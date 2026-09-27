@@ -1,25 +1,49 @@
 {
   "expo": {
-    "name": "trainr-mobile",
+    "name": "TRAINR",
     "slug": "trainr-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "scheme": "trainr",
+    "userInterfaceStyle": "automatic",
+
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.trainr.mobile",
+      "icon": {
+        "light": "./assets/icons/lightModeAppIcon.png",
+        "dark": "./assets/icons/darkModeAppIcon.png"
+      }
     },
+
     "android": {
-      "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
-      },
-      "predictiveBackGestureEnabled": false
+      "package": "com.trainr.mobile",
+      "icon": "./assets/icons/lightModeAppIcon.png"
     },
+
     "web": {
-      "favicon": "./assets/favicon.png"
-    }
+      "bundler": "metro"
+    },
+
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-sqlite",
+      "expo-font",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#FFFFFF",
+          "image": "./assets/splash/lightSplash.png",
+
+          "dark": {
+            "backgroundColor": "#000000",
+            "image": "./assets/splash/darkSplash.png"
+          },
+
+          "enableFullScreenImage_legacy": true
+        }
+      ]
+    ]
   }
 }
