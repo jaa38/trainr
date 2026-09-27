@@ -8,3 +8,5 @@ export const spacing = {
   xxxl: 48,
   huge: 64,
 } as const;
+
+export type SpacingToken = keyof typeof spacing;

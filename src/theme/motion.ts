@@ -4,3 +4,5 @@ export const motion = {
   transition: 300,
   celebration: 400,
 } as const;
+
+export type MotionToken = keyof typeof motion;
