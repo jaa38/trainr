@@ -1,10 +1,32 @@
-import { AppText } from '@/components/AppText';
-import { useTrainrTheme } from '@/theme';
+import { useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { AppText } from '@/components/AppText';
+import { useTrainrTheme } from '@/theme';
+
+type UserRole = 'gym-goer' | 'personal-trainer';
+
 export default function HomeScreen() {
   const { colors, spacing, radius } = useTrainrTheme();
+  const [selectedRole, setSelectedRole] = useState<UserRole | null>(null);
+
+  const roles: {
+    id: UserRole;
+    title: string;
+    description: string;
+  }[] = [
+    {
+      id: 'gym-goer',
+      title: "I'M A GYM-GOER",
+      description: 'Discover trainers and work towards your fitness goals.',
+    },
+    {
+      id: 'personal-trainer',
+      title: "I'M A PERSONAL TRAINER",
+      description: 'Build your profile and connect with potential clients.',
+    },
+  ];
 
   return (
     <SafeAreaView
@@ -16,6 +38,7 @@ export default function HomeScreen() {
     >
       <ScrollView
         contentContainerStyle={{
+          flexGrow: 1,
           paddingHorizontal: spacing.lg,
           paddingTop: spacing.lg,
           paddingBottom: spacing.xxxl,
@@ -23,46 +46,21 @@ export default function HomeScreen() {
         }}
         showsVerticalScrollIndicator={false}
       >
-        <View
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-          }}
-        >
-          <View style={{ gap: spacing.xs }}>
-            <AppText variant="h1" color={colors.text.primary}>
-              TRAINR
-            </AppText>
+        <View style={{ gap: spacing.xs }}>
+          <AppText variant="h1" color={colors.text.primary}>
+            TRAINR
+          </AppText>
 
-            <AppText
-              variant="caption"
-              color={colors.text.tertiary}
-              style={{
-                letterSpacing: 1.2,
-                textTransform: 'uppercase',
-              }}
-            >
-              Your fitness journey starts here
-            </AppText>
-          </View>
-
-          <View
+          <AppText
+            variant="caption"
+            color={colors.text.tertiary}
             style={{
-              width: 44,
-              height: 44,
-              borderRadius: radius.pill,
-              backgroundColor: colors.surface.muted,
-              borderWidth: 1,
-              borderColor: colors.border.default,
-              alignItems: 'center',
-              justifyContent: 'center',
+              letterSpacing: 1.2,
+              textTransform: 'uppercase',
             }}
           >
-            <AppText variant="button" color={colors.text.primary}>
-              JD
-            </AppText>
-          </View>
+            YOUR FITNESS. YOUR JOURNEY.
+          </AppText>
         </View>
 
         <View style={{ gap: spacing.sm }}>
@@ -79,116 +77,78 @@ export default function HomeScreen() {
             color={colors.text.secondary}
             style={{ marginTop: spacing.xs }}
           >
-            Find your trainer. Build your routine. Make every session count.
+            Whether you want to reach your fitness goals or help others reach theirs, your
+            next chapter starts here.
           </AppText>
         </View>
-
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Find your trainer"
-          onPress={() => {}}
-          style={{
-            backgroundColor: colors.brand.red,
-            borderRadius: radius.lg,
-            minHeight: 56,
-            paddingHorizontal: spacing.lg,
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-          }}
-        >
-          <AppText variant="buttonLarge" color={colors.brand.white}>
-            FIND YOUR TRAINER
-          </AppText>
-
-          <AppText
-            variant="buttonLarge"
-            color={colors.brand.white}
-            style={{ fontSize: 22 }}
-          >
-            →
-          </AppText>
-        </Pressable>
 
         <View style={{ gap: spacing.md }}>
           <AppText variant="h2" color={colors.text.primary}>
-            YOUR FITNESS
+            HOW WILL YOU TRAIN?
           </AppText>
 
+          {roles.map((role) => {
+            const isSelected = selectedRole === role.id;
+
+            return (
+              <Pressable
+                key={role.id}
+                accessibilityRole="button"
+                accessibilityLabel={role.title}
+                accessibilityState={{ selected: isSelected }}
+                onPress={() => setSelectedRole(role.id)}
+                style={({ pressed }) => ({
+                  padding: spacing.lg,
+                  minHeight: 112,
+                  gap: spacing.sm,
+                  justifyContent: 'center',
+                  borderRadius: radius.lg,
+                  borderWidth: 1,
+                  borderColor: isSelected ? colors.brand.red : colors.border.default,
+                  backgroundColor: isSelected
+                    ? colors.surface.muted
+                    : colors.surface.subtle,
+                  opacity: pressed ? 0.8 : 1,
+                })}
+              >
+                <AppText
+                  variant="h3"
+                  color={isSelected ? colors.brand.red : colors.text.primary}
+                >
+                  {role.title}
+                </AppText>
+
+                <AppText variant="body" color={colors.text.secondary}>
+                  {role.description}
+                </AppText>
+              </Pressable>
+            );
+          })}
+        </View>
+
+        {selectedRole && (
           <View
+            accessibilityLiveRegion="polite"
             style={{
-              flexDirection: 'row',
-              gap: spacing.md,
+              padding: spacing.lg,
+              gap: spacing.sm,
+              borderRadius: radius.lg,
+              backgroundColor: colors.surface.muted,
             }}
           >
-            <View
-              style={{
-                flex: 1,
-                minHeight: 132,
-                padding: spacing.lg,
-                gap: spacing.sm,
-                borderRadius: radius.lg,
-                borderWidth: 1,
-                borderColor: colors.border.default,
-                backgroundColor: colors.surface.subtle,
-              }}
-            >
-              <AppText variant="caption" color={colors.text.secondary}>
-                WORKOUTS
-              </AppText>
+            <AppText variant="h3" color={colors.text.primary}>
+              {selectedRole === 'gym-goer'
+                ? "LET'S REACH YOUR GOALS."
+                : 'LET’S BUILD YOUR TRAINING BUSINESS.'}
+            </AppText>
 
-              <AppText variant="metricLarge" color={colors.text.primary}>
-                0
-              </AppText>
-
-              <AppText variant="bodySmall" color={colors.text.tertiary}>
-                Sessions completed
-              </AppText>
-            </View>
-
-            <View
-              style={{
-                flex: 1,
-                minHeight: 132,
-                padding: spacing.lg,
-                gap: spacing.sm,
-                borderRadius: radius.lg,
-                borderWidth: 1,
-                borderColor: colors.border.default,
-                backgroundColor: colors.surface.subtle,
-              }}
-            >
-              <AppText variant="caption" color={colors.text.secondary}>
-                TRAINING
-              </AppText>
-
-              <AppText variant="metricLarge" color={colors.text.primary}>
-                —
-              </AppText>
-
-              <AppText variant="bodySmall" color={colors.text.tertiary}>
-                Your next session
-              </AppText>
-            </View>
+            <AppText variant="body" color={colors.text.secondary}>
+              {selectedRole === 'gym-goer'
+                ? 'You selected the gym-goer experience. Your fitness onboarding is the next step.'
+                : 'You selected the personal trainer experience. Your professional onboarding is the next step.'}
+            </AppText>
           </View>
-        </View>
-
-        <View
-          style={{
-            padding: spacing.lg,
-            gap: spacing.sm,
-            borderRadius: radius.lg,
-            backgroundColor: colors.surface.muted,
-          }}
-        >
-          <AppText variant="h3" color={colors.text.primary}>
-            READY TO GET STARTED?
-          </AppText>
-
-          <AppText variant="body" color={colors.text.secondary}>
-            Discover personal trainers who can help you reach your fitness goals.
-          </AppText>
-        </View>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
