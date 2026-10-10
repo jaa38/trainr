@@ -7,12 +7,12 @@
     "icon": "./assets/images/icons/lightModeAppIcon.png",
     "scheme": "trainr",
     "userInterfaceStyle": "automatic",
-
     "ios": {
       "icon": {
         "light": "./assets/images/icons/lightModeAppIcon.png",
         "dark": "./assets/images/icons/darkModeAppIcon.png"
-      }
+      },
+      "bundleIdentifier": "com.jaa38.trainr"
     },
     "android": {
       "icon": "./assets/images/icons/lightModeAppIcon.png",
