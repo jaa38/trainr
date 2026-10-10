@@ -1,56 +1,301 @@
-# Welcome to your Expo app 👋
+# TRAINR — Digital Fitness Platform
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+TRAINR is a digital fitness platform designed to connect gym-goers with personal trainers. The platform aims to help users discover trainers, define fitness goals, manage training sessions, follow workout plans, and track their progress.
 
-## Get started
+The application is being developed with **React Native, Expo, and TypeScript**, with a shared design system supporting light and dark themes.
 
-1. Install dependencies
+## Project Status
 
-   ```bash
-   npm install
-   ```
+**Current phase:** Foundation and initial app flow
 
-2. Start the app
+- [x] Expo and TypeScript project setup
+- [x] Expo Router navigation foundation
+- [x] TRAINR design system and theme provider
+- [x] Reusable UI component library
+- [x] Inter and Barlow Condensed typography
+- [x] Supabase connectivity verification
+- [x] Welcome screen and user role selection
+- [x] Component testing with Jest
+- [ ] Supabase authentication and session management
+- [ ] Gym-goer onboarding
+- [ ] Personal trainer onboarding
+- [ ] Trainer discovery and matching
+- [ ] Booking and training session management
+- [ ] Workout plans and progress tracking
 
-   ```bash
-   npx expo start
-   ```
+## Technology Stack
 
-In the output, you'll find options to open the app in a
+| Technology | Purpose |
+|---|---|
+| React Native | Cross-platform mobile application |
+| Expo SDK 57 | Development tooling and native capabilities |
+| TypeScript | Type safety and maintainable application code |
+| Expo Router | File-based application navigation |
+| Supabase | Backend connectivity and planned authentication/data services |
+| React Native Safe Area Context | Safe-area layout handling |
+| Inter | Interface and body typography |
+| Barlow Condensed | Display typography and headings |
+| Jest | Automated testing |
+| React Native Testing Library | Component testing |
+| ESLint | Code quality and linting |
+| Prettier | Consistent code formatting |
+| Git and GitHub | Version control and source management |
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+## Current Features
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+### Welcome and Role Selection
 
-## Get a fresh project
+The current home screen introduces TRAINR and lets users select their intended experience:
 
-When you're ready, run:
+- **Gym-goer:** Discover trainers and work towards personal fitness goals.
+- **Personal trainer:** Build a professional profile and connect with potential clients.
 
-```bash
-npm run reset-project
+Role selection currently uses local component state. It displays the selected role and a corresponding confirmation message. Persistent role storage and navigation into separate onboarding journeys have not yet been implemented.
+
+### Design System
+
+TRAINR uses a shared theme system designed for consistent interfaces across the application.
+
+**Brand colours**
+
+| Token | Light mode | Dark mode |
+|---|---|---|
+| Brand black | `#0B0B0B` | `#000000` |
+| Brand white | `#FFFFFF` | `#FFFFFF` |
+| TRAINR red | `#D71920` | `#F0111A` |
+| TRAINR dark red | `#B91C1C` | `#C90D15` |
+| TRAINR light red | `#FDE8E9` | Theme-dependent surfaces |
+
+**Typography**
+
+- **Inter:** Interface text, body copy, labels and supporting information.
+- **Barlow Condensed:** Display headings, prominent titles and metrics.
+
+The theme system also provides reusable colour, spacing, radius, sizing, motion and shadow tokens.
+
+### Reusable Components
+
+The current component foundation includes:
+
+- `AppText` — typography variants and consistent text styling
+- `Button` — reusable action buttons
+- `IconButton` — accessible icon actions
+- `Input` — themed form inputs
+- `Card` — reusable content containers
+- `Avatar` — profile imagery and initials
+- `Badge` — status and category indicators
+- `Divider` — visual separation
+- `Layout` — `Stack`, `Row` and `Spacer` primitives
+- `Screen` — safe-area and screen layout handling
+- `Feedback/States` — loading, empty and error states
+- `Progress/ProgressBar` — linear progress indicator
+- `Progress/ProgressRing` — circular progress indicator
+
+## Project Structure
+
+```text
+trainr/
+├── assets/
+│   └── images/
+├── src/
+│   ├── app/
+│   │   ├── _layout.tsx
+│   │   ├── index.tsx
+│   │   └── explore.tsx
+│   ├── components/
+│   │   ├── AppText/
+│   │   ├── Avatar/
+│   │   ├── Badge/
+│   │   ├── Button/
+│   │   ├── Card/
+│   │   ├── Divider/
+│   │   ├── Feedback/
+│   │   ├── IconButton/
+│   │   ├── Input/
+│   │   ├── Layout/
+│   │   ├── Progress/
+│   │   └── Screen/
+│   ├── lib/
+│   │   └── supabase.ts
+│   └── theme/
+│       ├── ThemeProvider.tsx
+│       ├── colors.ts
+│       ├── motion.ts
+│       ├── radius.ts
+│       ├── shadows.ts
+│       ├── sizes.ts
+│       ├── spacing.ts
+│       └── typography.ts
+├── .env.example
+├── app.json
+├── package.json
+├── tsconfig.json
+└── README.md
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+The structure above highlights the main application files and components. Additional configuration and test files are present in the repository.
 
-### Other setup steps
+## Getting Started
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+### Prerequisites
 
-## Learn more
+Install the following before running the project:
 
-To learn more about developing your project with Expo, look at the following resources:
+- Node.js compatible with the project's Expo SDK
+- npm
+- Git
+- Expo Go or an iOS Simulator / Android Emulator
+- A Supabase project for backend connectivity checks
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+### 1. Clone the repository
 
-## Join the community
+```bash
+git clone https://github.com/jaa38/trainr.git
+cd trainr
+```
 
-Join our community of developers creating universal apps.
+### 2. Install dependencies
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+```bash
+npm install
+```
+
+### 3. Configure environment variables
+
+Create a local `.env` file using the example:
+
+```bash
+cp .env.example .env
+```
+
+Set the following variables using your own Supabase project credentials:
+
+```dotenv
+EXPO_PUBLIC_SUPABASE_URL=your_supabase_project_url
+EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your_supabase_publishable_key
+```
+
+Do not commit your actual environment file or private credentials. Variables prefixed with `EXPO_PUBLIC_` are bundled into the client application and must not contain service-role keys or other server-side secrets.
+
+### 4. Start the development server
+
+```bash
+npx expo start
+```
+
+Use the terminal instructions to open the application in the iOS Simulator, Android Emulator or Expo Go, where supported by the installed SDK.
+
+To start directly on iOS:
+
+```bash
+npm run ios
+```
+
+To start on Android:
+
+```bash
+npm run android
+```
+
+To run the web target:
+
+```bash
+npm run web
+```
+
+## Backend Connectivity
+
+The Supabase client is configured in `src/lib/supabase.ts`. The current Explore screen provides a connectivity check that verifies the Supabase authentication endpoint is reachable.
+
+This confirms backend connectivity; it does not mean that user registration, login, profile persistence or the complete authentication flow has been implemented.
+
+## Testing and Code Quality
+
+TRAINR currently has **125 passing tests across 14 Jest test suites**.
+
+Run the test suite:
+
+```bash
+npm test -- --runInBand
+```
+
+Run TypeScript checks:
+
+```bash
+npx tsc --noEmit
+```
+
+Run ESLint:
+
+```bash
+npx expo lint
+```
+
+Check formatting:
+
+```bash
+npm run format:check
+```
+
+Format project files:
+
+```bash
+npm run format
+```
+
+These checks were passing at the latest verified development checkpoint. Run them again after making changes to confirm the current state.
+
+## Development Roadmap
+
+### Phase 1 — Foundation
+
+- Establish the Expo and TypeScript project
+- Configure navigation and theme infrastructure
+- Build reusable components and design tokens
+- Configure Supabase connectivity
+- Add automated component tests
+
+### Phase 2 — Authentication and Navigation
+
+- Implement sign-up and sign-in
+- Add sign-out and session handling
+- Persist user roles
+- Establish public and authenticated navigation flows
+
+### Phase 3 — User Onboarding
+
+**Gym-goer experience**
+- Fitness goal selection
+- Training experience
+- Training preferences
+- Profile setup
+
+**Personal trainer experience**
+- Professional profile
+- Areas of expertise
+- Qualifications and experience
+- Training services and availability
+
+### Phase 4 — Core Fitness Marketplace
+
+- Trainer discovery and profiles
+- Search, filtering and matching
+- Trainer reviews and ratings
+- Session booking and scheduling
+
+### Phase 5 — Training and Progress
+
+- Workout plans
+- Training session management
+- Fitness progress tracking
+- AI-powered fitness insights
+
+The roadmap describes intended functionality, not features currently available in the application.
+
+## Repository
+
+GitHub: https://github.com/jaa38/trainr
+
+## License
+
+No open-source license has been specified yet. All rights are reserved unless a license is added to the repository.
