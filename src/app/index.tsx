@@ -1,98 +1,195 @@
-import * as Device from 'expo-device';
-import { Platform, StyleSheet } from 'react-native';
+import { AppText } from '@/components/AppText';
+import { useTrainrTheme } from '@/theme';
+import { Pressable, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { AnimatedIcon } from '@/components/animated-icon';
-import { HintRow } from '@/components/hint-row';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { WebBadge } from '@/components/web-badge';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
-
-function getDevMenuHint() {
-  if (Platform.OS === 'web') {
-    return <ThemedText type="small">use browser devtools</ThemedText>;
-  }
-  if (Device.isDevice) {
-    return (
-      <ThemedText type="small">
-        shake device or press <ThemedText type="code">m</ThemedText> in terminal
-      </ThemedText>
-    );
-  }
-  const shortcut = Platform.OS === 'android' ? 'cmd+m (or ctrl+m)' : 'cmd+d';
-  return (
-    <ThemedText type="small">
-      press <ThemedText type="code">{shortcut}</ThemedText>
-    </ThemedText>
-  );
-}
-
 export default function HomeScreen() {
+  const { colors, spacing, radius } = useTrainrTheme();
+
   return (
-    <ThemedView style={styles.container}>
-      <SafeAreaView style={styles.safeArea}>
-        <ThemedView style={styles.heroSection}>
-          <AnimatedIcon />
-          <ThemedText type="title" style={styles.title}>
-            Welcome to&nbsp;Expo
-          </ThemedText>
-        </ThemedView>
+    <SafeAreaView
+      edges={['top']}
+      style={{
+        flex: 1,
+        backgroundColor: colors.background.primary,
+      }}
+    >
+      <ScrollView
+        contentContainerStyle={{
+          paddingHorizontal: spacing.lg,
+          paddingTop: spacing.lg,
+          paddingBottom: spacing.xxxl,
+          gap: spacing.xl,
+        }}
+        showsVerticalScrollIndicator={false}
+      >
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+          }}
+        >
+          <View style={{ gap: spacing.xs }}>
+            <AppText variant="h1" color={colors.text.primary}>
+              TRAINR
+            </AppText>
 
-        <ThemedText type="code" style={styles.code}>
-          get started
-        </ThemedText>
+            <AppText
+              variant="caption"
+              color={colors.text.tertiary}
+              style={{
+                letterSpacing: 1.2,
+                textTransform: 'uppercase',
+              }}
+            >
+              Your fitness journey starts here
+            </AppText>
+          </View>
 
-        <ThemedView type="backgroundElement" style={styles.stepContainer}>
-          <HintRow
-            title="Try editing"
-            hint={<ThemedText type="code">src/app/index.tsx</ThemedText>}
-          />
-          <HintRow title="Dev tools" hint={getDevMenuHint()} />
-          <HintRow
-            title="Fresh start"
-            hint={<ThemedText type="code">npm run reset-project</ThemedText>}
-          />
-        </ThemedView>
+          <View
+            style={{
+              width: 44,
+              height: 44,
+              borderRadius: radius.pill,
+              backgroundColor: colors.surface.muted,
+              borderWidth: 1,
+              borderColor: colors.border.default,
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <AppText variant="button" color={colors.text.primary}>
+              JD
+            </AppText>
+          </View>
+        </View>
 
-        {Platform.OS === 'web' && <WebBadge />}
-      </SafeAreaView>
-    </ThemedView>
+        <View style={{ gap: spacing.sm }}>
+          <AppText variant="displayLarge" color={colors.text.primary}>
+            BUILD YOUR
+          </AppText>
+
+          <AppText variant="displayLarge" color={colors.brand.red}>
+            STRONGER SELF.
+          </AppText>
+
+          <AppText
+            variant="body"
+            color={colors.text.secondary}
+            style={{ marginTop: spacing.xs }}
+          >
+            Find your trainer. Build your routine. Make every session count.
+          </AppText>
+        </View>
+
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Find your trainer"
+          onPress={() => {}}
+          style={{
+            backgroundColor: colors.brand.red,
+            borderRadius: radius.lg,
+            minHeight: 56,
+            paddingHorizontal: spacing.lg,
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+          }}
+        >
+          <AppText variant="buttonLarge" color={colors.brand.white}>
+            FIND YOUR TRAINER
+          </AppText>
+
+          <AppText
+            variant="buttonLarge"
+            color={colors.brand.white}
+            style={{ fontSize: 22 }}
+          >
+            →
+          </AppText>
+        </Pressable>
+
+        <View style={{ gap: spacing.md }}>
+          <AppText variant="h2" color={colors.text.primary}>
+            YOUR FITNESS
+          </AppText>
+
+          <View
+            style={{
+              flexDirection: 'row',
+              gap: spacing.md,
+            }}
+          >
+            <View
+              style={{
+                flex: 1,
+                minHeight: 132,
+                padding: spacing.lg,
+                gap: spacing.sm,
+                borderRadius: radius.lg,
+                borderWidth: 1,
+                borderColor: colors.border.default,
+                backgroundColor: colors.surface.subtle,
+              }}
+            >
+              <AppText variant="caption" color={colors.text.secondary}>
+                WORKOUTS
+              </AppText>
+
+              <AppText variant="metricLarge" color={colors.text.primary}>
+                0
+              </AppText>
+
+              <AppText variant="bodySmall" color={colors.text.tertiary}>
+                Sessions completed
+              </AppText>
+            </View>
+
+            <View
+              style={{
+                flex: 1,
+                minHeight: 132,
+                padding: spacing.lg,
+                gap: spacing.sm,
+                borderRadius: radius.lg,
+                borderWidth: 1,
+                borderColor: colors.border.default,
+                backgroundColor: colors.surface.subtle,
+              }}
+            >
+              <AppText variant="caption" color={colors.text.secondary}>
+                TRAINING
+              </AppText>
+
+              <AppText variant="metricLarge" color={colors.text.primary}>
+                —
+              </AppText>
+
+              <AppText variant="bodySmall" color={colors.text.tertiary}>
+                Your next session
+              </AppText>
+            </View>
+          </View>
+        </View>
+
+        <View
+          style={{
+            padding: spacing.lg,
+            gap: spacing.sm,
+            borderRadius: radius.lg,
+            backgroundColor: colors.surface.muted,
+          }}
+        >
+          <AppText variant="h3" color={colors.text.primary}>
+            READY TO GET STARTED?
+          </AppText>
+
+          <AppText variant="body" color={colors.text.secondary}>
+            Discover personal trainers who can help you reach your fitness goals.
+          </AppText>
+        </View>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: 'center',
-    flexDirection: 'row',
-  },
-  safeArea: {
-    flex: 1,
-    paddingHorizontal: Spacing.four,
-    alignItems: 'center',
-    gap: Spacing.three,
-    paddingBottom: BottomTabInset + Spacing.three,
-    maxWidth: MaxContentWidth,
-  },
-  heroSection: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    flex: 1,
-    paddingHorizontal: Spacing.four,
-    gap: Spacing.four,
-  },
-  title: {
-    textAlign: 'center',
-  },
-  code: {
-    textTransform: 'uppercase',
-  },
-  stepContainer: {
-    gap: Spacing.three,
-    alignSelf: 'stretch',
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.four,
-    borderRadius: Spacing.four,
-  },
-});
