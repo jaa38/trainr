@@ -1,5 +1,10 @@
 import { useFonts } from 'expo-font';
-import { DarkTheme, DefaultTheme, ThemeProvider as ExpoThemeProvider } from 'expo-router';
+import {
+  DarkTheme,
+  DefaultTheme,
+  ThemeProvider as ExpoThemeProvider,
+  Stack,
+} from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import { useColorScheme } from 'react-native';
@@ -18,12 +23,12 @@ import {
 } from '@expo-google-fonts/barlow-condensed';
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
-import AppTabs from '@/components/app-tabs';
+import { AuthProvider } from '@/providers/AuthProvider';
 import { TrainrThemeProvider } from '@/theme';
 
 SplashScreen.preventAutoHideAsync();
 
-export default function TabLayout() {
+export default function RootLayout() {
   const colorScheme = useColorScheme();
 
   const [fontsLoaded, fontError] = useFonts({
@@ -38,7 +43,7 @@ export default function TabLayout() {
 
   useEffect(() => {
     if (fontsLoaded || fontError) {
-      SplashScreen.hideAsync();
+      void SplashScreen.hideAsync();
     }
   }, [fontsLoaded, fontError]);
 
@@ -49,8 +54,15 @@ export default function TabLayout() {
   return (
     <TrainrThemeProvider mode="system">
       <ExpoThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-        <AnimatedSplashOverlay />
-        <AppTabs />
+        <AuthProvider>
+          <AnimatedSplashOverlay />
+
+          <Stack screenOptions={{ headerShown: false }}>
+            <Stack.Screen name="index" />
+            <Stack.Screen name="(auth)" />
+            <Stack.Screen name="(tabs)" />
+          </Stack>
+        </AuthProvider>
       </ExpoThemeProvider>
     </TrainrThemeProvider>
   );
