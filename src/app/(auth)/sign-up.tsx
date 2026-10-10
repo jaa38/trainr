@@ -1,4 +1,3 @@
-
 import { router } from 'expo-router';
 import { useState } from 'react';
 import {
@@ -66,6 +65,7 @@ export default function SignUpScreen() {
     }
 
     setErrors(nextErrors);
+
     return Object.keys(nextErrors).length === 0;
   }
 
@@ -87,6 +87,7 @@ export default function SignUpScreen() {
           data: {
             full_name: fullName.trim(),
           },
+          emailRedirectTo: 'trainr://auth/callback',
         },
       });
 
@@ -142,7 +143,10 @@ export default function SignUpScreen() {
               accessibilityRole="button"
               accessibilityLabel="Back to welcome"
               onPress={() => router.back()}
-              style={{ alignSelf: 'flex-start', paddingVertical: spacing.sm }}
+              style={{
+                alignSelf: 'flex-start',
+                paddingVertical: spacing.sm,
+              }}
             >
               <AppText variant="body" color={colors.brand.red}>
                 ← Back
@@ -252,7 +256,9 @@ export default function SignUpScreen() {
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel={
-                    showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'
+                    showConfirmPassword
+                      ? 'Hide confirm password'
+                      : 'Show confirm password'
                   }
                   onPress={() => setShowConfirmPassword((visible) => !visible)}
                   hitSlop={8}
@@ -265,11 +271,7 @@ export default function SignUpScreen() {
             />
 
             {errors.general ? (
-              <AppText
-                variant="body"
-                color={colors.text.error}
-                accessibilityRole="alert"
-              >
+              <AppText variant="body" color={colors.text.error} accessibilityRole="alert">
                 {errors.general}
               </AppText>
             ) : null}
