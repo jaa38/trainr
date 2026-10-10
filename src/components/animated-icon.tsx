@@ -1,16 +1,18 @@
 import { Image } from 'expo-image';
 import * as SplashScreen from 'expo-splash-screen';
 import { useState } from 'react';
-import { Dimensions, StyleSheet, View } from 'react-native';
+import { Dimensions, StyleSheet, View, useColorScheme } from 'react-native';
 import Animated, { Easing, Keyframe } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
 
 const INITIAL_SCALE_FACTOR = Dimensions.get('screen').height / 90;
-const DURATION = 600;
+const DURATION = 10000;
 
 export function AnimatedSplashOverlay() {
   const [animate, setAnimate] = useState(false);
   const [visible, setVisible] = useState(true);
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
 
   if (!visible) return null;
 
@@ -34,18 +36,32 @@ export function AnimatedSplashOverlay() {
   });
 
   const image = (
-    <Image style={styles.image} source={require('@/assets/images/expo-logo.png')} />
+    <Image
+      style={styles.fullScreenImage}
+      source={
+        isDark
+          ? require('@/assets/images/splash/darkSplash.png')
+          : require('@/assets/images/splash/lightSplash.png')
+      }
+      contentFit="cover"
+    />
   );
+
+  const overlayStyle = [
+    styles.splashOverlay,
+    { backgroundColor: isDark ? '#000000' : '#FFFFFF' },
+  ];
 
   return animate ? (
     <Animated.View
       entering={splashKeyframe.duration(DURATION).withCallback((finished) => {
         'worklet';
+
         if (finished) {
           scheduleOnRN(setVisible, false);
         }
       })}
-      style={styles.splashOverlay}
+      style={overlayStyle}
     >
       {image}
     </Animated.View>
@@ -56,7 +72,7 @@ export function AnimatedSplashOverlay() {
           setAnimate(true);
         });
       }}
-      style={styles.splashOverlay}
+      style={overlayStyle}
     >
       {image}
     </View>
@@ -107,6 +123,7 @@ export function AnimatedIcon() {
       </Animated.View>
 
       <Animated.View entering={keyframe.duration(DURATION)} style={styles.background} />
+
       <Animated.View
         style={styles.imageContainer}
         entering={logoKeyframe.duration(DURATION)}
@@ -138,6 +155,11 @@ const styles = StyleSheet.create({
     width: 76,
     height: 71,
   },
+  fullScreenImage: {
+    ...StyleSheet.absoluteFill,
+    width: '100%',
+    height: '100%',
+  },
   background: {
     borderRadius: 40,
     experimental_backgroundImage: `linear-gradient(180deg, #3C9FFE, #0274DF)`,
@@ -147,7 +169,7 @@ const styles = StyleSheet.create({
   },
   splashOverlay: {
     ...StyleSheet.absoluteFill,
-    backgroundColor: '#208AEF',
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 1000,
