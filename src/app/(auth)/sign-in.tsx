@@ -130,8 +130,9 @@ export default function SignInScreen() {
     setIsResettingPassword(true);
 
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email.trim());
-
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+        redirectTo: 'trainr://auth/callback?flow=recovery',
+      });
       if (error) {
         setErrors((current) => ({
           ...current,

@@ -27,7 +27,10 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+    } = supabase.auth.onAuthStateChange((event, nextSession) => {
+      console.log('[Auth] State change:', event);
+      console.log('[Auth] Session present:', Boolean(nextSession));
+
       if (isMounted) {
         setSession(nextSession);
         setIsLoading(false);
@@ -40,7 +43,10 @@ export function AuthProvider({ children }: PropsWithChildren) {
         if (!isMounted) return;
 
         if (error) {
-          console.error('Failed to restore authentication session:', error.message);
+          console.error(
+            '[Auth] Failed to restore authentication session:',
+            error.message,
+          );
           setSession(null);
         } else {
           setSession(data.session);
@@ -51,7 +57,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       .catch((error: unknown) => {
         if (!isMounted) return;
 
-        console.error('Unexpected error restoring session:', error);
+        console.error('[Auth] Unexpected error restoring session:', error);
         setSession(null);
         setIsLoading(false);
       });
@@ -63,10 +69,30 @@ export function AuthProvider({ children }: PropsWithChildren) {
   }, []);
 
   const signOut = async () => {
-    const { error } = await supabase.auth.signOut();
+    console.log('[Auth] Sign-out requested');
+
+    const { data, error } = await supabase.auth.getSession();
+
+    console.log('[Auth] Session exists before sign-out:', Boolean(data.session));
 
     if (error) {
+      console.error('[Auth] Failed to read session:', error.message);
       throw error;
+    }
+
+    const result = await supabase.auth.signOut();
+
+    if (result.error) {
+      console.error('[Auth] Sign-out failed:', result.error.message);
+      throw result.error;
+    }
+
+    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+
+    console.log('[Auth] Session exists after sign-out:', Boolean(sessionData.session));
+
+    if (sessionError) {
+      console.error('[Auth] Failed to verify sign-out:', sessionError.message);
     }
   };
 

@@ -1,6 +1,6 @@
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Linking, View } from 'react-native';
+import { ActivityIndicator, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/AppText';
@@ -9,149 +9,174 @@ import { supabase } from '@/lib/supabase';
 import { useTrainrTheme } from '@/theme';
 
 type CallbackParams = {
-  code?: string;
-  access_token?: string;
-  refresh_token?: string;
-  error?: string;
-  error_description?: string;
+  flow?: string | string[];
+  flow_id?: string | string[];
+  code?: string | string[];
+  access_token?: string | string[];
+  refresh_token?: string | string[];
+  error?: string | string[];
+  error_description?: string | string[];
 };
 
-function getCallbackParams(url: string): CallbackParams {
-  const parsedUrl = new URL(url);
-  const params = new URLSearchParams(parsedUrl.search);
-
-  // Supabase may return tokens in the URL fragment.
-  const fragment = parsedUrl.hash.replace(/^#/, '');
-  const fragmentParams = new URLSearchParams(fragment);
-
-  const get = (key: keyof CallbackParams) =>
-    params.get(key) ?? fragmentParams.get(key) ?? undefined;
-
-  return {
-    code: get('code'),
-    access_token: get('access_token'),
-    refresh_token: get('refresh_token'),
-    error: get('error'),
-    error_description: get('error_description'),
-  };
+function getParam(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
 }
 
 export default function AuthCallbackScreen() {
   const { colors, spacing } = useTrainrTheme();
 
+  const {
+    flow: rawFlow,
+    flow_id: rawFlowId,
+    code: rawCode,
+    access_token: rawAccessToken,
+    refresh_token: rawRefreshToken,
+    error: rawError,
+    error_description: rawErrorDescription,
+  } = useLocalSearchParams<CallbackParams>();
+
+  const flow = getParam(rawFlow);
+  const flowId = getParam(rawFlowId);
+
+  const code = getParam(rawCode);
+  const accessToken = getParam(rawAccessToken);
+  const refreshToken = getParam(rawRefreshToken);
+  const authError = getParam(rawError);
+  const errorDescription = getParam(rawErrorDescription);
+
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
 
-  const [message, setMessage] = useState('Verifying your email address...');
+  const [message, setMessage] = useState(
+    flow === 'recovery'
+      ? 'Preparing your password reset...'
+      : 'Verifying your email address...',
+  );
+
+  const [debugInfo, setDebugInfo] = useState('Waiting for authentication parameters...');
 
   const hasProcessed = useRef(false);
 
   useEffect(() => {
+    if (hasProcessed.current) {
+      return;
+    }
+
+    const hasCode = Boolean(code);
+    const hasTokens = Boolean(accessToken && refreshToken);
+    const hasAuthError = Boolean(authError || errorDescription);
+
+    // Wait for callback parameters without setting state synchronously.
+    if (!hasCode && !hasTokens && !hasAuthError) {
+      return;
+    }
+
+    hasProcessed.current = true;
+
     let mounted = true;
+    let redirectTimeout: ReturnType<typeof setTimeout> | undefined;
 
-    async function handleCallback(url: string | null) {
-      if (!url || hasProcessed.current) return;
-
-      console.log('[AuthCallback] Received callback URL:', Boolean(url));
-
-      let params: CallbackParams;
-
+    async function processCallback() {
       try {
-        params = getCallbackParams(url);
-      } catch {
-        if (mounted) {
-          setStatus('error');
-          setMessage(
-            'The verification link could not be read. Please request a new link.',
-          );
-        }
-        return;
-      }
-
-      console.log('[AuthCallback] Has code:', Boolean(params.code));
-      console.log('[AuthCallback] Has access token:', Boolean(params.access_token));
-      console.log('[AuthCallback] Has refresh token:', Boolean(params.refresh_token));
-      console.log('[AuthCallback] Has error:', Boolean(params.error));
-
-      if (
-        !params.code &&
-        !(params.access_token && params.refresh_token) &&
-        !params.error &&
-        !params.error_description
-      ) {
-        console.log('[AuthCallback] No authentication parameters found.');
-        return;
-      }
-
-      hasProcessed.current = true;
-
-      try {
-        if (params.error || params.error_description) {
+        if (authError || errorDescription) {
           throw new Error(
-            params.error_description || params.error || 'Email verification failed.',
+            errorDescription || authError || 'Authentication could not be completed.',
           );
         }
 
-        if (params.code) {
-          console.log('[AuthCallback] Exchanging code for session.');
+        if (code) {
+          setDebugInfo('Authentication code received. Exchanging for a session...');
 
-          const { error } = await supabase.auth.exchangeCodeForSession(params.code);
+          const { error: sessionError } = await supabase.auth.exchangeCodeForSession(
+            code,
+            flowId ? { flowId } : undefined,
+          );
 
-          if (error) throw error;
-        } else if (params.access_token && params.refresh_token) {
-          console.log('[AuthCallback] Setting session from tokens.');
+          if (sessionError) {
+            throw sessionError;
+          }
+        } else if (accessToken && refreshToken) {
+          setDebugInfo('Authentication tokens received. Establishing a session...');
 
-          const { error } = await supabase.auth.setSession({
-            access_token: params.access_token,
-            refresh_token: params.refresh_token,
+          const { error: sessionError } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
           });
 
-          if (error) throw error;
+          if (sessionError) {
+            throw sessionError;
+          }
         } else {
           throw new Error(
-            'The verification link did not contain usable authentication details. Please request a new email.',
+            'The authentication link did not contain usable details. Please request a new link.',
           );
         }
 
-        if (!mounted) return;
-
-        console.log('[AuthCallback] Authentication succeeded.');
+        if (!mounted) {
+          return;
+        }
 
         setStatus('success');
-        setMessage('Your email has been verified. Welcome to TRAINR!');
 
-        setTimeout(() => {
-          if (mounted) router.replace('/(tabs)');
-        }, 800);
-      } catch (err) {
-        if (!mounted) return;
+        if (flow === 'recovery') {
+          setMessage(
+            'Your recovery link has been verified. You can now choose a new password.',
+          );
+          setDebugInfo('Password recovery session established.');
+        } else {
+          setMessage('Your email has been verified. Welcome to TRAINR!');
+          setDebugInfo('Email verification completed successfully.');
+        }
 
-        console.error(
-          '[AuthCallback] Verification failed:',
-          err instanceof Error ? err.message : 'Unknown error',
-        );
+        redirectTimeout = setTimeout(() => {
+          if (!mounted) {
+            return;
+          }
+
+          if (flow === 'recovery') {
+            router.replace('/(auth)/reset-password');
+          } else {
+            router.replace('/(tabs)');
+          }
+        }, 1200);
+      } catch (callbackError) {
+        if (!mounted) {
+          return;
+        }
 
         setStatus('error');
+
         setMessage(
-          err instanceof Error
-            ? err.message
-            : 'We could not verify your email. Please request a new link.',
+          callbackError instanceof Error
+            ? callbackError.message
+            : flow === 'recovery'
+              ? 'We could not verify your password recovery link. Please request a new one.'
+              : 'We could not verify your email. Please request a new link.',
         );
+
+        setDebugInfo('Authentication processing failed.');
       }
     }
 
-    // Handle a link that launched the app.
-    void Linking.getInitialURL().then(handleCallback);
-
-    // Handle a link received while the app is already open.
-    const subscription = Linking.addEventListener('url', ({ url }) => {
-      void handleCallback(url);
-    });
+    void processCallback();
 
     return () => {
       mounted = false;
-      subscription.remove();
+
+      if (redirectTimeout) {
+        clearTimeout(redirectTimeout);
+      }
     };
-  }, []);
+  }, [flow, flowId, code, accessToken, refreshToken, authError, errorDescription]);
+
+  const waitingForParameters =
+    status === 'loading' &&
+    !code &&
+    !accessToken &&
+    !refreshToken &&
+    !authError &&
+    !errorDescription;
+
+  const isRecovery = flow === 'recovery';
 
   return (
     <SafeAreaView
@@ -178,10 +203,14 @@ export default function AuthCallbackScreen() {
           color={status === 'error' ? colors.text.error : colors.brand.red}
         >
           {status === 'loading'
-            ? 'VERIFYING.'
+            ? isRecovery
+              ? 'PREPARING.'
+              : 'VERIFYING.'
             : status === 'success'
-              ? 'VERIFIED.'
-              : 'NOT VERIFIED.'}
+              ? isRecovery
+                ? 'LINK VERIFIED.'
+                : 'VERIFIED.'
+              : 'UNSUCCESSFUL.'}
         </AppText>
 
         <AppText
@@ -193,11 +222,21 @@ export default function AuthCallbackScreen() {
           {message}
         </AppText>
 
+        {__DEV__ && (
+          <AppText variant="caption" color={colors.text.secondary}>
+            {waitingForParameters
+              ? 'Waiting for authentication parameters from the callback URL...'
+              : debugInfo}
+          </AppText>
+        )}
+
         {status === 'loading' && (
           <ActivityIndicator
             size="large"
             color={colors.brand.red}
-            accessibilityLabel="Verifying your email"
+            accessibilityLabel={
+              isRecovery ? 'Preparing password reset' : 'Verifying your email'
+            }
           />
         )}
 

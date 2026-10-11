@@ -58,7 +58,7 @@ export function Button({
   const borderColor = variant === 'outline' ? theme.colors.borderStrong : 'transparent';
 
   const textColor = isFilled
-    ? theme.colors.text.inverse
+    ? '#FFFFFF'
     : variant === 'ghost'
       ? theme.colors.primary
       : theme.colors.text.primary;
