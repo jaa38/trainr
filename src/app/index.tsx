@@ -250,7 +250,7 @@ export default function HomeScreen() {
           >
             <AppText
               variant="h2"
-              color={currentSlide.id === 'bold' ? colors.text.primary : colors.brand.red}
+              color={colors.text.primary}
               style={{
                 textAlign: 'center',
               }}
