@@ -26,7 +26,7 @@ type FormErrors = {
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function SignUpScreen() {
-  const { colors, spacing } = useTrainrTheme();
+  const { colors, spacing, mode } = useTrainrTheme();
 
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
@@ -103,8 +103,6 @@ export default function SignUpScreen() {
         return;
       }
 
-      setSuccessMessage('Your account has been created successfully.');
-
       router.replace('/(tabs)');
     } catch {
       setErrors({
@@ -133,43 +131,31 @@ export default function SignUpScreen() {
           contentContainerStyle={{
             flexGrow: 1,
             paddingHorizontal: spacing.lg,
-            paddingTop: spacing.lg,
-            paddingBottom: spacing.xxxl,
-            gap: spacing.xl,
+            paddingTop: spacing.sm,
+            paddingBottom: spacing.xl,
           }}
         >
-          <View style={{ gap: spacing.xs }}>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Back to welcome"
-              onPress={() => router.back()}
-              style={{
-                alignSelf: 'flex-start',
-                paddingVertical: spacing.sm,
-              }}
-            >
-              <AppText variant="body" color={colors.brand.red}>
-                ← Back
-              </AppText>
-            </Pressable>
-
-            <AppText variant="h1" color={colors.text.primary}>
-              TRAINR
+          {/* Navigation */}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Back to welcome"
+            onPress={() => router.back()}
+            hitSlop={8}
+            style={{
+              alignSelf: 'flex-start',
+              flexDirection: 'row',
+              alignItems: 'center',
+              paddingVertical: spacing.sm,
+              marginBottom: spacing.xl,
+            }}
+          >
+            <AppText variant="bodyMedium" color={colors.brand.red}>
+              ← Back
             </AppText>
+          </Pressable>
 
-            <AppText
-              variant="caption"
-              color={colors.text.tertiary}
-              style={{
-                letterSpacing: 1.2,
-                textTransform: 'uppercase',
-              }}
-            >
-              YOUR FITNESS. YOUR JOURNEY.
-            </AppText>
-          </View>
-
-          <View style={{ gap: spacing.sm }}>
+          {/* Page heading */}
+          <View style={{ gap: spacing.sm, marginBottom: spacing.xl }}>
             <AppText variant="displayLarge" color={colors.text.primary}>
               CREATE YOUR
             </AppText>
@@ -178,125 +164,171 @@ export default function SignUpScreen() {
               ACCOUNT.
             </AppText>
 
-            <AppText variant="body" color={colors.text.secondary}>
-              Start your fitness journey with TRAINR.
+            <AppText
+              variant="body"
+              color={colors.text.secondary}
+              style={{
+                marginTop: spacing.xs,
+                maxWidth: 320,
+              }}
+            >
+              Your fitness journey starts here. Create your account to get moving.
             </AppText>
           </View>
 
+          {/* Registration form */}
           <View style={{ gap: spacing.lg }}>
-            <Input
-              label="Full name"
-              placeholder="Enter your full name"
-              value={fullName}
-              onChangeText={setFullName}
-              autoCapitalize="words"
-              autoComplete="name"
-              textContentType="name"
-              returnKeyType="next"
-              error={errors.fullName}
-              editable={!isSubmitting}
-            />
+            <View style={{ gap: spacing.md }}>
+              <Input
+                label="Full name"
+                placeholder="Enter your full name"
+                value={fullName}
+                onChangeText={setFullName}
+                autoCapitalize="words"
+                autoComplete="name"
+                textContentType="name"
+                returnKeyType="next"
+                error={errors.fullName}
+                editable={!isSubmitting}
+              />
 
-            <Input
-              label="Email address"
-              placeholder="you@example.com"
-              value={email}
-              onChangeText={setEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoCorrect={false}
-              autoComplete="email"
-              textContentType="emailAddress"
-              returnKeyType="next"
-              error={errors.email}
-              editable={!isSubmitting}
-            />
+              <Input
+                label="Email address"
+                placeholder="you@example.com"
+                value={email}
+                onChangeText={setEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+                autoComplete="email"
+                textContentType="emailAddress"
+                returnKeyType="next"
+                error={errors.email}
+                editable={!isSubmitting}
+              />
 
-            <Input
-              label="Password"
-              placeholder="At least 8 characters"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry={!showPassword}
-              autoCapitalize="none"
-              autoCorrect={false}
-              autoComplete="new-password"
-              textContentType="newPassword"
-              returnKeyType="next"
-              error={errors.password}
-              editable={!isSubmitting}
-              trailing={
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
-                  onPress={() => setShowPassword((visible) => !visible)}
-                  hitSlop={8}
-                >
-                  <AppText variant="caption" color={colors.brand.red}>
-                    {showPassword ? 'Hide' : 'Show'}
-                  </AppText>
-                </Pressable>
-              }
-            />
+              <Input
+                label="Password"
+                placeholder="At least 8 characters"
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry={!showPassword}
+                autoCapitalize="none"
+                autoCorrect={false}
+                autoComplete="new-password"
+                textContentType="newPassword"
+                returnKeyType="next"
+                error={errors.password}
+                editable={!isSubmitting}
+                trailing={
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+                    accessibilityState={{ selected: showPassword }}
+                    onPress={() => setShowPassword((visible) => !visible)}
+                    hitSlop={8}
+                    disabled={isSubmitting}
+                  >
+                    <AppText variant="caption" color={colors.brand.red}>
+                      {showPassword ? 'Hide' : 'Show'}
+                    </AppText>
+                  </Pressable>
+                }
+              />
 
-            <Input
-              label="Confirm password"
-              placeholder="Re-enter your password"
-              value={confirmPassword}
-              onChangeText={setConfirmPassword}
-              secureTextEntry={!showConfirmPassword}
-              autoCapitalize="none"
-              autoCorrect={false}
-              autoComplete="new-password"
-              textContentType="newPassword"
-              returnKeyType="done"
-              error={errors.confirmPassword}
-              editable={!isSubmitting}
-              trailing={
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={
-                    showConfirmPassword
-                      ? 'Hide confirm password'
-                      : 'Show confirm password'
-                  }
-                  onPress={() => setShowConfirmPassword((visible) => !visible)}
-                  hitSlop={8}
-                >
-                  <AppText variant="caption" color={colors.brand.red}>
-                    {showConfirmPassword ? 'Hide' : 'Show'}
-                  </AppText>
-                </Pressable>
-              }
-            />
+              <Input
+                label="Confirm password"
+                placeholder="Re-enter your password"
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+                secureTextEntry={!showConfirmPassword}
+                autoCapitalize="none"
+                autoCorrect={false}
+                autoComplete="new-password"
+                textContentType="newPassword"
+                returnKeyType="done"
+                error={errors.confirmPassword}
+                editable={!isSubmitting}
+                trailing={
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={
+                      showConfirmPassword
+                        ? 'Hide confirm password'
+                        : 'Show confirm password'
+                    }
+                    accessibilityState={{
+                      selected: showConfirmPassword,
+                    }}
+                    onPress={() => setShowConfirmPassword((visible) => !visible)}
+                    hitSlop={8}
+                    disabled={isSubmitting}
+                  >
+                    <AppText variant="caption" color={colors.brand.red}>
+                      {showConfirmPassword ? 'Hide' : 'Show'}
+                    </AppText>
+                  </Pressable>
+                }
+              />
+            </View>
 
+            {/* Authentication feedback */}
             {errors.general ? (
-              <AppText variant="body" color={colors.text.error} accessibilityRole="alert">
-                {errors.general}
-              </AppText>
+              <View
+                accessibilityRole="alert"
+                style={{
+                  padding: spacing.md,
+                  borderRadius: 12,
+                  borderWidth: 1,
+                  borderColor: colors.brand.red,
+                  backgroundColor: colors.background.secondary,
+                }}
+              >
+                <AppText variant="bodySmall" color={colors.text.error}>
+                  {errors.general}
+                </AppText>
+              </View>
             ) : null}
 
             {successMessage ? (
-              <AppText
-                variant="body"
-                color={colors.text.secondary}
-                accessibilityLiveRegion="polite"
+              <View
+                style={{
+                  padding: spacing.md,
+                  borderRadius: 12,
+                  borderWidth: 1,
+                  borderColor: colors.border.default,
+                  backgroundColor: colors.background.secondary,
+                }}
               >
-                {successMessage}
-              </AppText>
+                <AppText
+                  variant="bodySmall"
+                  color={colors.text.secondary}
+                  accessibilityLiveRegion="polite"
+                >
+                  {successMessage}
+                </AppText>
+              </View>
             ) : null}
 
-            <Button
-              fullWidth
-              size="large"
-              loading={isSubmitting}
-              disabled={isSubmitting}
-              onPress={handleSignUp}
-            >
-              Create Account
-            </Button>
+            {/* Primary action */}
+            <View style={{ gap: spacing.sm, marginTop: spacing.xs }}>
+              <Button
+                fullWidth
+                size="large"
+                loading={isSubmitting}
+                disabled={isSubmitting}
+                onPress={handleSignUp}
+              >
+                Create Account
+              </Button>
+
+              <AppText variant="caption" color={colors.text.tertiary} align="center">
+                By continuing, make sure your account details are accurate.
+              </AppText>
+            </View>
           </View>
 
+          {/* Sign-in prompt */}
           <View
             style={{
               flexDirection: 'row',
@@ -304,6 +336,8 @@ export default function SignUpScreen() {
               alignItems: 'center',
               flexWrap: 'wrap',
               gap: spacing.xs,
+              marginTop: 'auto',
+              paddingTop: spacing.xl,
             }}
           >
             <AppText variant="body" color={colors.text.secondary}>
@@ -314,6 +348,7 @@ export default function SignUpScreen() {
               accessibilityRole="link"
               onPress={() => router.replace('/(auth)/sign-in')}
               disabled={isSubmitting}
+              hitSlop={8}
             >
               <AppText variant="button" color={colors.brand.red}>
                 Sign In
