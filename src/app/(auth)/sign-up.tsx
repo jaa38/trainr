@@ -26,8 +26,7 @@ type FormErrors = {
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function SignUpScreen() {
-  const { colors, spacing, mode } = useTrainrTheme();
-
+  const { colors, spacing } = useTrainrTheme();
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');

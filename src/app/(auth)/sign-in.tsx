@@ -109,8 +109,7 @@ export default function SignInScreen() {
       router.replace('/(tabs)');
     } catch {
       setErrors({
-        general:
-          'Something went wrong. Please check your connection and try again.',
+        general: 'Something went wrong. Please check your connection and try again.',
       });
     } finally {
       setIsSubmitting(false);
@@ -131,9 +130,7 @@ export default function SignInScreen() {
     setIsResettingPassword(true);
 
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(
-        email.trim(),
-      );
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim());
 
       if (error) {
         setErrors((current) => ({
@@ -149,8 +146,7 @@ export default function SignInScreen() {
     } catch {
       setErrors((current) => ({
         ...current,
-        general:
-          'Something went wrong. Please check your connection and try again.',
+        general: 'Something went wrong. Please check your connection and try again.',
       }));
     } finally {
       setIsResettingPassword(false);
@@ -276,9 +272,7 @@ export default function SignInScreen() {
                 trailing={
                   <Pressable
                     accessibilityRole="button"
-                    accessibilityLabel={
-                      showPassword ? 'Hide password' : 'Show password'
-                    }
+                    accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
                     accessibilityState={{ selected: showPassword }}
                     onPress={() => setShowPassword((visible) => !visible)}
                     hitSlop={8}
@@ -304,9 +298,7 @@ export default function SignInScreen() {
               }}
             >
               <AppText variant="button" color={colors.brand.red}>
-                {isResettingPassword
-                  ? 'Sending reset email...'
-                  : 'Forgot password?'}
+                {isResettingPassword ? 'Sending reset email...' : 'Forgot password?'}
               </AppText>
             </Pressable>
 
@@ -360,11 +352,7 @@ export default function SignInScreen() {
                 Sign In
               </Button>
 
-              <AppText
-                variant="caption"
-                color={colors.text.tertiary}
-                align="center"
-              >
+              <AppText variant="caption" color={colors.text.tertiary} align="center">
                 Welcome back. Your next step starts here.
               </AppText>
             </View>
@@ -383,7 +371,7 @@ export default function SignInScreen() {
             }}
           >
             <AppText variant="body" color={colors.text.secondary}>
-              Don't have an account?
+              Don&apos;t have an account?{' '}
             </AppText>
 
             <Pressable
