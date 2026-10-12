@@ -23,16 +23,23 @@ type FormErrors = {
   general?: string;
 };
 
+type AccountType = 'gym_goer' | 'trainer';
+
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function SignUpScreen() {
   const { colors, spacing } = useTrainrTheme();
+
   const [fullName, setFullName] = useState('');
+  const [accountType, setAccountType] = useState<AccountType>('gym_goer');
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
   const [errors, setErrors] = useState<FormErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
@@ -85,8 +92,9 @@ export default function SignUpScreen() {
         options: {
           data: {
             full_name: fullName.trim(),
+            account_type: accountType,
           },
-          emailRedirectTo: 'trainr://auth/callback',
+          emailRedirectTo: `trainr://auth/callback?account_type=${accountType}`,
         },
       });
 
@@ -102,6 +110,8 @@ export default function SignUpScreen() {
         return;
       }
 
+      // The account type is saved by the callback or the
+      // authenticated account-selection flow, not both here.
       router.replace('/(tabs)');
     } catch {
       setErrors({
@@ -111,6 +121,23 @@ export default function SignUpScreen() {
       setIsSubmitting(false);
     }
   }
+
+  const accountTypes: {
+    value: AccountType;
+    title: string;
+    description: string;
+  }[] = [
+    {
+      value: 'gym_goer',
+      title: 'Gym-goer',
+      description: 'Find trainers and track your fitness.',
+    },
+    {
+      value: 'trainer',
+      title: 'Personal trainer',
+      description: 'Manage clients and training sessions.',
+    },
+  ];
 
   return (
     <SafeAreaView
@@ -154,7 +181,12 @@ export default function SignUpScreen() {
           </Pressable>
 
           {/* Page heading */}
-          <View style={{ gap: spacing.sm, marginBottom: spacing.xl }}>
+          <View
+            style={{
+              gap: spacing.sm,
+              marginBottom: spacing.xl,
+            }}
+          >
             <AppText variant="displayLarge" color={colors.text.primary}>
               CREATE YOUR
             </AppText>
@@ -177,6 +209,93 @@ export default function SignUpScreen() {
 
           {/* Registration form */}
           <View style={{ gap: spacing.lg }}>
+            {/* Account type selector */}
+            <View style={{ gap: spacing.sm }}>
+              <AppText variant="bodyMedium" color={colors.text.primary}>
+                I WANT TO JOIN AS A
+              </AppText>
+
+              <View
+                accessibilityRole="radiogroup"
+                style={{
+                  flexDirection: 'row',
+                  gap: spacing.sm,
+                }}
+              >
+                {accountTypes.map((type) => {
+                  const isSelected = accountType === type.value;
+
+                  return (
+                    <Pressable
+                      key={type.value}
+                      accessibilityRole="radio"
+                      accessibilityLabel={type.title}
+                      accessibilityHint={type.description}
+                      accessibilityState={{
+                        selected: isSelected,
+                        disabled: isSubmitting,
+                      }}
+                      disabled={isSubmitting}
+                      onPress={() => setAccountType(type.value)}
+                      style={{
+                        flex: 1,
+                        minHeight: 112,
+                        padding: spacing.md,
+                        borderRadius: 12,
+                        borderWidth: 1,
+                        borderColor: isSelected
+                          ? colors.brand.red
+                          : colors.border.default,
+                        backgroundColor: isSelected
+                          ? colors.background.secondary
+                          : colors.background.primary,
+                        gap: spacing.xs,
+                        opacity: isSubmitting ? 0.7 : 1,
+                      }}
+                    >
+                      <View
+                        style={{
+                          width: 20,
+                          height: 20,
+                          borderRadius: 10,
+                          borderWidth: 2,
+                          borderColor: isSelected
+                            ? colors.brand.red
+                            : colors.border.default,
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          marginBottom: spacing.xs,
+                        }}
+                      >
+                        {isSelected ? (
+                          <View
+                            style={{
+                              width: 10,
+                              height: 10,
+                              borderRadius: 5,
+                              backgroundColor: colors.brand.red,
+                            }}
+                          />
+                        ) : null}
+                      </View>
+
+                      <AppText
+                        variant="bodyMedium"
+                        color={isSelected ? colors.brand.red : colors.text.primary}
+                      >
+                        {type.title}
+                      </AppText>
+
+                      <AppText variant="body" color={colors.text.secondary}>
+                        {type.description}
+                      </AppText>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+
+            {/* Form fields */}
             <View style={{ gap: spacing.md }}>
               <Input
                 label="Full name"
@@ -310,7 +429,12 @@ export default function SignUpScreen() {
             ) : null}
 
             {/* Primary action */}
-            <View style={{ gap: spacing.sm, marginTop: spacing.xs }}>
+            <View
+              style={{
+                gap: spacing.sm,
+                marginTop: spacing.xs,
+              }}
+            >
               <Button
                 fullWidth
                 size="large"

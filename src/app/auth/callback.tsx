@@ -8,18 +8,25 @@ import { Button } from '@/components/Button';
 import { supabase } from '@/lib/supabase';
 import { useTrainrTheme } from '@/theme';
 
+type AccountType = 'gym_goer' | 'trainer';
+
 type CallbackParams = {
   flow?: string | string[];
   flow_id?: string | string[];
   code?: string | string[];
   access_token?: string | string[];
   refresh_token?: string | string[];
+  account_type?: string | string[];
   error?: string | string[];
   error_description?: string | string[];
 };
 
 function getParam(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
+}
+
+function isAccountType(value: string | undefined): value is AccountType {
+  return value === 'gym_goer' || value === 'trainer';
 }
 
 export default function AuthCallbackScreen() {
@@ -31,16 +38,17 @@ export default function AuthCallbackScreen() {
     code: rawCode,
     access_token: rawAccessToken,
     refresh_token: rawRefreshToken,
+    account_type: rawAccountType,
     error: rawError,
     error_description: rawErrorDescription,
   } = useLocalSearchParams<CallbackParams>();
 
   const flow = getParam(rawFlow);
   const flowId = getParam(rawFlowId);
-
   const code = getParam(rawCode);
   const accessToken = getParam(rawAccessToken);
   const refreshToken = getParam(rawRefreshToken);
+  const accountTypeParam = getParam(rawAccountType);
   const authError = getParam(rawError);
   const errorDescription = getParam(rawErrorDescription);
 
@@ -65,7 +73,6 @@ export default function AuthCallbackScreen() {
     const hasTokens = Boolean(accessToken && refreshToken);
     const hasAuthError = Boolean(authError || errorDescription);
 
-    // Wait for callback parameters without setting state synchronously.
     if (!hasCode && !hasTokens && !hasAuthError) {
       return;
     }
@@ -115,25 +122,57 @@ export default function AuthCallbackScreen() {
           return;
         }
 
-        setStatus('success');
-
+        // Password recovery must not change the account type.
         if (flow === 'recovery') {
+          setStatus('success');
           setMessage(
             'Your recovery link has been verified. You can now choose a new password.',
           );
           setDebugInfo('Password recovery session established.');
-        } else {
-          setMessage('Your email has been verified. Welcome to TRAINR!');
-          setDebugInfo('Email verification completed successfully.');
+
+          redirectTimeout = setTimeout(() => {
+            if (mounted) {
+              router.replace('/(auth)/reset-password');
+            }
+          }, 1200);
+
+          return;
         }
+
+        // Save the selected account type through the protected RPC.
+        if (isAccountType(accountTypeParam)) {
+          setDebugInfo('Saving your selected account type...');
+
+          const { error: roleError } = await supabase.rpc('select_initial_account_type', {
+            requested_role: accountTypeParam,
+          });
+
+          if (roleError) {
+            throw new Error(
+              'Your email has been verified, but we could not save your account type. Please sign in and try again.',
+            );
+          }
+        }
+
+        if (!mounted) {
+          return;
+        }
+
+        setStatus('success');
+        setMessage('Your email has been verified. Welcome to TRAINR!');
+        setDebugInfo('Email verification completed successfully.');
 
         redirectTimeout = setTimeout(() => {
           if (!mounted) {
             return;
           }
 
-          if (flow === 'recovery') {
-            router.replace('/(auth)/reset-password');
+          if (isAccountType(accountTypeParam)) {
+            router.replace(
+              accountTypeParam === 'trainer'
+                ? '/(tabs)/personal-trainer'
+                : '/(tabs)/gym-goer',
+            );
           } else {
             router.replace('/(tabs)');
           }
@@ -166,7 +205,16 @@ export default function AuthCallbackScreen() {
         clearTimeout(redirectTimeout);
       }
     };
-  }, [flow, flowId, code, accessToken, refreshToken, authError, errorDescription]);
+  }, [
+    flow,
+    flowId,
+    code,
+    accessToken,
+    refreshToken,
+    accountTypeParam,
+    authError,
+    errorDescription,
+  ]);
 
   const waitingForParameters =
     status === 'loading' &&

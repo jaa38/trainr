@@ -1,43 +1,75 @@
+import { router, type Href } from 'expo-router';
 import { useState } from 'react';
-import { Image, Pressable, ScrollView, View } from 'react-native';
+import { Pressable, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/AppText';
+import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/providers/AuthProvider';
 import { useTrainrTheme } from '@/theme';
 
-export default function HomeTabScreen() {
-  const { colors, spacing, mode } = useTrainrTheme();
-  const { signOut } = useAuth();
+type AccountType = 'gym_goer' | 'trainer';
 
-  const [isSigningOut, setIsSigningOut] = useState(false);
+const roleRoutes: Record<AccountType, Href> = {
+  gym_goer: '/(tabs)/gym-goer' as Href,
+  trainer: '/(tabs)/personal-trainer' as Href,
+};
+
+export default function RoleSelectionScreen() {
+  const { colors, spacing } = useTrainrTheme();
+  const { user, isLoading, refreshProfile } = useAuth();
+
+  const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const handleSignOut = async () => {
-    if (isSigningOut) {
+  async function selectRole(accountType: AccountType) {
+    if (isLoading || !user || isSaving) {
       return;
     }
 
-    setIsSigningOut(true);
+    setIsSaving(true);
     setErrorMessage(null);
 
     try {
-      await signOut();
+      const { error } = await supabase.rpc('select_initial_account_type', {
+        requested_role: accountType,
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      await refreshProfile();
+      router.replace(roleRoutes[accountType]);
     } catch (error) {
-      console.error('[Home] Sign-out or navigation failed:', error);
+      console.error('[Role Selection] Failed to save account type:', error);
 
       setErrorMessage(
-        error instanceof Error ? error.message : 'Unable to sign out. Please try again.',
+        error instanceof Error
+          ? error.message
+          : 'Unable to save your account type. Please try again.',
       );
     } finally {
-      setIsSigningOut(false);
+      setIsSaving(false);
     }
-  };
+  }
 
-  const appIcon =
-    mode === 'dark'
-      ? require('../../../assets/images/icons/darkModeAppIcon.png')
-      : require('../../../assets/images/icons/lightModeAppIcon.png');
+  const roleOptions: {
+    role: AccountType;
+    title: string;
+    description: string;
+  }[] = [
+    {
+      role: 'gym_goer',
+      title: "I'm a Gym-Goer",
+      description: 'Discover trainers, book sessions and track your progress.',
+    },
+    {
+      role: 'trainer',
+      title: "I'm a Personal Trainer",
+      description: 'Manage clients, organise sessions and grow your business.',
+    },
+  ];
 
   return (
     <SafeAreaView
@@ -47,202 +79,65 @@ export default function HomeTabScreen() {
         backgroundColor: colors.background.primary,
       }}
     >
-      <ScrollView
-        contentContainerStyle={{
-          flexGrow: 1,
-          paddingHorizontal: spacing.lg,
-          paddingTop: spacing.lg,
-          paddingBottom: spacing.xxxl,
+      <View
+        style={{
+          flex: 1,
+          justifyContent: 'center',
+          padding: spacing.lg,
+          gap: spacing.lg,
         }}
-        showsVerticalScrollIndicator={false}
       >
-        {/* Brand Header */}
-        <View
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            marginBottom: spacing.xxxl,
-          }}
-        >
-          <View style={{ gap: spacing.xs }}>
-            <AppText variant="h1" color={colors.text.primary}>
-              TRAINR
-            </AppText>
+        <AppText variant="displayLarge" color={colors.text.primary}>
+          TRAINR
+        </AppText>
 
-            <AppText
-              variant="caption"
-              color={colors.text.tertiary}
-              style={{
-                letterSpacing: 1.2,
-                textTransform: 'uppercase',
-              }}
-            >
-              YOUR FITNESS. YOUR JOURNEY.
-            </AppText>
-          </View>
+        <AppText variant="h2" color={colors.text.primary}>
+          Choose your experience.
+        </AppText>
 
-          {/* Theme-aware App Icon */}
-          <Image
-            source={appIcon}
-            accessibilityLabel="TRAINR app icon"
-            resizeMode="contain"
-            style={{
-              width: 64,
-              height: 64,
-              borderRadius: 14,
-            }}
-          />
-        </View>
+        <AppText variant="body" color={colors.text.secondary}>
+          Tell us how you'll use TRAINR so we can personalise your experience.
+        </AppText>
 
-        {/* Welcome Section */}
-        <View
-          style={{
-            gap: spacing.sm,
-            marginBottom: spacing.xl,
-          }}
-        >
-          <AppText
-            variant="caption"
-            color={colors.brand.red}
-            style={{
-              letterSpacing: 1.5,
-              textTransform: 'uppercase',
-            }}
-          >
-            YOUR NEXT CHAPTER
-          </AppText>
-
-          <AppText variant="displayLarge" color={colors.text.primary}>
-            WELCOME
-          </AppText>
-
-          <AppText variant="displayLarge" color={colors.brand.red}>
-            BACK.
-          </AppText>
-
-          <AppText
-            variant="body"
-            color={colors.text.secondary}
-            style={{
-              lineHeight: 24,
-              marginTop: spacing.xs,
-            }}
-          >
-            Your fitness journey continues here. Stay focused, keep showing up, and make
-            every session count.
-          </AppText>
-        </View>
-
-        {/* Fitness Feature Card */}
-        <View
-          style={{
-            padding: spacing.lg,
-            borderRadius: 20,
-            borderWidth: 1,
-            borderColor: colors.border.default,
-            backgroundColor: colors.background.secondary,
-            gap: spacing.md,
-            marginBottom: spacing.xl,
-          }}
-        >
-          <View
-            style={{
-              width: 44,
-              height: 4,
-              borderRadius: 2,
-              backgroundColor: colors.brand.red,
-            }}
-          />
-
-          <AppText variant="h2" color={colors.text.primary}>
-            BUILT THROUGH GRIT.
-          </AppText>
-
-          <AppText
-            variant="body"
-            color={colors.text.secondary}
-            style={{ lineHeight: 24 }}
-          >
-            Every challenge builds resilience. Every session moves you closer to your
-            potential.
-          </AppText>
-
-          <View
-            style={{
-              alignSelf: 'flex-start',
-              paddingHorizontal: spacing.md,
-              paddingVertical: spacing.sm,
-              borderRadius: 10,
-              backgroundColor: colors.brand.red,
-            }}
-          >
-            <AppText variant="button" color="#FFFFFF">
-              KEEP MOVING
-            </AppText>
-          </View>
-        </View>
-
-        {/* Sign Out Section */}
-        <View
-          style={{
-            paddingTop: spacing.lg,
-            gap: spacing.md,
-          }}
-        >
-          {errorMessage ? (
-            <View
-              accessibilityRole="alert"
-              style={{
-                padding: spacing.md,
-                borderRadius: 12,
-                borderWidth: 1,
-                borderColor: colors.brand.red,
-                backgroundColor: colors.background.secondary,
-              }}
-            >
-              <AppText variant="bodySmall" color={colors.text.error}>
-                {errorMessage}
-              </AppText>
-            </View>
-          ) : null}
-
+        {roleOptions.map((option) => (
           <Pressable
+            key={option.role}
             accessibilityRole="button"
-            accessibilityLabel="Sign out of TRAINR"
-            accessibilityState={{
-              disabled: isSigningOut,
-              busy: isSigningOut,
-            }}
-            disabled={isSigningOut}
-            onPress={handleSignOut}
+            accessibilityLabel={option.title}
+            accessibilityHint={option.description}
+            accessibilityState={{ disabled: isSaving || isLoading }}
+            disabled={isSaving || isLoading}
+            onPress={() => selectRole(option.role)}
             style={({ pressed }) => ({
-              minHeight: 54,
-              flexDirection: 'row',
-              alignItems: 'center',
-              justifyContent: 'center',
-              paddingHorizontal: spacing.lg,
-              borderRadius: 14,
+              padding: spacing.lg,
+              gap: spacing.sm,
+              borderRadius: 16,
               borderWidth: 1,
-              borderColor: colors.border.default,
-              backgroundColor: colors.background.primary,
-              opacity: isSigningOut ? 0.6 : pressed ? 0.75 : 1,
+              borderColor: colors.brand.red,
+              backgroundColor: colors.background.secondary,
+              opacity: isSaving || isLoading ? 0.6 : pressed ? 0.75 : 1,
             })}
           >
-            <AppText variant="buttonLarge" color={colors.text.primary}>
-              {isSigningOut ? 'Signing Out…' : 'Sign Out'}
+            <AppText variant="h3" color={colors.text.primary}>
+              {option.title}
+            </AppText>
+
+            <AppText variant="body" color={colors.text.secondary}>
+              {option.description}
+            </AppText>
+
+            <AppText variant="button" color={colors.brand.red}>
+              {isSaving ? 'Saving…' : 'Continue →'}
             </AppText>
           </Pressable>
+        ))}
 
-          <AppText
-            variant="caption"
-            color={colors.text.tertiary}
-            style={{ textAlign: 'center' }}
-          >
-            KEEP SHOWING UP. YOUR WORK ADDS UP.
+        {errorMessage ? (
+          <AppText variant="bodySmall" color={colors.text.error}>
+            {errorMessage}
           </AppText>
-        </View>
-      </ScrollView>
+        ) : null}
+      </View>
     </SafeAreaView>
   );
 }

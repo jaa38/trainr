@@ -32,10 +32,24 @@ import { TrainrThemeProvider } from '@/theme';
 SplashScreen.preventAutoHideAsync();
 
 function AuthenticatedNavigation() {
-  const { session, isLoading } = useAuth();
+  const { session, isLoading, profile, isProfileLoading, profileError } = useAuth();
+
   const router = useRouter();
   const segments = useSegments();
   const navigationState = useRootNavigationState();
+
+  // Temporary diagnostic log to identify profile-loading and navigation issues.
+  useEffect(() => {
+    console.log('[Navigation] Auth state:', {
+      sessionPresent: Boolean(session),
+      isLoading,
+      isProfileLoading,
+      profileFound: Boolean(profile),
+      accountTypeSelected: profile?.account_type_selected ?? null,
+      profileRole: profile?.role ?? null,
+      profileError,
+    });
+  }, [session, isLoading, isProfileLoading, profile, profileError]);
 
   useEffect(() => {
     if (isLoading || !navigationState?.key) {
@@ -60,19 +74,64 @@ function AuthenticatedNavigation() {
     const isWelcomeScreen = firstSegment === undefined;
     const isTabsScreen = firstSegment === '(tabs)';
 
-    if (session && (isWelcomeScreen || isAuthScreen)) {
-      console.log('[Navigation] Authenticated user: redirecting to tabs.');
-      router.replace('/(tabs)');
+    // Signed-out users cannot access authenticated tabs.
+    if (!session) {
+      if (isTabsScreen) {
+        router.replace('/(auth)/sign-in');
+      }
       return;
     }
 
-    if (!session && isTabsScreen) {
-      console.log('[Navigation] Signed-out user: redirecting to sign-in.');
-      router.replace('/(auth)/sign-in');
+    // Wait for the profile query to finish before making routing decisions.
+    if (isProfileLoading || (!profile && !profileError)) {
+      return;
     }
-  }, [isLoading, navigationState?.key, router, segments, session]);
 
-  if (isLoading || !navigationState?.key) {
+    // Don't treat a profile query failure as a missing profile.
+    if (profileError) {
+      console.error('[Navigation] Profile could not be loaded:', profileError);
+      return;
+    }
+
+    // A missing profile needs investigation; don't redirect based on assumptions.
+    if (!profile) {
+      console.error('[Navigation] No profile found after loading completed.');
+      return;
+    }
+
+    // Users must select their account type before entering a role-specific area.
+    if (!profile.account_type_selected) {
+      if (!isTabsScreen || segments[1] !== undefined) {
+        router.replace('/(tabs)');
+      }
+      return;
+    }
+
+    const homeRoute =
+      profile.role === 'trainer' ? '/(tabs)/personal-trainer' : '/(tabs)/gym-goer';
+
+    // Authenticated users should land in their correct role-specific area.
+    if (isWelcomeScreen || isAuthScreen || !isTabsScreen) {
+      router.replace(homeRoute);
+      return;
+    }
+
+    // Prevent selected users from returning to the account-selection screen.
+    if (segments[1] === undefined) {
+      router.replace(homeRoute);
+    }
+  }, [
+    isLoading,
+    isProfileLoading,
+    navigationState?.key,
+    profile,
+    profileError,
+    router,
+    segments,
+    session,
+  ]);
+
+  if (isLoading || !navigationState?.key || (Boolean(session) && isProfileLoading)) {
     return null;
   }
 
