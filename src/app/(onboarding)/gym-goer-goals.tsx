@@ -1,8 +1,11 @@
+import { router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/AppText';
+import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/providers/AuthProvider';
 import { useTrainrTheme } from '@/theme';
 
 const fitnessGoals = [
@@ -40,14 +43,68 @@ const fitnessGoals = [
 
 export default function GymGoerGoalsScreen() {
   const { colors, spacing } = useTrainrTheme();
+  const { user } = useAuth();
+
   const [selectedGoals, setSelectedGoals] = useState<string[]>([]);
+  const [isSaving, setIsSaving] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   function toggleGoal(goalId: string) {
+    if (isSaving) return;
+
     setSelectedGoals((current) =>
       current.includes(goalId)
         ? current.filter((goal) => goal !== goalId)
         : [...current, goalId],
     );
+  }
+
+  async function handleContinue() {
+    if (!user || isSaving || selectedGoals.length === 0) {
+      if (!user) {
+        setErrorMessage('Your session could not be found. Please sign in again.');
+      }
+      return;
+    }
+
+    setIsSaving(true);
+    setErrorMessage(null);
+
+    try {
+      // Replace the user's existing selections with the current selections.
+      const { error: deleteError } = await supabase
+        .from('gym_goer_fitness_goals')
+        .delete()
+        .eq('user_id', user.id);
+
+      if (deleteError) {
+        throw deleteError;
+      }
+
+      const { error: insertError } = await supabase.from('gym_goer_fitness_goals').insert(
+        selectedGoals.map((goal) => ({
+          user_id: user.id,
+          goal,
+        })),
+      );
+
+      if (insertError) {
+        throw insertError;
+      }
+
+      // Continue to the next step after the goals have been saved.
+      router.push('/(onboarding)/gym-goer-preferences');
+    } catch (error) {
+      console.error('[Gym-Goer Onboarding] Failed to save fitness goals:', error);
+
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : 'Unable to save your fitness goals. Please try again.',
+      );
+    } finally {
+      setIsSaving(false);
+    }
   }
 
   return (
@@ -64,6 +121,7 @@ export default function GymGoerGoalsScreen() {
           padding: spacing.lg,
           gap: spacing.lg,
         }}
+        keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
         <AppText variant="caption" color={colors.brand.red}>
@@ -87,7 +145,13 @@ export default function GymGoerGoalsScreen() {
             <Pressable
               key={goal.id}
               accessibilityRole="checkbox"
-              accessibilityState={{ checked: selected }}
+              accessibilityLabel={goal.title}
+              accessibilityHint={goal.description}
+              accessibilityState={{
+                checked: selected,
+                disabled: isSaving,
+              }}
+              disabled={isSaving}
               onPress={() => toggleGoal(goal.id)}
               style={({ pressed }) => ({
                 padding: spacing.lg,
@@ -98,7 +162,7 @@ export default function GymGoerGoalsScreen() {
                 backgroundColor: selected
                   ? colors.background.secondary
                   : colors.background.primary,
-                opacity: pressed ? 0.8 : 1,
+                opacity: isSaving ? 0.6 : pressed ? 0.8 : 1,
               })}
             >
               <View
@@ -135,24 +199,35 @@ export default function GymGoerGoalsScreen() {
           {selectedGoals.length === 1 ? '' : 's'} selected
         </AppText>
 
+        {errorMessage ? (
+          <AppText
+            variant="bodySmall"
+            color={colors.text.error}
+            accessibilityRole="alert"
+          >
+            {errorMessage}
+          </AppText>
+        ) : null}
+
         <Pressable
           accessibilityRole="button"
-          accessibilityState={{ disabled: selectedGoals.length === 0 }}
-          disabled={selectedGoals.length === 0}
-          onPress={() => {
-            console.log('[Onboarding] Selected fitness goals:', selectedGoals);
+          accessibilityState={{
+            disabled: selectedGoals.length === 0 || isSaving,
+            busy: isSaving,
           }}
+          disabled={selectedGoals.length === 0 || isSaving}
+          onPress={handleContinue}
           style={({ pressed }) => ({
             minHeight: 54,
             alignItems: 'center',
             justifyContent: 'center',
             borderRadius: 14,
             backgroundColor: colors.brand.red,
-            opacity: selectedGoals.length === 0 ? 0.45 : pressed ? 0.8 : 1,
+            opacity: selectedGoals.length === 0 || isSaving ? 0.45 : pressed ? 0.8 : 1,
           })}
         >
           <AppText variant="buttonLarge" color="#FFFFFF">
-            Continue →
+            {isSaving ? 'SAVING…' : 'CONTINUE →'}
           </AppText>
         </Pressable>
       </ScrollView>

@@ -11,8 +11,8 @@ import { useTrainrTheme } from '@/theme';
 type AccountType = 'gym_goer' | 'trainer';
 
 const roleRoutes: Record<AccountType, Href> = {
-  gym_goer: '/(tabs)/gym-goer' as Href,
-  trainer: '/(tabs)/personal-trainer' as Href,
+  gym_goer: '/(onboarding)/gym-goer' as Href,
+  trainer: '/(onboarding)/personal-trainer' as Href,
 };
 
 export default function RoleSelectionScreen() {

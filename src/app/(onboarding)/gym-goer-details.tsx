@@ -17,8 +17,8 @@ import { useTrainrTheme } from '@/theme';
 
 export default function GymGoerDetailsScreen() {
   const { colors, spacing } = useTrainrTheme();
-  const { user, refreshProfile } = useAuth();
-
+  const { user } = useAuth();
+  
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [dateOfBirth, setDateOfBirth] = useState('');
@@ -78,7 +78,6 @@ export default function GymGoerDetailsScreen() {
 
       if (error) throw error;
 
-      await refreshProfile();
       router.push('/(onboarding)/gym-goer-goals');
     } catch (error) {
       console.error('[Gym-Goer Onboarding] Failed to save details:', error);

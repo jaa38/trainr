@@ -32,13 +32,13 @@ import { TrainrThemeProvider } from '@/theme';
 SplashScreen.preventAutoHideAsync();
 
 function AuthenticatedNavigation() {
-  const { session, isLoading, profile, isProfileLoading, profileError } = useAuth();
+  const { session, isLoading, profile, isProfileLoading, profileError } =
+    useAuth();
 
   const router = useRouter();
   const segments = useSegments();
   const navigationState = useRootNavigationState();
 
-  // Temporary diagnostic log to identify profile-loading and navigation issues.
   useEffect(() => {
     console.log('[Navigation] Auth state:', {
       sessionPresent: Boolean(session),
@@ -46,6 +46,7 @@ function AuthenticatedNavigation() {
       isProfileLoading,
       profileFound: Boolean(profile),
       accountTypeSelected: profile?.account_type_selected ?? null,
+      onboardingCompleted: profile?.onboarding_completed ?? null,
       profileRole: profile?.role ?? null,
       profileError,
     });
@@ -59,10 +60,9 @@ function AuthenticatedNavigation() {
     const firstSegment = segments[0];
     const secondSegment = segments[1];
 
-    // Allow authentication callbacks to finish processing.
-    const isAuthCallback = firstSegment === 'auth' && secondSegment === 'callback';
+    const isAuthCallback =
+      firstSegment === 'auth' && secondSegment === 'callback';
 
-    // Allow users to set a new password during recovery.
     const isPasswordReset =
       firstSegment === '(auth)' && secondSegment === 'reset-password';
 
@@ -73,33 +73,37 @@ function AuthenticatedNavigation() {
     const isAuthScreen = firstSegment === '(auth)';
     const isWelcomeScreen = firstSegment === undefined;
     const isTabsScreen = firstSegment === '(tabs)';
+    const isOnboardingScreen = firstSegment === '(onboarding)';
 
-    // Signed-out users cannot access authenticated tabs.
+    // Signed-out users cannot access authenticated screens.
     if (!session) {
-      if (isTabsScreen) {
+      if (isTabsScreen || isOnboardingScreen) {
         router.replace('/(auth)/sign-in');
       }
       return;
     }
 
-    // Wait for the profile query to finish before making routing decisions.
+    // Wait for the profile query to finish.
     if (isProfileLoading || (!profile && !profileError)) {
       return;
     }
 
-    // Don't treat a profile query failure as a missing profile.
     if (profileError) {
-      console.error('[Navigation] Profile could not be loaded:', profileError);
+      console.error(
+        '[Navigation] Profile could not be loaded:',
+        profileError,
+      );
       return;
     }
 
-    // A missing profile needs investigation; don't redirect based on assumptions.
     if (!profile) {
-      console.error('[Navigation] No profile found after loading completed.');
+      console.error(
+        '[Navigation] No profile found after loading completed.',
+      );
       return;
     }
 
-    // Users must select their account type before entering a role-specific area.
+    // Account selection must happen before onboarding.
     if (!profile.account_type_selected) {
       if (!isTabsScreen || segments[1] !== undefined) {
         router.replace('/(tabs)');
@@ -108,15 +112,45 @@ function AuthenticatedNavigation() {
     }
 
     const homeRoute =
-      profile.role === 'trainer' ? '/(tabs)/personal-trainer' : '/(tabs)/gym-goer';
+      profile.role === 'trainer'
+        ? '/(tabs)/personal-trainer'
+        : '/(tabs)/gym-goer';
 
-    // Authenticated users should land in their correct role-specific area.
-    if (isWelcomeScreen || isAuthScreen || !isTabsScreen) {
+    const onboardingRoute =
+      profile.role === 'trainer'
+        ? '/(onboarding)/personal-trainer'
+        : '/(onboarding)/gym-goer';
+
+    // Incomplete users must stay within their role's onboarding flow.
+    if (!profile.onboarding_completed) {
+      const isAllowedOnboardingRoute =
+        isOnboardingScreen &&
+        (profile.role === 'trainer'
+          ? secondSegment === 'personal-trainer' ||
+            secondSegment === 'personal-trainer-details'
+          : secondSegment === 'gym-goer' ||
+            secondSegment === 'gym-goer-details' ||
+            secondSegment === 'gym-goer-goals' ||
+            secondSegment === 'gym-goer-preferences');
+
+      if (!isAllowedOnboardingRoute) {
+        router.replace(onboardingRoute);
+      }
+
+      return;
+    }
+
+    // Completed users should not return to onboarding or role selection.
+    if (
+      isWelcomeScreen ||
+      isAuthScreen ||
+      isOnboardingScreen ||
+      !isTabsScreen
+    ) {
       router.replace(homeRoute);
       return;
     }
 
-    // Prevent selected users from returning to the account-selection screen.
     if (segments[1] === undefined) {
       router.replace(homeRoute);
     }
@@ -131,7 +165,11 @@ function AuthenticatedNavigation() {
     session,
   ]);
 
-  if (isLoading || !navigationState?.key || (Boolean(session) && isProfileLoading)) {
+  if (
+    isLoading ||
+    !navigationState?.key ||
+    (Boolean(session) && isProfileLoading)
+  ) {
     return null;
   }
 
@@ -143,6 +181,7 @@ function AuthenticatedNavigation() {
         <Stack.Screen name="index" />
         <Stack.Screen name="(auth)" />
         <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="(onboarding)" />
         <Stack.Screen name="auth/callback" />
       </Stack>
     </>
@@ -174,7 +213,9 @@ export default function RootLayout() {
 
   return (
     <TrainrThemeProvider mode="system">
-      <ExpoThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+      <ExpoThemeProvider
+        value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}
+      >
         <AuthProvider>
           <AuthenticatedNavigation />
         </AuthProvider>

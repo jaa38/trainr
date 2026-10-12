@@ -1,3 +1,5 @@
+// src/providers/AuthProvider.tsx
+
 import type { Session, User } from '@supabase/supabase-js';
 import {
   createContext,
@@ -30,6 +32,7 @@ type AuthContextValue = {
   isProfileLoading: boolean;
   profileError: string | null;
   refreshProfile: () => Promise<void>;
+  completeOnboardingLocally: () => void;
   signOut: () => Promise<void>;
 };
 
@@ -41,7 +44,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isProfileLoading, setIsProfileLoading] = useState(false);
   const [profileError, setProfileError] = useState<string | null>(null);
-  const [profileRefreshKey, setProfileRefreshKey] = useState(0);
+  const [profileRefreshKey] = useState(0);
 
   useEffect(() => {
     let isMounted = true;
@@ -91,10 +94,75 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
   const userId = session?.user.id ?? null;
 
+  const loadProfile = useCallback(async (id: string): Promise<UserProfile> => {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select(
+        'id, role, account_type_selected, onboarding_completed, first_name, last_name, avatar_url',
+      )
+      .eq('id', id)
+      .maybeSingle();
+
+    if (error) throw error;
+
+    if (!data) {
+      throw new Error(
+        'Your profile could not be found. Please try signing out and signing in again.',
+      );
+    }
+
+    if (data.role !== 'gym_goer' && data.role !== 'trainer') {
+      throw new Error('Your profile contains an unsupported account type.');
+    }
+
+    return data as UserProfile;
+  }, []);
+
+  const refreshProfile = useCallback(async () => {
+    if (!userId) {
+      setProfile(null);
+      setProfileError(null);
+      return;
+    }
+
+    setIsProfileLoading(true);
+    setProfileError(null);
+
+    try {
+      const latestProfile = await loadProfile(userId);
+      setProfile(latestProfile);
+      setProfileError(null);
+    } catch (error: unknown) {
+      console.error('[Auth] Failed to refresh profile:', error);
+
+      setProfile(null);
+      setProfileError(
+        error instanceof Error
+          ? error.message
+          : 'Unable to load your profile. Please try again.',
+      );
+
+      throw error;
+    } finally {
+      setIsProfileLoading(false);
+    }
+  }, [loadProfile, userId]);
+
+  const completeOnboardingLocally = useCallback(() => {
+    setProfile((currentProfile) =>
+      currentProfile
+        ? {
+            ...currentProfile,
+            onboarding_completed: true,
+          }
+        : currentProfile,
+    );
+  }, []);
+
   useEffect(() => {
     let isCurrentRequest = true;
 
-    async function loadProfile() {
+    async function fetchProfile() {
       if (!userId) {
         setProfile(null);
         setProfileError(null);
@@ -107,30 +175,10 @@ export function AuthProvider({ children }: PropsWithChildren) {
       setIsProfileLoading(true);
 
       try {
-        const { data, error } = await supabase
-          .from('profiles')
-          .select(
-            'id, role, account_type_selected, onboarding_completed, first_name, last_name, avatar_url',
-          )
-          .eq('id', userId)
-          .maybeSingle();
-
-        if (error) {
-          throw error;
-        }
-
-        if (!data) {
-          throw new Error(
-            'Your profile could not be found. Please try signing out and signing in again.',
-          );
-        }
-
-        if (data.role !== 'gym_goer' && data.role !== 'trainer') {
-          throw new Error('Your profile contains an unsupported account type.');
-        }
+        const latestProfile = await loadProfile(userId);
 
         if (isCurrentRequest) {
-          setProfile(data as UserProfile);
+          setProfile(latestProfile);
           setProfileError(null);
         }
       } catch (error: unknown) {
@@ -151,16 +199,12 @@ export function AuthProvider({ children }: PropsWithChildren) {
       }
     }
 
-    void loadProfile();
+    void fetchProfile();
 
     return () => {
       isCurrentRequest = false;
     };
-  }, [userId, profileRefreshKey]);
-
-  const refreshProfile = useCallback(async () => {
-    setProfileRefreshKey((current) => current + 1);
-  }, []);
+  }, [userId, profileRefreshKey, loadProfile]);
 
   const signOut = async () => {
     console.log('[Auth] Sign-out requested');
@@ -183,14 +227,6 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
     setProfile(null);
     setProfileError(null);
-
-    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-
-    console.log('[Auth] Session exists after sign-out:', Boolean(sessionData.session));
-
-    if (sessionError) {
-      console.error('[Auth] Failed to verify sign-out:', sessionError.message);
-    }
   };
 
   return (
@@ -203,6 +239,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
         isProfileLoading,
         profileError,
         refreshProfile,
+        completeOnboardingLocally,
         signOut,
       }}
     >
@@ -215,7 +252,7 @@ export function useAuth() {
   const context = useContext(AuthContext);
 
   if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
+    throw new Error('useAuth must be used within an AuthProvider.');
   }
 
   return context;
