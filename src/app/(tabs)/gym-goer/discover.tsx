@@ -224,10 +224,14 @@ export default function DiscoverScreen() {
                   accessibilityRole="button"
                   accessibilityLabel={`View profile for ${fullName || 'TRAINR Coach'}`}
                   onPress={() => {
+                    console.log('[Discover] Trainer card tapped:', trainer.trainer_id);
+
                     router.push({
-                      pathname: '/(tabs)/gym-goer/trainer/[id]',
+                      pathname: '/(tabs)/trainer-profile/[id]',
                       params: { id: trainer.trainer_id },
                     });
+
+                    console.log('[Discover] Navigation requested');
                   }}
                   style={{
                     padding: spacing.lg,

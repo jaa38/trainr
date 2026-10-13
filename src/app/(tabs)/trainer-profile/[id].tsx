@@ -1,11 +1,6 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import {
-  ActivityIndicator,
-  Pressable,
-  ScrollView,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/AppText';
@@ -30,9 +25,7 @@ export default function TrainerProfileScreen() {
       try {
         const trainers = await discoverPublishedTrainers();
 
-        const selectedTrainer = trainers.find(
-          (item) => item.trainer_id === id,
-        );
+        const selectedTrainer = trainers.find((item) => item.trainer_id === id);
 
         if (isActive) {
           setTrainer(selectedTrainer ?? null);
@@ -44,15 +37,10 @@ export default function TrainerProfileScreen() {
           }
         }
       } catch (error) {
-        console.error(
-          '[Trainer Profile] Unable to load trainer:',
-          error,
-        );
+        console.error('[Trainer Profile] Unable to load trainer:', error);
 
         if (isActive) {
-          setErrorMessage(
-            'We couldn’t load this trainer’s profile. Please try again.',
-          );
+          setErrorMessage('We couldn’t load this trainer’s profile. Please try again.');
         }
       } finally {
         if (isActive) {
@@ -80,23 +68,15 @@ export default function TrainerProfileScreen() {
     }).format(item.session_rate);
 
     return `${item.currency ?? ''} ${amount}${
-      item.session_duration_minutes
-        ? ` / ${item.session_duration_minutes} min`
-        : ''
+      item.session_duration_minutes ? ` / ${item.session_duration_minutes} min` : ''
     }`.trim();
   };
 
   const fullName = trainer
-    ? [trainer.first_name, trainer.last_name]
-        .filter(Boolean)
-        .join(' ')
-        .trim()
+    ? [trainer.first_name, trainer.last_name].filter(Boolean).join(' ').trim()
     : '';
 
-  function renderSection(
-    title: string,
-    content: string | null | undefined,
-  ) {
+  function renderSection(title: string, content: string | null | undefined) {
     if (!content) {
       return null;
     }
@@ -191,10 +171,7 @@ export default function TrainerProfileScreen() {
               gap: spacing.md,
             }}
           >
-            <ActivityIndicator
-              size="large"
-              color={colors.brand.red}
-            />
+            <ActivityIndicator size="large" color={colors.brand.red} />
 
             <AppText variant="body" color={colors.text.secondary}>
               Loading trainer profile…
@@ -251,27 +228,16 @@ export default function TrainerProfileScreen() {
                 TRAINR COACH
               </AppText>
 
-              <AppText
-                variant="displayLarge"
-                color={colors.text.primary}
-              >
+              <AppText variant="displayLarge" color={colors.text.primary}>
                 {fullName || 'TRAINR Coach'}
               </AppText>
 
-              {trainer.location
-                ? renderSection('Location', trainer.location)
-                : null}
+              {trainer.location ? renderSection('Location', trainer.location) : null}
 
               {trainer.years_experience != null ? (
-                <AppText
-                  variant="body"
-                  color={colors.text.secondary}
-                >
+                <AppText variant="body" color={colors.text.secondary}>
                   {trainer.years_experience}{' '}
-                  {trainer.years_experience === 1
-                    ? 'year'
-                    : 'years'}{' '}
-                  of experience
+                  {trainer.years_experience === 1 ? 'year' : 'years'} of experience
                 </AppText>
               ) : null}
 
@@ -283,10 +249,7 @@ export default function TrainerProfileScreen() {
                   gap: spacing.xs,
                 }}
               >
-                <AppText
-                  variant="caption"
-                  color={colors.text.secondary}
-                >
+                <AppText variant="caption" color={colors.text.secondary}>
                   SESSION RATE
                 </AppText>
 
@@ -296,41 +259,31 @@ export default function TrainerProfileScreen() {
               </View>
             </View>
 
-            {renderSection(
-              'About the trainer',
-              trainer.professional_bio,
-            )}
+            {renderSection('About the trainer', trainer.professional_bio)}
 
             {trainer.specialities?.length
-              ? renderSection(
-                  'Specialties',
-                  trainer.specialities.join(' · '),
-                )
+              ? renderSection('Specialties', trainer.specialities.join(' · '))
               : null}
 
             {trainer.qualifications?.length
-              ? renderSection(
-                  'Qualifications',
-                  trainer.qualifications.join(' · '),
-                )
+              ? renderSection('Qualifications', trainer.qualifications.join(' · '))
               : null}
 
             {trainer.certifications?.length
-              ? renderSection(
-                  'Certifications',
-                  trainer.certifications.join(' · '),
-                )
+              ? renderSection('Certifications', trainer.certifications.join(' · '))
               : null}
 
-            {renderSection(
-              'Coaching approach',
-              trainer.coaching_approach,
-            )}
+            {renderSection('Coaching approach', trainer.coaching_approach)}
 
             <Pressable
               accessibilityRole="button"
               onPress={() => {
-                // Connect the booking flow in a later step.
+                if (!id) return;
+
+                router.push({
+                  pathname: '/(tabs)/booking/[trainerId]',
+                  params: { trainerId: id },
+                });
               }}
               style={{
                 minHeight: 54,
@@ -346,10 +299,7 @@ export default function TrainerProfileScreen() {
               </AppText>
             </Pressable>
 
-            <AppText
-              variant="caption"
-              color={colors.text.tertiary}
-            >
+            <AppText variant="caption" color={colors.text.tertiary}>
               Booking will be available once session scheduling is implemented.
             </AppText>
           </>
