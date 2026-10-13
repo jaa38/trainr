@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Image, Pressable, ScrollView, View } from 'react-native';
+import { Image, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/AppText';
@@ -153,29 +153,6 @@ export default function PersonalTrainerHomeScreen() {
             </AppText>
           </View>
         ) : null}
-
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Sign out of TRAINR"
-          accessibilityState={{ disabled: isSigningOut, busy: isSigningOut }}
-          disabled={isSigningOut}
-          onPress={handleSignOut}
-          style={({ pressed }) => ({
-            minHeight: 54,
-            alignItems: 'center',
-            justifyContent: 'center',
-            paddingHorizontal: spacing.lg,
-            borderRadius: 14,
-            borderWidth: 1,
-            borderColor: colors.border.default,
-            backgroundColor: colors.background.primary,
-            opacity: isSigningOut ? 0.6 : pressed ? 0.75 : 1,
-          })}
-        >
-          <AppText variant="buttonLarge" color={colors.text.primary}>
-            {isSigningOut ? 'Signing Out…' : 'Sign Out'}
-          </AppText>
-        </Pressable>
       </ScrollView>
     </SafeAreaView>
   );
