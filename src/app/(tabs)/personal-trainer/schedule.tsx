@@ -154,7 +154,7 @@ export default function ScheduleScreen() {
             Review the booking details.
           </AppText>
           <AppText variant="body" color={colors.text.secondary}>
-            Prepare the client's workout.
+            Prepare the client&apos;s workout.
           </AppText>
           <AppText variant="body" color={colors.text.secondary}>
             Record session completion when available.
