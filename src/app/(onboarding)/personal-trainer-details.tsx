@@ -15,81 +15,39 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/providers/AuthProvider';
 import { useTrainrTheme } from '@/theme';
 
-const specialityOptions = [
-  'Strength training',
-  'Weight loss',
-  'Muscle building',
-  'General fitness',
-  'Functional training',
-  'Sports performance',
-  'Mobility and flexibility',
-  'Nutrition coaching',
-] as const;
-
-const availabilityOptions = [
-  'Monday',
-  'Tuesday',
-  'Wednesday',
-  'Thursday',
-  'Friday',
-  'Saturday',
-  'Sunday',
-] as const;
-
 export default function PersonalTrainerDetailsScreen() {
   const { colors, spacing } = useTrainrTheme();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
 
+  const [firstName, setFirstName] = useState<string | null>(null);
+  const [lastName, setLastName] = useState<string | null>(null);
   const [professionalBio, setProfessionalBio] = useState('');
-  const [qualifications, setQualifications] = useState('');
-  const [selectedSpecialities, setSelectedSpecialities] = useState<string[]>([]);
-  const [yearsExperience, setYearsExperience] = useState('');
   const [location, setLocation] = useState('');
-  const [availableDays, setAvailableDays] = useState<string[]>([]);
+  const [coachingApproach, setCoachingApproach] = useState('');
+
+  const resolvedFirstName = firstName ?? profile?.first_name ?? '';
+  const resolvedLastName = lastName ?? profile?.last_name ?? '';
+
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  function toggleSelection(
-    value: string,
-    current: string[],
-    update: (next: string[]) => void,
-  ) {
-    if (isSaving) return;
-
-    update(
-      current.includes(value)
-        ? current.filter((item) => item !== value)
-        : [...current, value],
-    );
-  }
-
-  async function handleFinish() {
+  async function handleContinue() {
     if (!user || isSaving) return;
 
+    const normalizedFirstName = resolvedFirstName.trim();
+    const normalizedLastName = resolvedLastName.trim();
     const normalizedBio = professionalBio.trim();
-    const normalizedQualifications = qualifications
-      .split(',')
-      .map((item) => item.trim())
-      .filter(Boolean);
     const normalizedLocation = location.trim();
-    const experience = Number(yearsExperience);
+    const normalizedCoachingApproach = coachingApproach.trim();
 
     if (
+      !normalizedFirstName ||
+      !normalizedLastName ||
       !normalizedBio ||
-      normalizedQualifications.length === 0 ||
-      selectedSpecialities.length === 0 ||
-      !yearsExperience.trim() ||
       !normalizedLocation ||
-      availableDays.length === 0
+      !normalizedCoachingApproach
     ) {
-      setErrorMessage(
-        'Complete all fields, including at least one qualification, speciality and available day.',
-      );
-      return;
-    }
-
-    if (!Number.isInteger(experience) || experience < 0 || experience > 80) {
-      setErrorMessage('Enter a valid number of years of experience.');
+      setErrorMessage('Complete all fields before continuing.');
       return;
     }
 
@@ -97,59 +55,62 @@ export default function PersonalTrainerDetailsScreen() {
     setErrorMessage(null);
 
     try {
+      const now = new Date().toISOString();
+
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .update({
+          first_name: normalizedFirstName,
+          last_name: normalizedLastName,
+          updated_at: now,
+        })
+        .eq('id', user.id);
+
+      if (profileError) {
+        throw profileError;
+      }
+
       const { error: trainerProfileError } = await supabase
         .from('trainer_profiles')
         .upsert(
           {
             user_id: user.id,
             professional_bio: normalizedBio,
-            qualifications: normalizedQualifications,
-            specialities: selectedSpecialities,
-            years_experience: experience,
             location: normalizedLocation,
-            availability: {
-              days: availableDays,
-            },
-            updated_at: new Date().toISOString(),
+            coaching_approach: normalizedCoachingApproach,
+            updated_at: now,
           },
           { onConflict: 'user_id' },
         );
 
-      if (trainerProfileError) throw trainerProfileError;
+      if (trainerProfileError) {
+        throw trainerProfileError;
+      }
 
-      const { error: completionError } = await supabase
-        .from('profiles')
-        .update({
-          onboarding_completed: true,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', user.id);
+      console.log('[Trainer Onboarding] Professional profile draft saved');
+      console.log('[Trainer Onboarding] Navigating to expertise screen');
 
-      if (completionError) throw completionError;
-
-      router.replace('/(tabs)/personal-trainer');
+      router.push('/(onboarding)/personal-trainer-expertise');
     } catch (error) {
-      console.error('[Trainer Onboarding] Failed to save trainer profile:', error);
+      console.error('[Trainer Onboarding] Failed to save professional profile:', error);
 
       setErrorMessage(
         error instanceof Error
           ? error.message
-          : 'Unable to save your trainer profile. Please try again.',
+          : 'Unable to save your professional profile. Please try again.',
       );
     } finally {
       setIsSaving(false);
     }
   }
 
-  function renderTextField(
+  function renderField(
     label: string,
     value: string,
     onChangeText: (text: string) => void,
     placeholder: string,
     options?: {
       multiline?: boolean;
-      keyboardType?: 'default' | 'numeric';
-      autoCapitalize?: 'none' | 'sentences' | 'words';
     },
   ) {
     return (
@@ -164,8 +125,6 @@ export default function PersonalTrainerDetailsScreen() {
           placeholder={placeholder}
           placeholderTextColor={colors.text.tertiary}
           multiline={options?.multiline}
-          keyboardType={options?.keyboardType ?? 'default'}
-          autoCapitalize={options?.autoCapitalize ?? 'sentences'}
           editable={!isSaving}
           textAlignVertical={options?.multiline ? 'top' : 'center'}
           style={{
@@ -183,43 +142,13 @@ export default function PersonalTrainerDetailsScreen() {
     );
   }
 
-  function renderChoice(
-    label: string,
-    selected: boolean,
-    onPress: () => void,
-    key: string,
-  ) {
-    return (
-      <Pressable
-        key={key}
-        accessibilityRole="checkbox"
-        accessibilityLabel={label}
-        accessibilityState={{ checked: selected, disabled: isSaving }}
-        disabled={isSaving}
-        onPress={onPress}
-        style={({ pressed }) => ({
-          padding: spacing.md,
-          borderRadius: 12,
-          borderWidth: 1,
-          borderColor: selected ? colors.brand.red : colors.border.default,
-          backgroundColor: selected
-            ? colors.background.secondary
-            : colors.background.primary,
-          opacity: isSaving ? 0.6 : pressed ? 0.8 : 1,
-        })}
-      >
-        <AppText variant="body" color={selected ? colors.brand.red : colors.text.primary}>
-          {selected ? '✓  ' : ''}
-          {label}
-        </AppText>
-      </Pressable>
-    );
-  }
-
   return (
     <SafeAreaView
       edges={['top']}
-      style={{ flex: 1, backgroundColor: colors.background.primary }}
+      style={{
+        flex: 1,
+        backgroundColor: colors.background.primary,
+      }}
     >
       <KeyboardAvoidingView
         style={{ flex: 1 }}
@@ -235,88 +164,68 @@ export default function PersonalTrainerDetailsScreen() {
           showsVerticalScrollIndicator={false}
         >
           <AppText variant="caption" color={colors.brand.red}>
-            PERSONAL TRAINER SETUP · STEP 2 OF 4
+            PERSONAL TRAINER SETUP · STEP 2 OF 5
           </AppText>
 
           <AppText variant="h1" color={colors.text.primary}>
-            Build your trainer profile.
+            Your professional profile.
           </AppText>
 
           <AppText variant="body" color={colors.text.secondary}>
-            Tell gym-goers about your expertise, qualifications and training availability.
+            Introduce yourself to potential clients. Your name is prefilled from your
+            account when available. You can save your details now and publish your profile
+            later.
           </AppText>
 
-          {renderTextField(
+          {renderField(
+            'First name',
+            resolvedFirstName,
+            (value) => setFirstName(value),
+            'Enter your first name',
+          )}
+
+          {renderField(
+            'Last name',
+            resolvedLastName,
+            (value) => setLastName(value),
+            'Enter your last name',
+          )}
+
+          {renderField(
             'Professional bio',
             professionalBio,
             setProfessionalBio,
-            'Introduce yourself and your coaching approach',
+            'Tell gym-goers about your experience and what makes you different',
             { multiline: true },
           )}
 
-          {renderTextField(
-            'Qualifications',
-            qualifications,
-            setQualifications,
-            'e.g. Personal Training Level 3, First Aid',
+          {renderField('Location', location, setLocation, 'Enter your city or area')}
+
+          {renderField(
+            'Coaching approach',
+            coachingApproach,
+            setCoachingApproach,
+            'Describe how you motivate, guide and support your clients',
+            { multiline: true },
           )}
 
-          <View style={{ gap: spacing.sm }}>
-            <AppText variant="h3" color={colors.text.primary}>
-              Specialities
+          <View
+            style={{
+              padding: spacing.md,
+              borderRadius: 12,
+              borderWidth: 1,
+              borderColor: colors.border.default,
+              gap: spacing.xs,
+            }}
+          >
+            <AppText variant="body" color={colors.text.primary}>
+              Profile photo
             </AppText>
 
             <AppText variant="bodySmall" color={colors.text.secondary}>
-              Select all areas in which you specialise.
+              Photo upload will be available after profile image storage is configured.
+              Your existing account photo is preserved.
             </AppText>
-
-            {specialityOptions.map((speciality) =>
-              renderChoice(
-                speciality,
-                selectedSpecialities.includes(speciality),
-                () =>
-                  toggleSelection(
-                    speciality,
-                    selectedSpecialities,
-                    setSelectedSpecialities,
-                  ),
-                speciality,
-              ),
-            )}
-          </View>
-
-          {renderTextField(
-            'Years of experience',
-            yearsExperience,
-            setYearsExperience,
-            'e.g. 3',
-            {
-              keyboardType: 'numeric',
-              autoCapitalize: 'none',
-            },
-          )}
-
-          {renderTextField('Location', location, setLocation, 'Enter your city or area', {
-            autoCapitalize: 'words',
-          })}
-
-          <View style={{ gap: spacing.sm }}>
-            <AppText variant="h3" color={colors.text.primary}>
-              Weekly availability
-            </AppText>
-
-            <AppText variant="bodySmall" color={colors.text.secondary}>
-              Select the days you are generally available to train clients.
-            </AppText>
-
-            {availabilityOptions.map((day) =>
-              renderChoice(
-                day,
-                availableDays.includes(day),
-                () => toggleSelection(day, availableDays, setAvailableDays),
-                day,
-              ),
-            )}
           </View>
 
           {errorMessage ? (
@@ -331,9 +240,12 @@ export default function PersonalTrainerDetailsScreen() {
 
           <Pressable
             accessibilityRole="button"
-            accessibilityState={{ disabled: isSaving, busy: isSaving }}
+            accessibilityState={{
+              disabled: isSaving,
+              busy: isSaving,
+            }}
             disabled={isSaving}
-            onPress={handleFinish}
+            onPress={handleContinue}
             style={({ pressed }) => ({
               minHeight: 54,
               alignItems: 'center',
@@ -344,7 +256,7 @@ export default function PersonalTrainerDetailsScreen() {
             })}
           >
             <AppText variant="buttonLarge" color="#FFFFFF">
-              {isSaving ? 'SAVING…' : 'COMPLETE SETUP →'}
+              {isSaving ? 'SAVING…' : 'SAVE DRAFT & CONTINUE →'}
             </AppText>
           </Pressable>
         </ScrollView>

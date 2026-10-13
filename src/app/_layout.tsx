@@ -1,3 +1,4 @@
+
 import { useFonts } from 'expo-font';
 import {
   DarkTheme,
@@ -75,7 +76,9 @@ function AuthenticatedNavigation() {
     const isTabsScreen = firstSegment === '(tabs)';
     const isOnboardingScreen = firstSegment === '(onboarding)';
 
-    // Signed-out users cannot access authenticated screens.
+    const isDevelopmentRoleSelection =
+      __DEV__ && isTabsScreen && secondSegment === undefined;
+
     if (!session) {
       if (isTabsScreen || isOnboardingScreen) {
         router.replace('/(auth)/sign-in');
@@ -83,7 +86,6 @@ function AuthenticatedNavigation() {
       return;
     }
 
-    // Wait for the profile query to finish.
     if (isProfileLoading || (!profile && !profileError)) {
       return;
     }
@@ -103,9 +105,8 @@ function AuthenticatedNavigation() {
       return;
     }
 
-    // Account selection must happen before onboarding.
     if (!profile.account_type_selected) {
-      if (!isTabsScreen || segments[1] !== undefined) {
+      if (!isTabsScreen || secondSegment !== undefined) {
         router.replace('/(tabs)');
       }
       return;
@@ -121,17 +122,32 @@ function AuthenticatedNavigation() {
         ? '/(onboarding)/personal-trainer'
         : '/(onboarding)/gym-goer';
 
-    // Incomplete users must stay within their role's onboarding flow.
+    if (isDevelopmentRoleSelection) {
+      return;
+    }
+
     if (!profile.onboarding_completed) {
+      const trainerOnboardingRoutes = [
+        'personal-trainer',
+        'personal-trainer-details',
+        'personal-trainer-expertise',
+        'personal-trainer-pricing',
+        'personal-trainer-availability',
+        'personal-trainer-review',
+      ];
+
+      const gymGoerOnboardingRoutes = [
+        'gym-goer',
+        'gym-goer-details',
+        'gym-goer-goals',
+        'gym-goer-preferences',
+      ];
+
       const isAllowedOnboardingRoute =
         isOnboardingScreen &&
         (profile.role === 'trainer'
-          ? secondSegment === 'personal-trainer' ||
-            secondSegment === 'personal-trainer-details'
-          : secondSegment === 'gym-goer' ||
-            secondSegment === 'gym-goer-details' ||
-            secondSegment === 'gym-goer-goals' ||
-            secondSegment === 'gym-goer-preferences');
+          ? trainerOnboardingRoutes.includes(secondSegment ?? '')
+          : gymGoerOnboardingRoutes.includes(secondSegment ?? ''));
 
       if (!isAllowedOnboardingRoute) {
         router.replace(onboardingRoute);
@@ -140,7 +156,6 @@ function AuthenticatedNavigation() {
       return;
     }
 
-    // Completed users should not return to onboarding or role selection.
     if (
       isWelcomeScreen ||
       isAuthScreen ||
@@ -151,7 +166,7 @@ function AuthenticatedNavigation() {
       return;
     }
 
-    if (segments[1] === undefined) {
+    if (secondSegment === undefined) {
       router.replace(homeRoute);
     }
   }, [

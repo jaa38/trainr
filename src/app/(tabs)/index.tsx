@@ -17,7 +17,7 @@ const roleRoutes: Record<AccountType, Href> = {
 
 export default function RoleSelectionScreen() {
   const { colors, spacing } = useTrainrTheme();
-  const { user, isLoading, refreshProfile } = useAuth();
+  const { user, profile, isLoading, refreshProfile } = useAuth();
 
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -31,6 +31,18 @@ export default function RoleSelectionScreen() {
     setErrorMessage(null);
 
     try {
+      // If a role has already been selected, continue to its onboarding flow.
+      if (profile?.account_type_selected) {
+        const existingRole = profile.role;
+
+        if (existingRole !== 'gym_goer' && existingRole !== 'trainer') {
+          throw new Error('Your account has an unsupported role.');
+        }
+
+        router.replace(roleRoutes[existingRole]);
+        return;
+      }
+
       const { error } = await supabase.rpc('select_initial_account_type', {
         requested_role: accountType,
       });
@@ -96,7 +108,7 @@ export default function RoleSelectionScreen() {
         </AppText>
 
         <AppText variant="body" color={colors.text.secondary}>
-          Tell us how you'll use TRAINR so we can personalise your experience.
+          Tell us how you&apos;ll use TRAINR so we can personalise your experience.{' '}
         </AppText>
 
         {roleOptions.map((option) => (
@@ -133,7 +145,11 @@ export default function RoleSelectionScreen() {
         ))}
 
         {errorMessage ? (
-          <AppText variant="bodySmall" color={colors.text.error}>
+          <AppText
+            variant="bodySmall"
+            color={colors.text.error}
+            accessibilityRole="alert"
+          >
             {errorMessage}
           </AppText>
         ) : null}

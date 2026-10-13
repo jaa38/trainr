@@ -150,7 +150,7 @@ export default function GymGoerDetailsScreen() {
           </AppText>
 
           <AppText variant="h1" color={colors.text.primary}>
-            Let's get to know you.
+            Let&apos;s get to know you.
           </AppText>
 
           <AppText variant="body" color={colors.text.secondary}>

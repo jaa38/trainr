@@ -16,7 +16,6 @@ import { supabase } from '@/lib/supabase';
 import { useTrainrTheme } from '@/theme';
 
 type FormErrors = {
-  fullName?: string;
   email?: string;
   password?: string;
   confirmPassword?: string;
@@ -30,7 +29,6 @@ const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export default function SignUpScreen() {
   const { colors, spacing } = useTrainrTheme();
 
-  const [fullName, setFullName] = useState('');
   const [accountType, setAccountType] = useState<AccountType>('gym_goer');
 
   const [email, setEmail] = useState('');
@@ -47,10 +45,6 @@ export default function SignUpScreen() {
   function validateForm(): boolean {
     const nextErrors: FormErrors = {};
     const normalizedEmail = email.trim();
-
-    if (!fullName.trim()) {
-      nextErrors.fullName = 'Enter your full name.';
-    }
 
     if (!normalizedEmail) {
       nextErrors.email = 'Enter your email address.';
@@ -91,7 +85,6 @@ export default function SignUpScreen() {
         password,
         options: {
           data: {
-            full_name: fullName.trim(),
             account_type: accountType,
           },
           emailRedirectTo: `trainr://auth/callback?account_type=${accountType}`,
@@ -110,8 +103,6 @@ export default function SignUpScreen() {
         return;
       }
 
-      // The account type is saved by the callback or the
-      // authenticated account-selection flow, not both here.
       router.replace('/(tabs)');
     } catch {
       setErrors({
@@ -161,7 +152,6 @@ export default function SignUpScreen() {
             paddingBottom: spacing.xl,
           }}
         >
-          {/* Navigation */}
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Back to welcome"
@@ -180,7 +170,6 @@ export default function SignUpScreen() {
             </AppText>
           </Pressable>
 
-          {/* Page heading */}
           <View
             style={{
               gap: spacing.sm,
@@ -207,9 +196,7 @@ export default function SignUpScreen() {
             </AppText>
           </View>
 
-          {/* Registration form */}
           <View style={{ gap: spacing.lg }}>
-            {/* Account type selector */}
             <View style={{ gap: spacing.sm }}>
               <AppText variant="bodyMedium" color={colors.text.primary}>
                 I WANT TO JOIN AS A
@@ -295,21 +282,7 @@ export default function SignUpScreen() {
               </View>
             </View>
 
-            {/* Form fields */}
             <View style={{ gap: spacing.md }}>
-              <Input
-                label="Full name"
-                placeholder="Enter your full name"
-                value={fullName}
-                onChangeText={setFullName}
-                autoCapitalize="words"
-                autoComplete="name"
-                textContentType="name"
-                returnKeyType="next"
-                error={errors.fullName}
-                editable={!isSubmitting}
-              />
-
               <Input
                 label="Email address"
                 placeholder="you@example.com"
@@ -390,7 +363,6 @@ export default function SignUpScreen() {
               />
             </View>
 
-            {/* Authentication feedback */}
             {errors.general ? (
               <View
                 accessibilityRole="alert"
@@ -428,7 +400,6 @@ export default function SignUpScreen() {
               </View>
             ) : null}
 
-            {/* Primary action */}
             <View
               style={{
                 gap: spacing.sm,
@@ -451,7 +422,6 @@ export default function SignUpScreen() {
             </View>
           </View>
 
-          {/* Sign-in prompt */}
           <View
             style={{
               flexDirection: 'row',

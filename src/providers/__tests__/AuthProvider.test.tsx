@@ -1,4 +1,6 @@
 
+import React from 'react';
+
 import {
   act,
   fireEvent,
@@ -11,8 +13,6 @@ import { Pressable, Text, View } from 'react-native';
 import { supabase } from '@/lib/supabase';
 import { AuthProvider, useAuth } from '@/providers/AuthProvider';
 
-import React from 'react';
-
 jest.mock('@/lib/supabase', () => ({
   supabase: {
     auth: {
@@ -20,6 +20,23 @@ jest.mock('@/lib/supabase', () => ({
       getSession: jest.fn(),
       signOut: jest.fn(),
     },
+    from: jest.fn(() => ({
+      select: jest.fn(() => ({
+        eq: jest.fn(() => ({
+          maybeSingle: jest.fn().mockResolvedValue({
+            data: {
+              id: 'test-user-id',
+              role: 'gym_goer',
+              first_name: 'Test',
+              last_name: 'User',
+              onboarding_completed: false,
+              account_type_selected: true,
+            },
+            error: null,
+          }),
+        })),
+      })),
+    })),
   },
 }));
 
@@ -72,7 +89,7 @@ function AuthConsumer() {
 }
 
 async function renderAuthProvider() {
-  return await render(
+  return render(
     <AuthProvider>
       <AuthConsumer />
     </AuthProvider>,
@@ -234,7 +251,7 @@ describe('AuthProvider', () => {
 
       await waitFor(() => {
         expect(getByTestId('caught-error').props.children).toBe(
-          'useAuth must be used within an AuthProvider',
+          'useAuth must be used within an AuthProvider.',
         );
       });
     } finally {

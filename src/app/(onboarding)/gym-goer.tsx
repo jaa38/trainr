@@ -1,4 +1,3 @@
-
 import { router } from 'expo-router';
 import { Pressable, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -25,6 +24,24 @@ export default function GymGoerOnboardingScreen() {
           gap: spacing.lg,
         }}
       >
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Back to account selection"
+          onPress={() => router.replace('/(tabs)')}
+          style={{
+            alignSelf: 'flex-start',
+            paddingVertical: spacing.sm,
+            paddingHorizontal: spacing.md,
+            borderRadius: 10,
+            borderWidth: 1,
+            borderColor: colors.border.default,
+          }}
+        >
+          <AppText variant="button" color={colors.text.secondary}>
+            ← BACK TO ACCOUNT SELECTION
+          </AppText>
+        </Pressable>
+
         <AppText variant="caption" color={colors.brand.red}>
           GYM-GOER SETUP · STEP 1 OF 4
         </AppText>
@@ -38,7 +55,7 @@ export default function GymGoerOnboardingScreen() {
         </AppText>
 
         <AppText variant="body" color={colors.text.secondary}>
-          Let's personalise TRAINR around your fitness goals, experience and
+          Let&apos;s personalise TRAINR around your fitness goals, experience and
           preferred way to train.
         </AppText>
 
