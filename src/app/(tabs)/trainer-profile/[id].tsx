@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, View } from 'react-native';
+import { ActivityIndicator, Image, Pressable, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/AppText';
@@ -227,6 +227,45 @@ export default function TrainerProfileScreen() {
               >
                 TRAINR COACH
               </AppText>
+
+              {trainer.avatar_url ? (
+                <Image
+                  source={{ uri: trainer.avatar_url }}
+                  accessibilityLabel={`Profile photo of ${fullName || 'TRAINR Coach'}`}
+                  resizeMode="cover"
+                  style={{
+                    width: 104,
+                    height: 104,
+                    borderRadius: 52,
+                    backgroundColor: colors.background.primary,
+                    borderWidth: 1,
+                    borderColor: colors.border.default,
+                  }}
+                />
+              ) : (
+                <View
+                  style={{
+                    width: 104,
+                    height: 104,
+                    borderRadius: 52,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    backgroundColor: colors.background.primary,
+                    borderWidth: 1,
+                    borderColor: colors.border.default,
+                  }}
+                >
+                  <AppText variant="displayLarge" color={colors.brand.red}>
+                    {fullName
+                      .split(' ')
+                      .filter(Boolean)
+                      .map((part) => part[0])
+                      .join('')
+                      .slice(0, 2)
+                      .toUpperCase() || '?'}
+                  </AppText>
+                </View>
+              )}
 
               <AppText variant="displayLarge" color={colors.text.primary}>
                 {fullName || 'TRAINR Coach'}

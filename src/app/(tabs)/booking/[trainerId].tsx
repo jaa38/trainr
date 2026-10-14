@@ -159,6 +159,15 @@ export default function BookingScreen() {
     setIsSubmitting(true);
 
     try {
+      // Diagnostic: verify which trainer the booking targets.
+      console.log('[Booking] Submission context:', {
+        gymGoerId: user.id,
+        trainerIdFromRoute: trainerId,
+        trainerIdFromLoadedProfile: trainer.trainer_id,
+        scheduledStart,
+        scheduledEnd,
+      });
+
       const { error } = await supabase.from('trainer_bookings').insert({
         gym_goer_id: user.id,
         trainer_id: trainer.trainer_id,
@@ -183,14 +192,33 @@ export default function BookingScreen() {
         ],
       );
     } catch (error) {
-      console.error('[Booking] Submission failed:', error);
+      if (error && typeof error === 'object') {
+        const databaseError = error as {
+          code?: string;
+          message?: string;
+          details?: string;
+          hint?: string;
+        };
 
-      Alert.alert(
-        'Booking unsuccessful',
-        error instanceof Error
-          ? error.message
-          : 'We could not submit your request. Please try again.',
-      );
+        console.error('[Booking] Submission failed:', {
+          code: databaseError.code,
+          message: databaseError.message,
+          details: databaseError.details,
+          hint: databaseError.hint,
+        });
+
+        Alert.alert(
+          'Booking unsuccessful',
+          databaseError.message ?? 'We could not submit your request. Please try again.',
+        );
+      } else {
+        console.error('[Booking] Submission failed:', error);
+
+        Alert.alert(
+          'Booking unsuccessful',
+          'We could not submit your request. Please try again.',
+        );
+      }
     } finally {
       setIsSubmitting(false);
     }
