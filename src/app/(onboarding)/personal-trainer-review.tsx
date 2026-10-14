@@ -1,11 +1,12 @@
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Pressable, ScrollView, View } from 'react-native';
+import { Image, Pressable, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/AppText';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/providers/AuthProvider';
+import { getProfileImageUrl } from '@/services/profile-images';
 import { useTrainrTheme } from '@/theme';
 
 type TrainerProfile = {
@@ -54,6 +55,7 @@ export default function PersonalTrainerReviewScreen() {
   const [trainer, setTrainer] = useState<TrainerProfile | null>(null);
   const [pricing, setPricing] = useState<TrainerPricing | null>(null);
   const [packages, setPackages] = useState<TrainingPackage[]>([]);
+  const [profileImageUrl, setProfileImageUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSavingDraft, setIsSavingDraft] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
@@ -110,6 +112,20 @@ export default function PersonalTrainerReviewScreen() {
         setTrainer(trainerResult.data);
         setPricing(pricingResult.data);
         setPackages(packagesResult.data ?? []);
+
+        try {
+          const imageUrl = await getProfileImageUrl(profileResult.data.avatar_url);
+
+          if (isMounted) {
+            setProfileImageUrl(imageUrl);
+          }
+        } catch (imageError) {
+          console.error('[Trainer Review] Failed to load profile image:', imageError);
+
+          if (isMounted) {
+            setProfileImageUrl(null);
+          }
+        }
       } catch (error) {
         console.error('[Trainer Review] Failed to load profile:', error);
 
@@ -418,17 +434,30 @@ export default function PersonalTrainerReviewScreen() {
                     backgroundColor: colors.background.secondary,
                     borderWidth: 1,
                     borderColor: colors.border.default,
+                    overflow: 'hidden',
                   }}
                 >
-                  <AppText variant="h1" color={colors.brand.red}>
-                    {fullName
-                      .split(' ')
-                      .filter(Boolean)
-                      .map((part) => part[0])
-                      .join('')
-                      .slice(0, 2)
-                      .toUpperCase() || '?'}
-                  </AppText>
+                  {profileImageUrl ? (
+                    <Image
+                      source={{ uri: profileImageUrl }}
+                      style={{
+                        width: '100%',
+                        height: '100%',
+                      }}
+                      resizeMode="cover"
+                      accessibilityLabel={`${fullName || 'Trainer'} profile photo`}
+                    />
+                  ) : (
+                    <AppText variant="h1" color={colors.brand.red}>
+                      {fullName
+                        .split(' ')
+                        .filter(Boolean)
+                        .map((part) => part[0])
+                        .join('')
+                        .slice(0, 2)
+                        .toUpperCase() || '?'}
+                    </AppText>
+                  )}
                 </View>
 
                 <AppText variant="h3" color={colors.text.primary}>

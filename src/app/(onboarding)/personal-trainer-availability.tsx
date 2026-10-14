@@ -1,5 +1,7 @@
+import { zodResolver } from '@hookform/resolvers/zod';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
+import { useForm, useWatch } from 'react-hook-form';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -12,6 +14,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppText } from '@/components/AppText';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/providers/AuthProvider';
+import {
+  trainerAvailabilitySchema,
+  type TrainerAvailabilityFormValues,
+} from '@/schemas/trainer-availability';
 import { useTrainrTheme } from '@/theme';
 
 const availabilityOptions = [
@@ -28,7 +34,24 @@ export default function PersonalTrainerAvailabilityScreen() {
   const { colors, spacing } = useTrainrTheme();
   const { user } = useAuth();
 
-  const [availableDays, setAvailableDays] = useState<string[]>([]);
+  const {
+    control,
+    handleSubmit,
+    reset,
+    setValue,
+    formState: { errors },
+  } = useForm<TrainerAvailabilityFormValues>({
+    resolver: zodResolver(trainerAvailabilitySchema),
+    defaultValues: {
+      availableDays: [],
+    },
+  });
+
+  const availableDays = useWatch({
+    control,
+    name: 'availableDays',
+  });
+
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -61,13 +84,19 @@ export default function PersonalTrainerAvailabilityScreen() {
           'days' in availability &&
           Array.isArray(availability.days)
         ) {
-          setAvailableDays(
-            availability.days.filter(
-              (day: unknown): day is string =>
-                typeof day === 'string' &&
-                availabilityOptions.includes(day as (typeof availabilityOptions)[number]),
-            ),
+          const savedDays = availability.days.filter(
+            (day: unknown): day is (typeof availabilityOptions)[number] =>
+              typeof day === 'string' &&
+              availabilityOptions.includes(day as (typeof availabilityOptions)[number]),
           );
+
+          const uniqueSavedDays: (typeof availabilityOptions)[number][] = [
+            ...new Set<(typeof availabilityOptions)[number]>(savedDays),
+          ];
+
+          reset({
+            availableDays: uniqueSavedDays,
+          });
         }
       } catch (error) {
         console.error('[Trainer Availability] Failed to load availability:', error);
@@ -89,23 +118,25 @@ export default function PersonalTrainerAvailabilityScreen() {
     return () => {
       isMounted = false;
     };
-  }, [user]);
-
-  function toggleDay(day: string) {
+  }, [user, reset]);
+  
+  function toggleDay(day: (typeof availabilityOptions)[number]) {
     if (isSaving || isLoading) return;
 
-    setAvailableDays((current) =>
-      current.includes(day) ? current.filter((item) => item !== day) : [...current, day],
-    );
+    const updatedDays = availableDays.includes(day)
+      ? availableDays.filter((item) => item !== day)
+      : [...availableDays, day];
+
+    setValue('availableDays', updatedDays, {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+
+    setErrorMessage(null);
   }
 
-  async function handleContinue() {
+  async function handleContinue(values: TrainerAvailabilityFormValues) {
     if (!user || isSaving || isLoading) return;
-
-    if (availableDays.length === 0) {
-      setErrorMessage('Select at least one day when you are available.');
-      return;
-    }
 
     setIsSaving(true);
     setErrorMessage(null);
@@ -115,7 +146,7 @@ export default function PersonalTrainerAvailabilityScreen() {
         {
           user_id: user.id,
           availability: {
-            days: availabilityOptions.filter((day) => availableDays.includes(day)),
+            days: availabilityOptions.filter((day) => values.availableDays.includes(day)),
           },
           updated_at: new Date().toISOString(),
         },
@@ -140,7 +171,7 @@ export default function PersonalTrainerAvailabilityScreen() {
     }
   }
 
-  function renderDay(day: string) {
+  function renderDay(day: (typeof availabilityOptions)[number]) {
     const selected = availableDays.includes(day);
 
     return (
@@ -230,7 +261,19 @@ export default function PersonalTrainerAvailabilityScreen() {
                 Loading saved availability…
               </AppText>
             ) : (
-              availabilityOptions.map(renderDay)
+              <>
+                {availabilityOptions.map(renderDay)}
+
+                {errors.availableDays?.message ? (
+                  <AppText
+                    variant="bodySmall"
+                    color={colors.text.error}
+                    accessibilityRole="alert"
+                  >
+                    {errors.availableDays.message}
+                  </AppText>
+                ) : null}
+              </>
             )}
           </View>
 
@@ -251,7 +294,7 @@ export default function PersonalTrainerAvailabilityScreen() {
               busy: isSaving,
             }}
             disabled={isSaving || isLoading}
-            onPress={handleContinue}
+            onPress={handleSubmit(handleContinue)}
             style={({ pressed }) => ({
               minHeight: 54,
               alignItems: 'center',

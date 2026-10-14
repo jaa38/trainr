@@ -30,6 +30,11 @@ const fitnessGoals = [
     description: 'Get stronger and improve performance.',
   },
   {
+    id: 'improve_endurance',
+    title: 'Improve endurance',
+    description: 'Build stamina and sustain physical activity for longer.',
+  },
+  {
     id: 'improve_health',
     title: 'Improve general health',
     description: 'Build sustainable, healthy habits.',

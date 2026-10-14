@@ -26,6 +26,7 @@
       "output": "static",
       "favicon": "./assets/images/icons/lightModeAppIcon.png"
     },
+
     "plugins": [
       "expo-router",
       [
@@ -40,10 +41,19 @@
           }
         }
       ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "TRAINR needs access to your photos so you can add a profile picture.",
+          "cameraPermission": "TRAINR needs camera access so you can take a profile picture.",
+          "microphonePermission": false
+        }
+      ],
       "expo-sqlite",
       "expo-secure-store",
       "expo-web-browser"
     ],
+
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true

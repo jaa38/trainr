@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import { getProfileImageUrl } from '@/services/profile-images';
 
 export type PublishedTrainer = {
   trainer_id: string;
@@ -24,5 +25,27 @@ export async function discoverPublishedTrainers(): Promise<PublishedTrainer[]> {
     throw new Error(`Unable to discover trainers: ${error.message}`);
   }
 
-  return (data ?? []) as PublishedTrainer[];
+  const trainers = (data ?? []) as PublishedTrainer[];
+
+  return Promise.all(
+    trainers.map(async (trainer) => {
+      try {
+        return {
+          ...trainer,
+          avatar_url: await getProfileImageUrl(trainer.avatar_url),
+        };
+      } catch (imageError) {
+        console.warn(
+          `[Trainer Discovery] Unable to load profile photo for ${trainer.trainer_id}:`,
+          imageError,
+        );
+
+        // A missing photo should not prevent a trainer from appearing.
+        return {
+          ...trainer,
+          avatar_url: null,
+        };
+      }
+    }),
+  );
 }

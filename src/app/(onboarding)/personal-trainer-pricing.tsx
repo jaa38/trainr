@@ -1,5 +1,7 @@
+import { zodResolver } from '@hookform/resolvers/zod';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
+import { useForm, useWatch } from 'react-hook-form';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -13,17 +15,19 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppText } from '@/components/AppText';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/providers/AuthProvider';
+import {
+  trainerPricingSchema,
+  type TrainerPricingFormValues,
+  type TrainingPackageFormValues,
+} from '@/schemas/trainer-pricing';
 import { useTrainrTheme } from '@/theme';
 
 const currencies = ['NGN', 'GBP', 'USD', 'EUR'] as const;
+
 type Currency = (typeof currencies)[number];
 
-type TrainingPackage = {
+type TrainingPackage = TrainingPackageFormValues & {
   id?: string;
-  name: string;
-  description: string;
-  sessionsCount: string;
-  price: string;
 };
 
 const createPackage = (): TrainingPackage => ({
@@ -37,10 +41,43 @@ export default function PersonalTrainerPricingScreen() {
   const { colors, spacing } = useTrainrTheme();
   const { user } = useAuth();
 
-  const [sessionRate, setSessionRate] = useState('');
-  const [currency, setCurrency] = useState<Currency>('NGN');
-  const [sessionDuration, setSessionDuration] = useState('60');
-  const [packages, setPackages] = useState<TrainingPackage[]>([]);
+  const {
+    control,
+    handleSubmit,
+    reset,
+    setValue,
+    formState: { errors },
+  } = useForm<TrainerPricingFormValues>({
+    resolver: zodResolver(trainerPricingSchema),
+    defaultValues: {
+      sessionRate: '',
+      currency: 'NGN',
+      sessionDuration: '60',
+      packages: [],
+    },
+  });
+
+  const sessionRate = useWatch({
+    control,
+    name: 'sessionRate',
+  });
+
+  const currency = useWatch({
+    control,
+    name: 'currency',
+  });
+
+  const sessionDuration = useWatch({
+    control,
+    name: 'sessionDuration',
+  });
+
+  const packages =
+    useWatch({
+      control,
+      name: 'packages',
+    }) ?? [];
+
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -64,6 +101,7 @@ export default function PersonalTrainerPricingScreen() {
             .select('session_rate, currency, session_duration_minutes')
             .eq('user_id', user.id)
             .maybeSingle(),
+
           supabase
             .from('trainer_packages')
             .select('id, name, description, sessions_count, price, currency')
@@ -75,25 +113,21 @@ export default function PersonalTrainerPricingScreen() {
         if (packagesError) throw packagesError;
         if (!isMounted) return;
 
-        if (pricing) {
-          setSessionRate(String(pricing.session_rate));
-          setCurrency(
-            currencies.includes(pricing.currency as Currency)
+        reset({
+          sessionRate: pricing ? String(pricing.session_rate) : '',
+          currency:
+            pricing && currencies.includes(pricing.currency as Currency)
               ? (pricing.currency as Currency)
               : 'NGN',
-          );
-          setSessionDuration(String(pricing.session_duration_minutes));
-        }
-
-        setPackages(
-          (savedPackages ?? []).map((item) => ({
+          sessionDuration: pricing ? String(pricing.session_duration_minutes) : '60',
+          packages: (savedPackages ?? []).map((item) => ({
             id: item.id,
             name: item.name,
             description: item.description ?? '',
             sessionsCount: String(item.sessions_count),
             price: String(item.price),
           })),
-        );
+        });
       } catch (error) {
         console.error('[Trainer Pricing] Failed to load pricing:', error);
 
@@ -103,7 +137,9 @@ export default function PersonalTrainerPricingScreen() {
           );
         }
       } finally {
-        if (isMounted) setIsLoading(false);
+        if (isMounted) {
+          setIsLoading(false);
+        }
       }
     }
 
@@ -112,19 +148,34 @@ export default function PersonalTrainerPricingScreen() {
     return () => {
       isMounted = false;
     };
-  }, [user]);
+  }, [user, reset]);
 
   function updatePackage(index: number, field: keyof TrainingPackage, value: string) {
-    setPackages((current) =>
-      current.map((item, itemIndex) =>
-        itemIndex === index ? { ...item, [field]: value } : item,
-      ),
+    const updatedPackages = packages.map((item, itemIndex) =>
+      itemIndex === index ? { ...item, [field]: value } : item,
     );
+
+    setValue('packages', updatedPackages, {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+
+    setErrorMessage(null);
   }
 
   function removePackage(index: number) {
     if (isSaving) return;
-    setPackages((current) => current.filter((_, itemIndex) => itemIndex !== index));
+
+    setValue(
+      'packages',
+      packages.filter((_, itemIndex) => itemIndex !== index),
+      {
+        shouldDirty: true,
+        shouldValidate: true,
+      },
+    );
+
+    setErrorMessage(null);
   }
 
   function renderField(
@@ -176,7 +227,14 @@ export default function PersonalTrainerPricingScreen() {
         accessibilityRole="radio"
         accessibilityState={{ checked: selected }}
         disabled={isSaving || isLoading}
-        onPress={() => setCurrency(option)}
+        onPress={() => {
+          setValue('currency', option, {
+            shouldDirty: true,
+            shouldValidate: true,
+          });
+
+          setErrorMessage(null);
+        }}
         style={{
           flex: 1,
           minHeight: 46,
@@ -200,58 +258,22 @@ export default function PersonalTrainerPricingScreen() {
     );
   }
 
-  async function handleContinue() {
+  async function handleContinue(values: TrainerPricingFormValues) {
     if (!user || isSaving || isLoading) return;
-
-    const rate = Number(sessionRate);
-    const duration = Number(sessionDuration);
-
-    if (!sessionRate.trim() || !Number.isFinite(rate) || rate <= 0) {
-      setErrorMessage('Enter a session rate greater than zero.');
-      return;
-    }
-
-    if (!sessionDuration.trim() || !Number.isInteger(duration) || duration <= 0) {
-      setErrorMessage('Enter a valid session duration in minutes.');
-      return;
-    }
-
-    const normalizedPackages = packages.map((item) => ({
-      ...item,
-      normalizedName: item.name.trim(),
-      normalizedDescription: item.description.trim(),
-      normalizedSessions: Number(item.sessionsCount),
-      normalizedPrice: Number(item.price),
-    }));
-
-    for (const item of normalizedPackages) {
-      if (
-        !item.normalizedName ||
-        !item.sessionsCount.trim() ||
-        !Number.isInteger(item.normalizedSessions) ||
-        item.normalizedSessions <= 0 ||
-        !item.price.trim() ||
-        !Number.isFinite(item.normalizedPrice) ||
-        item.normalizedPrice <= 0
-      ) {
-        setErrorMessage(
-          'Complete each package name, session count and price, or remove the unfinished package.',
-        );
-        return;
-      }
-    }
 
     setIsSaving(true);
     setErrorMessage(null);
 
     try {
       const now = new Date().toISOString();
+      const rate = Number(values.sessionRate);
+      const duration = Number(values.sessionDuration);
 
       const { error: pricingError } = await supabase.from('trainer_pricing').upsert(
         {
           user_id: user.id,
           session_rate: rate,
-          currency,
+          currency: values.currency,
           session_duration_minutes: duration,
           updated_at: now,
         },
@@ -267,6 +289,21 @@ export default function PersonalTrainerPricingScreen() {
 
       if (existingError) throw existingError;
 
+      // Normalize the form values while retaining saved package IDs.
+      const normalizedPackages: (TrainingPackage & {
+        normalizedName: string;
+        normalizedDescription: string;
+        normalizedSessions: number;
+        normalizedPrice: number;
+      })[] = values.packages.map((item) => ({
+        ...item,
+        normalizedName: item.name.trim(),
+        normalizedDescription: item.description.trim(),
+        normalizedSessions: Number(item.sessionsCount),
+        normalizedPrice: Number(item.price),
+      }));
+
+      // Only existing IDs are retained; new packages have no ID yet.
       const retainedIds = new Set(
         normalizedPackages
           .map((item) => item.id)
@@ -294,7 +331,7 @@ export default function PersonalTrainerPricingScreen() {
           description: item.normalizedDescription || null,
           sessions_count: item.normalizedSessions,
           price: item.normalizedPrice,
-          currency,
+          currency: values.currency,
           updated_at: now,
         };
 
@@ -332,7 +369,10 @@ export default function PersonalTrainerPricingScreen() {
   return (
     <SafeAreaView
       edges={['top']}
-      style={{ flex: 1, backgroundColor: colors.background.primary }}
+      style={{
+        flex: 1,
+        backgroundColor: colors.background.primary,
+      }}
     >
       <KeyboardAvoidingView
         style={{ flex: 1 }}
@@ -374,17 +414,35 @@ export default function PersonalTrainerPricingScreen() {
                 {renderField(
                   'Rate per session',
                   sessionRate,
-                  setSessionRate,
+                  (value) => {
+                    setValue('sessionRate', value, {
+                      shouldDirty: true,
+                      shouldValidate: true,
+                    });
+
+                    setErrorMessage(null);
+                  },
                   'e.g. 5000',
                   { numeric: true },
                 )}
+
+                {errors.sessionRate?.message ? (
+                  <AppText variant="bodySmall" color={colors.text.error}>
+                    {errors.sessionRate.message}
+                  </AppText>
+                ) : null}
 
                 <View style={{ gap: spacing.sm }}>
                   <AppText variant="body" color={colors.text.primary}>
                     Currency
                   </AppText>
 
-                  <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+                  <View
+                    style={{
+                      flexDirection: 'row',
+                      gap: spacing.sm,
+                    }}
+                  >
                     {currencies.map(renderCurrencyOption)}
                   </View>
                 </View>
@@ -392,10 +450,23 @@ export default function PersonalTrainerPricingScreen() {
                 {renderField(
                   'Session duration (minutes)',
                   sessionDuration,
-                  setSessionDuration,
+                  (value) => {
+                    setValue('sessionDuration', value, {
+                      shouldDirty: true,
+                      shouldValidate: true,
+                    });
+
+                    setErrorMessage(null);
+                  },
                   'e.g. 60',
                   { numeric: true },
                 )}
+
+                {errors.sessionDuration?.message ? (
+                  <AppText variant="bodySmall" color={colors.text.error}>
+                    {errors.sessionDuration.message}
+                  </AppText>
+                ) : null}
               </View>
 
               <View style={{ gap: spacing.md }}>
@@ -451,6 +522,12 @@ export default function PersonalTrainerPricingScreen() {
                       'e.g. 8-session strength programme',
                     )}
 
+                    {errors.packages?.[index]?.name?.message ? (
+                      <AppText variant="bodySmall" color={colors.text.error}>
+                        {errors.packages[index]?.name?.message}
+                      </AppText>
+                    ) : null}
+
                     {renderField(
                       'Description (optional)',
                       item.description,
@@ -458,6 +535,12 @@ export default function PersonalTrainerPricingScreen() {
                       'Describe what the package includes',
                       { multiline: true },
                     )}
+
+                    {errors.packages?.[index]?.description?.message ? (
+                      <AppText variant="bodySmall" color={colors.text.error}>
+                        {errors.packages[index]?.description?.message}
+                      </AppText>
+                    ) : null}
 
                     {renderField(
                       'Number of sessions',
@@ -467,6 +550,12 @@ export default function PersonalTrainerPricingScreen() {
                       { numeric: true },
                     )}
 
+                    {errors.packages?.[index]?.sessionsCount?.message ? (
+                      <AppText variant="bodySmall" color={colors.text.error}>
+                        {errors.packages[index]?.sessionsCount?.message}
+                      </AppText>
+                    ) : null}
+
                     {renderField(
                       `Package price (${currency})`,
                       item.price,
@@ -474,13 +563,26 @@ export default function PersonalTrainerPricingScreen() {
                       'e.g. 35000',
                       { numeric: true },
                     )}
+
+                    {errors.packages?.[index]?.price?.message ? (
+                      <AppText variant="bodySmall" color={colors.text.error}>
+                        {errors.packages[index]?.price?.message}
+                      </AppText>
+                    ) : null}
                   </View>
                 ))}
 
                 <Pressable
                   accessibilityRole="button"
-                  disabled={isSaving}
-                  onPress={() => setPackages((current) => [...current, createPackage()])}
+                  disabled={isSaving || isLoading}
+                  onPress={() => {
+                    setValue('packages', [...packages, createPackage()], {
+                      shouldDirty: true,
+                      shouldValidate: false,
+                    });
+
+                    setErrorMessage(null);
+                  }}
                   style={{
                     minHeight: 50,
                     alignItems: 'center',
@@ -515,7 +617,7 @@ export default function PersonalTrainerPricingScreen() {
               busy: isSaving,
             }}
             disabled={isSaving || isLoading}
-            onPress={handleContinue}
+            onPress={handleSubmit(handleContinue)}
             style={({ pressed }) => ({
               minHeight: 54,
               alignItems: 'center',

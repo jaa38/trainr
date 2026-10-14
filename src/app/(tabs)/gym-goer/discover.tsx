@@ -1,12 +1,15 @@
 import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
+
 import {
   ActivityIndicator,
+  Image,
   Pressable,
   RefreshControl,
   ScrollView,
   View,
 } from 'react-native';
+
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/AppText';
@@ -242,16 +245,56 @@ export default function DiscoverScreen() {
                     gap: spacing.md,
                   }}
                 >
-                  <View style={{ gap: spacing.xs }}>
-                    <AppText variant="h3" color={colors.text.primary}>
-                      {fullName || 'TRAINR Coach'}
-                    </AppText>
+                  <View
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: spacing.md,
+                    }}
+                  >
+                    {trainer.avatar_url ? (
+                      <Image
+                        source={{ uri: trainer.avatar_url }}
+                        accessibilityLabel={`Profile photo of ${fullName || 'TRAINR Coach'}`}
+                        resizeMode="cover"
+                        style={{
+                          width: 76,
+                          height: 76,
+                          borderRadius: 38,
+                          backgroundColor: colors.background.primary,
+                        }}
+                      />
+                    ) : (
+                      <View
+                        accessibilityLabel="Default trainer profile image"
+                        style={{
+                          width: 76,
+                          height: 76,
+                          borderRadius: 38,
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          backgroundColor: colors.background.primary,
+                          borderWidth: 1,
+                          borderColor: colors.border.default,
+                        }}
+                      >
+                        <AppText variant="h2" color={colors.brand.red}>
+                          {fullName.charAt(0).toUpperCase() || 'T'}
+                        </AppText>
+                      </View>
+                    )}
 
-                    {trainer.location ? (
-                      <AppText variant="bodySmall" color={colors.text.secondary}>
-                        {trainer.location}
+                    <View style={{ flex: 1, gap: spacing.xs }}>
+                      <AppText variant="h3" color={colors.text.primary}>
+                        {fullName || 'TRAINR Coach'}
                       </AppText>
-                    ) : null}
+
+                      {trainer.location ? (
+                        <AppText variant="bodySmall" color={colors.text.secondary}>
+                          {trainer.location}
+                        </AppText>
+                      ) : null}
+                    </View>
                   </View>
 
                   {trainer.professional_bio ? (
