@@ -35,6 +35,19 @@ type Booking = {
 };
 
 const views: ScheduleView[] = ['Upcoming', 'Availability', 'History'];
+
+const availabilityOptions = [
+  'Monday',
+  'Tuesday',
+  'Wednesday',
+  'Thursday',
+  'Friday',
+  'Saturday',
+  'Sunday',
+] as const;
+
+type AvailableDay = (typeof availabilityOptions)[number];
+
 const HISTORY_STATUSES: BookingStatus[] = ['declined', 'cancelled', 'completed'];
 
 function formatDate(value: string) {
@@ -65,15 +78,21 @@ export default function ScheduleScreen() {
 
   const [activeView, setActiveView] = useState<ScheduleView>('Upcoming');
   const [bookings, setBookings] = useState<Booking[]>([]);
+  const [availableDays, setAvailableDays] = useState<AvailableDay[]>([]);
+  const [savedDays, setSavedDays] = useState<AvailableDay[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isSavingAvailability, setIsSavingAvailability] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [availabilityError, setAvailabilityError] = useState<string | null>(null);
   const [updatingBookingId, setUpdatingBookingId] = useState<string | null>(null);
 
-  const loadBookings = useCallback(
+  const loadSchedule = useCallback(
     async (refresh = false) => {
       if (!user) {
         setBookings([]);
+        setAvailableDays([]);
+        setSavedDays([]);
         setIsLoading(false);
         setIsRefreshing(false);
         return;
@@ -86,20 +105,32 @@ export default function ScheduleScreen() {
       }
 
       setErrorMessage(null);
+      setAvailabilityError(null);
 
       try {
-        const { data, error } = await supabase
-          .from('trainer_bookings')
-          .select(
-            'id, gym_goer_id, scheduled_start, scheduled_end, session_rate, currency, status, notes',
-          )
-          .eq('trainer_id', user.id)
-          .order('scheduled_start', { ascending: true });
+        const [
+          { data: bookingRows, error: bookingsError },
+          { data: trainerProfile, error: availabilityLoadError },
+        ] = await Promise.all([
+          supabase
+            .from('trainer_bookings')
+            .select(
+              'id, gym_goer_id, scheduled_start, scheduled_end, session_rate, currency, status, notes',
+            )
+            .eq('trainer_id', user.id)
+            .order('scheduled_start', { ascending: true }),
+          supabase
+            .from('trainer_profiles')
+            .select('availability')
+            .eq('user_id', user.id)
+            .maybeSingle(),
+        ]);
 
-        if (error) throw error;
+        if (bookingsError) throw bookingsError;
+        if (availabilityLoadError) throw availabilityLoadError;
 
-        const bookingRows = data ?? [];
-        const clientIds = [...new Set(bookingRows.map((booking) => booking.gym_goer_id))];
+        const rows = bookingRows ?? [];
+        const clientIds = [...new Set(rows.map((booking) => booking.gym_goer_id))];
 
         const { data: clientProfiles, error: profilesError } = clientIds.length
           ? await supabase
@@ -120,14 +151,36 @@ export default function ScheduleScreen() {
           ]),
         );
 
-        const bookingsWithClients: Booking[] = bookingRows.map((booking) => ({
+        const bookingsWithClients: Booking[] = rows.map((booking) => ({
           ...booking,
           client: profilesById.get(booking.gym_goer_id) ?? null,
         })) as Booking[];
 
         setBookings(bookingsWithClients);
+
+        const availability = trainerProfile?.availability;
+        let loadedDays: AvailableDay[] = [];
+
+        if (
+          availability &&
+          typeof availability === 'object' &&
+          !Array.isArray(availability) &&
+          'days' in availability &&
+          Array.isArray(availability.days)
+        ) {
+          const validDays = availability.days.filter(
+            (day: unknown): day is AvailableDay =>
+              typeof day === 'string' &&
+              availabilityOptions.includes(day as AvailableDay),
+          );
+
+          loadedDays = [...new Set<AvailableDay>(validDays)];
+        }
+
+        setAvailableDays(loadedDays);
+        setSavedDays(loadedDays);
       } catch (error) {
-        console.error('[Trainer Schedule] Unable to load bookings:', error);
+        console.error('[Trainer Schedule] Unable to load schedule:', error);
         setErrorMessage('We couldn’t load your sessions. Please try again.');
       } finally {
         setIsLoading(false);
@@ -139,14 +192,65 @@ export default function ScheduleScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      void loadBookings();
-    }, [loadBookings]),
+      void loadSchedule();
+    }, [loadSchedule]),
   );
 
-  const updateBookingStatus = async (
-    booking: Booking,
-    status: 'confirmed' | 'declined',
-  ) => {
+  function toggleDay(day: AvailableDay) {
+    if (isSavingAvailability || isLoading) return;
+
+    setAvailableDays((current) =>
+      current.includes(day)
+        ? current.filter((item) => item !== day)
+        : availabilityOptions.filter(
+            (option) => option === day || current.includes(option),
+          ),
+    );
+
+    setAvailabilityError(null);
+  }
+
+  async function saveAvailability() {
+    if (!user || isSavingAvailability || isLoading) return;
+
+    if (availableDays.length === 0) {
+      setAvailabilityError('Select at least one training day.');
+      return;
+    }
+
+    setIsSavingAvailability(true);
+    setAvailabilityError(null);
+
+    try {
+      const orderedDays = availabilityOptions.filter((day) =>
+        availableDays.includes(day),
+      );
+
+      const { error } = await supabase
+        .from('trainer_profiles')
+        .update({
+          availability: { days: orderedDays },
+          updated_at: new Date().toISOString(),
+        })
+        .eq('user_id', user.id);
+
+      if (error) throw error;
+
+      setAvailableDays(orderedDays);
+      setSavedDays(orderedDays);
+
+      Alert.alert('Availability saved', 'Your training days have been updated.');
+    } catch (error) {
+      console.error('[Trainer Schedule] Unable to save availability:', error);
+      setAvailabilityError('Unable to save your availability. Please try again.');
+    } finally {
+      setIsSavingAvailability(false);
+    }
+  }
+
+  async function updateBookingStatus(booking: Booking, status: 'confirmed' | 'declined') {
+    if (!user) return;
+
     const action = status === 'confirmed' ? 'confirm' : 'decline';
 
     setUpdatingBookingId(booking.id);
@@ -156,7 +260,7 @@ export default function ScheduleScreen() {
         .from('trainer_bookings')
         .update({ status })
         .eq('id', booking.id)
-        .eq('trainer_id', user?.id ?? '')
+        .eq('trainer_id', user.id)
         .eq('status', 'pending')
         .select('id');
 
@@ -167,11 +271,12 @@ export default function ScheduleScreen() {
           'Booking not updated',
           'This request may already have been updated. Refresh the schedule and try again.',
         );
-        await loadBookings(true);
+        await loadSchedule(true);
         return;
       }
 
-      await loadBookings(true);
+      await loadSchedule(true);
+
       Alert.alert(
         status === 'confirmed' ? 'Session confirmed' : 'Request declined',
         status === 'confirmed'
@@ -187,7 +292,7 @@ export default function ScheduleScreen() {
     } finally {
       setUpdatingBookingId(null);
     }
-  };
+  }
 
   const visibleBookings = bookings.filter((booking) => {
     if (activeView === 'Availability') return false;
@@ -213,7 +318,7 @@ export default function ScheduleScreen() {
         refreshControl={
           <RefreshControl
             refreshing={isRefreshing}
-            onRefresh={() => void loadBookings(true)}
+            onRefresh={() => void loadSchedule(true)}
             tintColor={colors.brand.red}
           />
         }
@@ -276,22 +381,114 @@ export default function ScheduleScreen() {
               borderWidth: 1,
               borderColor: colors.border.default,
               backgroundColor: colors.background.secondary,
-              alignItems: 'center',
               gap: spacing.md,
             }}
           >
             <AppText variant="h3" color={colors.text.primary}>
-              TRAINING DAYS
+              WEEKLY AVAILABILITY
             </AppText>
 
-            <AppText
-              variant="body"
-              color={colors.text.secondary}
-              style={{ textAlign: 'center', lineHeight: 24 }}
-            >
-              Your configured training days are saved in your trainer profile. You can
-              review and update them through your onboarding settings.
+            <AppText variant="body" color={colors.text.secondary}>
+              Select the days you can train clients. Your changes are saved to your
+              trainer profile.
             </AppText>
+
+            {isLoading ? (
+              <ActivityIndicator size="large" color={colors.brand.red} />
+            ) : (
+              availabilityOptions.map((day) => {
+                const selected = availableDays.includes(day);
+
+                return (
+                  <Pressable
+                    key={day}
+                    accessibilityRole="checkbox"
+                    accessibilityLabel={day}
+                    accessibilityState={{
+                      checked: selected,
+                      disabled: isSavingAvailability,
+                    }}
+                    disabled={isSavingAvailability}
+                    onPress={() => toggleDay(day)}
+                    style={({ pressed }) => ({
+                      minHeight: 54,
+                      paddingHorizontal: spacing.md,
+                      borderRadius: 12,
+                      borderWidth: 1,
+                      borderColor: selected ? colors.brand.red : colors.border.default,
+                      backgroundColor: selected
+                        ? colors.background.primary
+                        : colors.background.secondary,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      opacity: isSavingAvailability ? 0.6 : pressed ? 0.8 : 1,
+                    })}
+                  >
+                    <AppText
+                      variant="body"
+                      color={selected ? colors.brand.red : colors.text.primary}
+                    >
+                      {day}
+                    </AppText>
+
+                    <AppText
+                      variant="button"
+                      color={selected ? colors.brand.red : colors.text.tertiary}
+                    >
+                      {selected ? '✓' : '+'}
+                    </AppText>
+                  </Pressable>
+                );
+              })
+            )}
+
+            {availabilityError ? (
+              <AppText
+                variant="bodySmall"
+                color={colors.text.error}
+                accessibilityRole="alert"
+              >
+                {availabilityError}
+              </AppText>
+            ) : null}
+
+            <Pressable
+              accessibilityRole="button"
+              accessibilityState={{
+                disabled: isLoading || isSavingAvailability || availableDays.length === 0,
+                busy: isSavingAvailability,
+              }}
+              disabled={isLoading || isSavingAvailability || availableDays.length === 0}
+              onPress={() => void saveAvailability()}
+              style={({ pressed }) => ({
+                minHeight: 54,
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: 14,
+                backgroundColor: colors.brand.red,
+                opacity:
+                  isLoading || isSavingAvailability || availableDays.length === 0
+                    ? 0.6
+                    : pressed
+                      ? 0.8
+                      : 1,
+              })}
+            >
+              {isSavingAvailability ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <AppText variant="buttonLarge" color="#FFFFFF">
+                  SAVE AVAILABILITY
+                </AppText>
+              )}
+            </Pressable>
+
+            {savedDays.length > 0 ? (
+              <AppText variant="bodySmall" color={colors.text.secondary}>
+                Saved days: {savedDays.join(', ')}
+              </AppText>
+            ) : null}
           </View>
         ) : isLoading ? (
           <View
@@ -327,7 +524,7 @@ export default function ScheduleScreen() {
 
             <Pressable
               accessibilityRole="button"
-              onPress={() => void loadBookings()}
+              onPress={() => void loadSchedule()}
               style={{
                 padding: spacing.md,
                 alignItems: 'center',
