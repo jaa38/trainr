@@ -1,5 +1,6 @@
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -13,6 +14,257 @@ import {
 } from '@/services/trainer-discovery';
 import { useTrainrTheme } from '@/theme';
 
+type DailySchedule = {
+  start: string;
+  end: string;
+};
+
+type TrainerAvailability = {
+  days?: string[];
+  schedule?: Record<string, DailySchedule | undefined>;
+};
+
+type OccupiedSlot = {
+  start: string;
+  end: string;
+};
+
+type AvailabilityResponse = {
+  availability: TrainerAvailability;
+  timezone: string;
+  occupied_slots: OccupiedSlot[];
+};
+
+type AvailableSlot = {
+  start: string;
+  end: string;
+  label: string;
+};
+
+type BookingErrorContext = 'availability' | 'submission';
+
+const SLOT_INTERVAL_MINUTES = 30;
+
+const WEEKDAYS = [
+  'Sunday',
+  'Monday',
+  'Tuesday',
+  'Wednesday',
+  'Thursday',
+  'Friday',
+  'Saturday',
+];
+
+function dateKey(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+
+  return `${year}-${month}-${day}`;
+}
+
+function weekdayForDate(date: string): string {
+  const [year, month, day] = date.split('-').map(Number);
+  const weekdayIndex = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
+
+  return WEEKDAYS[weekdayIndex];
+}
+
+function timeToMinutes(time: string): number | null {
+  const match = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(time);
+
+  if (!match) return null;
+
+  return Number(match[1]) * 60 + Number(match[2]);
+}
+
+function getZonedDateParts(date: Date, timezone: string): { date: string; time: string } {
+  const formatter = new Intl.DateTimeFormat('en-GB', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  });
+
+  const parts = formatter.formatToParts(date);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+
+  return {
+    date: `${values.year}-${values.month}-${values.day}`,
+    time: `${values.hour}:${values.minute}`,
+  };
+}
+
+/**
+ * Converts a wall-clock date and time in a named timezone to UTC.
+ * This does not assume that the device and trainer share a timezone.
+ */
+function zonedDateTimeToUtc(date: string, time: string, timezone: string): Date {
+  const [year, month, day] = date.split('-').map(Number);
+  const [hour, minute] = time.split(':').map(Number);
+
+  const targetUtc = Date.UTC(year, month - 1, day, hour, minute);
+
+  let guess = targetUtc;
+
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const parts = getZonedDateParts(new Date(guess), timezone);
+    const [localYear, localMonth, localDay] = parts.date.split('-').map(Number);
+    const [localHour, localMinute] = parts.time.split(':').map(Number);
+
+    const representedUtc = Date.UTC(
+      localYear,
+      localMonth - 1,
+      localDay,
+      localHour,
+      localMinute,
+    );
+
+    const difference = targetUtc - representedUtc;
+
+    if (difference === 0) break;
+
+    guess += difference;
+  }
+
+  const result = new Date(guess);
+  const actual = getZonedDateParts(result, timezone);
+
+  if (actual.date !== date || actual.time !== time) {
+    throw new Error(
+      'This local time is not valid in the trainer’s timezone. Please choose another slot.',
+    );
+  }
+
+  return result;
+}
+
+function formatTimeLabel(time: string): string {
+  const [hour, minute] = time.split(':').map(Number);
+  const suffix = hour >= 12 ? 'PM' : 'AM';
+  const displayHour = hour % 12 || 12;
+
+  return `${displayHour}:${String(minute).padStart(2, '0')} ${suffix}`;
+}
+
+function formatSelectedDate(date: string): string {
+  const [year, month, day] = date.split('-').map(Number);
+
+  return new Intl.DateTimeFormat(undefined, {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+    timeZone: 'UTC',
+  }).format(new Date(Date.UTC(year, month - 1, day)));
+}
+
+function formatRate(rate: number, currency: string | null): string {
+  const amount = new Intl.NumberFormat(undefined, {
+    maximumFractionDigits: 2,
+  }).format(rate);
+
+  return `${currency ?? 'NGN'} ${amount}`;
+}
+
+function overlaps(
+  firstStart: number,
+  firstEnd: number,
+  secondStart: number,
+  secondEnd: number,
+): boolean {
+  return firstStart < secondEnd && firstEnd > secondStart;
+}
+
+function getCurrentTimestamp(): number {
+  return Date.now();
+}
+
+/**
+ * Maps Supabase/PostgreSQL errors to messages that make sense to users.
+ * Raw database messages are logged for debugging, not shown in the UI.
+ */
+function getBookingErrorMessage(error: unknown, context: BookingErrorContext): string {
+  const databaseError =
+    error && typeof error === 'object'
+      ? (error as {
+          code?: string;
+          message?: string;
+          details?: string;
+          hint?: string;
+        })
+      : {};
+
+  const code = databaseError.code;
+  const message = databaseError.message?.toLowerCase() ?? '';
+  const details = databaseError.details?.toLowerCase() ?? '';
+  const combined = `${message} ${details}`;
+
+  if (
+    code === 'P0002' ||
+    combined.includes('published trainer not found') ||
+    combined.includes('trainer not found')
+  ) {
+    return 'This trainer is no longer available for booking. Please choose another trainer.';
+  }
+
+  // PostgreSQL exclusion constraint: a booking overlaps an existing one.
+  if (
+    code === '23P01' ||
+    combined.includes('exclusion constraint') ||
+    combined.includes('overlap')
+  ) {
+    return 'This slot is no longer available. Please refresh the available times and select another slot.';
+  }
+
+  // PostgreSQL check constraint or the availability validation trigger.
+  if (
+    code === '23514' ||
+    combined.includes('outside trainer') ||
+    combined.includes('available hours') ||
+    combined.includes('availability') ||
+    combined.includes('working hours')
+  ) {
+    return 'This time is outside the trainer’s available hours. Please choose another available slot.';
+  }
+
+  if (
+    combined.includes('timezone is not configured') ||
+    combined.includes('invalid time zone')
+  ) {
+    return 'This trainer’s schedule is temporarily unavailable. Please try again later.';
+  }
+
+  if (code === '42501') {
+    return 'Your account cannot perform this action. Please sign in again and try again.';
+  }
+
+  if (code === '23503') {
+    return 'Some booking details are no longer valid. Please refresh the trainer’s availability and try again.';
+  }
+
+  if (code === '23505') {
+    return 'This booking could not be saved because it conflicts with an existing record. Please try another slot.';
+  }
+
+  if (
+    message.includes('network request failed') ||
+    message.includes('failed to fetch') ||
+    message.includes('fetch failed')
+  ) {
+    return 'We couldn’t connect to TRAINR. Check your internet connection and try again.';
+  }
+
+  if (context === 'availability') {
+    return 'We couldn’t check this trainer’s available times. Please try again.';
+  }
+
+  return 'We couldn’t submit your booking request. Please try again.';
+}
+
 export default function BookingScreen() {
   const { trainerId } = useLocalSearchParams<{ trainerId: string }>();
   const { user, profile } = useAuth();
@@ -20,16 +272,33 @@ export default function BookingScreen() {
 
   const [trainer, setTrainer] = useState<PublishedTrainer | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingSlots, setIsLoadingSlots] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [date, setDate] = useState('');
-  const [startTime, setStartTime] = useState('');
+  const [availabilityError, setAvailabilityError] = useState<string | null>(null);
+  const [availability, setAvailability] = useState<TrainerAvailability | null>(null);
+  const [timezone, setTimezone] = useState<string | null>(null);
+  const [occupiedSlots, setOccupiedSlots] = useState<OccupiedSlot[]>([]);
+  const [selectedDate, setSelectedDate] = useState(() => new Date());
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [selectedStartTime, setSelectedStartTime] = useState<string | null>(null);
   const [notes, setNotes] = useState('');
+  const [nowTimestamp, setNowTimestamp] = useState(() => getCurrentTimestamp());
 
+  const selectedDateKey = dateKey(selectedDate);
+
+  const trainerName = trainer
+    ? [trainer.first_name, trainer.last_name].filter(Boolean).join(' ').trim()
+    : 'TRAINR Coach';
+
+  // Load the selected published trainer.
   useEffect(() => {
     let isActive = true;
 
     async function loadTrainer() {
+      setIsLoading(true);
+      setErrorMessage(null);
+
       try {
         const trainers = await discoverPublishedTrainers();
         const selected = trainers.find((item) => item.trainer_id === trainerId);
@@ -37,13 +306,18 @@ export default function BookingScreen() {
         if (!isActive) return;
 
         if (!selected) {
-          setErrorMessage('This trainer is unavailable for booking.');
+          setTrainer(null);
+          setErrorMessage(
+            'This trainer is no longer available for booking. Please choose another trainer.',
+          );
         } else if (
           selected.session_rate == null ||
-          selected.session_duration_minutes == null
+          selected.session_duration_minutes == null ||
+          selected.session_duration_minutes <= 0
         ) {
+          setTrainer(null);
           setErrorMessage(
-            'This trainer has not configured a complete session rate and duration.',
+            'This trainer has not configured a valid session rate and duration.',
           );
         } else {
           setTrainer(selected);
@@ -53,7 +327,9 @@ export default function BookingScreen() {
         console.error('[Booking] Unable to load trainer:', error);
 
         if (isActive) {
-          setErrorMessage('Unable to load this trainer. Please try again.');
+          setErrorMessage(
+            'We couldn’t load this trainer. Check your connection and try again.',
+          );
         }
       } finally {
         if (isActive) {
@@ -71,16 +347,156 @@ export default function BookingScreen() {
     };
   }, [trainerId]);
 
-  const trainerName = trainer
-    ? [trainer.first_name, trainer.last_name].filter(Boolean).join(' ').trim()
-    : 'TRAINR Coach';
+  // Load the trainer's schedule and occupied intervals for the selected date.
+  const loadAvailability = useCallback(async () => {
+    if (!trainerId || !trainer) return;
 
-  const formatRate = (rate: number, currency: string | null) =>
-    `${currency ?? ''} ${new Intl.NumberFormat(undefined, {
-      maximumFractionDigits: 2,
-    }).format(rate)}`.trim();
+    setIsLoadingSlots(true);
+    setAvailabilityError(null);
+    setAvailability(null);
+    setOccupiedSlots([]);
+    setTimezone(null);
+    setSelectedStartTime(null);
 
-  function handleSubmit() {
+    try {
+      const { data, error } = await supabase.rpc('get_trainer_booking_availability', {
+        p_trainer_id: trainerId,
+        p_date: selectedDateKey,
+      });
+
+      if (error) throw error;
+
+      const response = (
+        Array.isArray(data) ? data[0] : data
+      ) as AvailabilityResponse | null;
+
+      if (!response?.timezone || !response.availability) {
+        throw new Error('The trainer’s availability could not be retrieved.');
+      }
+
+      // Validate the IANA timezone before using it in date calculations.
+      new Intl.DateTimeFormat('en-GB', {
+        timeZone: response.timezone,
+      }).format(new Date());
+
+      setNowTimestamp(getCurrentTimestamp());
+      setAvailability(response.availability);
+      setTimezone(response.timezone);
+      setOccupiedSlots(response.occupied_slots ?? []);
+    } catch (error) {
+      console.error('[Booking] Unable to load availability:', error);
+
+      setAvailabilityError(getBookingErrorMessage(error, 'availability'));
+    } finally {
+      setIsLoadingSlots(false);
+    }
+  }, [trainerId, trainer, selectedDateKey]);
+
+  useEffect(() => {
+    let isActive = true;
+
+    async function refreshAvailability() {
+      await Promise.resolve();
+
+      if (isActive) {
+        await loadAvailability();
+      }
+    }
+
+    void refreshAvailability();
+
+    return () => {
+      isActive = false;
+    };
+  }, [loadAvailability]);
+
+  const availableSlots = useMemo<AvailableSlot[]>(() => {
+    if (!availability || !timezone || !trainer?.session_duration_minutes) {
+      return [];
+    }
+
+    const weekday = weekdayForDate(selectedDateKey);
+
+    if (!availability.days?.includes(weekday)) {
+      return [];
+    }
+
+    const window = availability.schedule?.[weekday];
+
+    if (!window) return [];
+
+    const openingMinute = timeToMinutes(window.start);
+    const closingMinute = timeToMinutes(window.end);
+
+    if (
+      openingMinute == null ||
+      closingMinute == null ||
+      closingMinute <= openingMinute
+    ) {
+      return [];
+    }
+
+    const duration = trainer.session_duration_minutes;
+    const slots: AvailableSlot[] = [];
+    const now = nowTimestamp;
+
+    // Offer starts on 30-minute clock intervals.
+    const firstStart =
+      Math.ceil(openingMinute / SLOT_INTERVAL_MINUTES) * SLOT_INTERVAL_MINUTES;
+
+    for (
+      let startMinute = firstStart;
+      startMinute + duration <= closingMinute;
+      startMinute += SLOT_INTERVAL_MINUTES
+    ) {
+      const startTime = `${String(Math.floor(startMinute / 60)).padStart(2, '0')}:${String(startMinute % 60).padStart(2, '0')}`;
+      const endMinute = startMinute + duration;
+      const endTime = `${String(Math.floor(endMinute / 60)).padStart(2, '0')}:${String(endMinute % 60).padStart(2, '0')}`;
+
+      try {
+        const start = zonedDateTimeToUtc(selectedDateKey, startTime, timezone);
+        const end = zonedDateTimeToUtc(selectedDateKey, endTime, timezone);
+
+        if (start.getTime() <= now) continue;
+
+        const hasConflict = occupiedSlots.some((occupied) => {
+          const occupiedStart = new Date(occupied.start).getTime();
+          const occupiedEnd = new Date(occupied.end).getTime();
+
+          return (
+            Number.isFinite(occupiedStart) &&
+            Number.isFinite(occupiedEnd) &&
+            overlaps(start.getTime(), end.getTime(), occupiedStart, occupiedEnd)
+          );
+        });
+
+        if (!hasConflict) {
+          slots.push({
+            start: startTime,
+            end: endTime,
+            label: formatTimeLabel(startTime),
+          });
+        }
+      } catch {
+        // Skip local times that cannot be represented in this timezone.
+      }
+    }
+
+    return slots;
+  }, [availability, timezone, trainer, selectedDateKey, occupiedSlots, nowTimestamp]);
+
+  const selectedSlot = availableSlots.find((slot) => slot.start === selectedStartTime);
+
+  function handleDateChange(event: { type: string }, date?: Date) {
+    setShowDatePicker(false);
+
+    if (event.type !== 'set' || !date) return;
+
+    setSelectedDate(date);
+    setSelectedStartTime(null);
+  }
+
+  async function handleSubmit() {
     if (isSubmitting) return;
 
     if (!user || !profile) {
@@ -99,80 +515,53 @@ export default function BookingScreen() {
     if (!trainer || !trainerId) {
       Alert.alert(
         'Trainer unavailable',
-        'Please return to the trainer profile and try again.',
+        'This trainer is no longer available for booking. Please choose another trainer.',
       );
       return;
     }
 
-    const dateMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date.trim());
-    const timeMatch = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(startTime.trim());
-
-    if (!dateMatch) {
-      Alert.alert('Check the date', 'Enter a date in YYYY-MM-DD format.');
+    if (!timezone || !selectedSlot) {
+      Alert.alert(
+        'Choose an available time',
+        'Select a date and an available time before continuing.',
+      );
       return;
     }
 
-    if (!timeMatch) {
-      Alert.alert('Check the time', 'Enter a 24-hour start time in HH:MM format.');
+    let scheduledStart: Date;
+    let scheduledEnd: Date;
+
+    try {
+      scheduledStart = zonedDateTimeToUtc(selectedDateKey, selectedSlot.start, timezone);
+
+      scheduledEnd = zonedDateTimeToUtc(selectedDateKey, selectedSlot.end, timezone);
+    } catch (error) {
+      Alert.alert(
+        'Invalid session time',
+        error instanceof Error ? error.message : 'Please select another available time.',
+      );
       return;
     }
 
-    const year = Number(dateMatch[1]);
-    const month = Number(dateMatch[2]);
-    const day = Number(dateMatch[3]);
-    const hour = Number(timeMatch[1]);
-    const minute = Number(timeMatch[2]);
+    // Use the actual current time at submission, not the render timestamp.
+    if (scheduledStart.getTime() <= getCurrentTimestamp()) {
+      Alert.alert(
+        'Choose a future time',
+        'This session time has already passed. Please choose another slot.',
+      );
 
-    const localStart = new Date(year, month - 1, day, hour, minute);
-
-    if (
-      localStart.getFullYear() !== year ||
-      localStart.getMonth() !== month - 1 ||
-      localStart.getDate() !== day
-    ) {
-      Alert.alert('Check the date', 'Enter a valid calendar date.');
+      await loadAvailability();
       return;
     }
-
-    const now = new Date();
-
-    if (localStart.getTime() <= now.getTime()) {
-      Alert.alert('Choose a future time', 'Your session must start in the future.');
-      return;
-    }
-
-    const duration = trainer.session_duration_minutes;
-
-    if (!duration || duration <= 0) {
-      Alert.alert('Session duration unavailable', 'Please contact the trainer.');
-      return;
-    }
-
-    const localEnd = new Date(localStart.getTime() + duration * 60_000);
-
-    void submitBooking(localStart.toISOString(), localEnd.toISOString());
-  }
-
-  async function submitBooking(scheduledStart: string, scheduledEnd: string) {
-    if (!user || !trainer || isSubmitting) return;
 
     setIsSubmitting(true);
 
     try {
-      // Diagnostic: verify which trainer the booking targets.
-      console.log('[Booking] Submission context:', {
-        gymGoerId: user.id,
-        trainerIdFromRoute: trainerId,
-        trainerIdFromLoadedProfile: trainer.trainer_id,
-        scheduledStart,
-        scheduledEnd,
-      });
-
       const { error } = await supabase.from('trainer_bookings').insert({
         gym_goer_id: user.id,
         trainer_id: trainer.trainer_id,
-        scheduled_start: scheduledStart,
-        scheduled_end: scheduledEnd,
+        scheduled_start: scheduledStart.toISOString(),
+        scheduled_end: scheduledEnd.toISOString(),
         session_rate: trainer.session_rate,
         currency: trainer.currency ?? 'NGN',
         status: 'pending',
@@ -183,7 +572,7 @@ export default function BookingScreen() {
 
       Alert.alert(
         'Request sent',
-        `Your session request with ${trainerName} has been sent for confirmation.`,
+        `Your ${selectedSlot.label} session on ${formatSelectedDate(selectedDateKey)} with ${trainerName} has been sent for confirmation. Times are shown in the trainer’s timezone (${timezone}).`,
         [
           {
             text: 'Done',
@@ -192,36 +581,42 @@ export default function BookingScreen() {
         ],
       );
     } catch (error) {
-      if (error && typeof error === 'object') {
-        const databaseError = error as {
-          code?: string;
-          message?: string;
-          details?: string;
-          hint?: string;
-        };
+      console.error('[Booking] Submission failed:', error);
 
-        console.error('[Booking] Submission failed:', {
-          code: databaseError.code,
-          message: databaseError.message,
-          details: databaseError.details,
-          hint: databaseError.hint,
-        });
-
-        Alert.alert(
-          'Booking unsuccessful',
-          databaseError.message ?? 'We could not submit your request. Please try again.',
-        );
-      } else {
-        console.error('[Booking] Submission failed:', error);
-
-        Alert.alert(
-          'Booking unsuccessful',
-          'We could not submit your request. Please try again.',
-        );
-      }
+      Alert.alert('Booking unsuccessful', getBookingErrorMessage(error, 'submission'), [
+        {
+          text: 'OK',
+          onPress: () => {
+            void loadAvailability();
+          },
+        },
+      ]);
     } finally {
       setIsSubmitting(false);
     }
+  }
+
+  function renderPrimaryButton(label: string, onPress: () => void, disabled = false) {
+    return (
+      <Pressable
+        accessibilityRole="button"
+        accessibilityState={{ disabled }}
+        disabled={disabled}
+        onPress={onPress}
+        style={{
+          minHeight: 52,
+          paddingHorizontal: spacing.lg,
+          borderRadius: 14,
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: disabled ? colors.text.tertiary : colors.brand.red,
+        }}
+      >
+        <AppText variant="button" color="#FFFFFF">
+          {label}
+        </AppText>
+      </Pressable>
+    );
   }
 
   return (
@@ -239,6 +634,7 @@ export default function BookingScreen() {
           paddingBottom: spacing.xxxl,
           gap: spacing.lg,
         }}
+        showsVerticalScrollIndicator={false}
       >
         <Pressable
           accessibilityRole="button"
@@ -259,32 +655,14 @@ export default function BookingScreen() {
           </AppText>
 
           <AppText variant="body" color={colors.text.secondary}>
-            Request a training session with your selected coach.
+            Choose a date and an available time with your coach.
           </AppText>
         </View>
 
         {!trainerId ? (
-          <View style={{ gap: spacing.md }}>
-            <AppText variant="body" color={colors.text.secondary}>
-              No trainer was selected. Return to Discover and choose a trainer.
-            </AppText>
-
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => router.back()}
-              style={{
-                minHeight: 50,
-                borderRadius: 12,
-                backgroundColor: colors.brand.red,
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <AppText variant="button" color="#FFFFFF">
-                Return to Discover
-              </AppText>
-            </Pressable>
-          </View>
+          <AppText variant="body" color={colors.text.secondary}>
+            No trainer was selected. Return to Discover and choose a trainer.
+          </AppText>
         ) : isLoading ? (
           <View
             style={{
@@ -305,21 +683,7 @@ export default function BookingScreen() {
               {errorMessage ?? 'This trainer could not be found.'}
             </AppText>
 
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => router.back()}
-              style={{
-                minHeight: 50,
-                borderRadius: 12,
-                backgroundColor: colors.brand.red,
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <AppText variant="button" color="#FFFFFF">
-                Return to trainer profile
-              </AppText>
-            </Pressable>
+            {renderPrimaryButton('Return to trainer profile', () => router.back())}
           </View>
         ) : (
           <>
@@ -350,71 +714,220 @@ export default function BookingScreen() {
               </AppText>
 
               <AppText variant="caption" color={colors.text.secondary}>
-                Final booking is subject to trainer confirmation.
+                Your request remains pending until the trainer confirms it.
               </AppText>
             </View>
 
-            <Input
-              label="Session date"
-              value={date}
-              onChangeText={setDate}
-              placeholder="YYYY-MM-DD"
-              accessibilityLabel="Session date in year-month-day format"
-              keyboardType="numbers-and-punctuation"
-              autoCapitalize="none"
-              helperText="Use your local date, for example 2026-10-20."
-              editable={!isSubmitting}
-            />
+            <View style={{ gap: spacing.sm }}>
+              <AppText variant="h2" color={colors.text.primary}>
+                1. Choose a date
+              </AppText>
 
-            <Input
-              label="Start time"
-              value={startTime}
-              onChangeText={setStartTime}
-              placeholder="HH:MM (24-hour time)"
-              accessibilityLabel="Session start time in 24-hour format"
-              keyboardType="numbers-and-punctuation"
-              autoCapitalize="none"
-              helperText="For example, 14:30 for 2:30 PM."
-              editable={!isSubmitting}
-            />
-
-            <Input
-              label="Notes for your trainer (optional)"
-              value={notes}
-              onChangeText={setNotes}
-              placeholder="Share your goals or anything your trainer should know."
-              multiline
-              maxLength={1000}
-              textAlignVertical="top"
-              style={{
-                minHeight: 100,
-                paddingTop: spacing.md,
-              }}
-              editable={!isSubmitting}
-            />
-
-            <Pressable
-              accessibilityRole="button"
-              accessibilityState={{ disabled: isSubmitting }}
-              disabled={isSubmitting}
-              onPress={handleSubmit}
-              style={{
-                minHeight: 54,
-                alignItems: 'center',
-                justifyContent: 'center',
-                borderRadius: 14,
-                backgroundColor: isSubmitting ? colors.text.tertiary : colors.brand.red,
-                paddingHorizontal: spacing.lg,
-              }}
-            >
-              {isSubmitting ? (
-                <ActivityIndicator color="#FFFFFF" />
-              ) : (
-                <AppText variant="button" color="#FFFFFF">
-                  Send booking request
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Selected date: ${formatSelectedDate(selectedDateKey)}. Change date`}
+                disabled={isSubmitting}
+                onPress={() => setShowDatePicker(true)}
+                style={{
+                  minHeight: 54,
+                  paddingHorizontal: spacing.md,
+                  borderRadius: 12,
+                  borderWidth: 1,
+                  borderColor: colors.border.default,
+                  backgroundColor: colors.background.secondary,
+                  justifyContent: 'center',
+                }}
+              >
+                <AppText variant="button" color={colors.text.primary}>
+                  {formatSelectedDate(selectedDateKey)}
                 </AppText>
+
+                <AppText variant="caption" color={colors.text.secondary}>
+                  Tap to change date
+                </AppText>
+              </Pressable>
+
+              {showDatePicker ? (
+                <DateTimePicker
+                  value={selectedDate}
+                  mode="date"
+                  display="default"
+                  minimumDate={new Date()}
+                  onChange={handleDateChange}
+                />
+              ) : null}
+            </View>
+
+            <View style={{ gap: spacing.sm }}>
+              <View style={{ gap: spacing.xs }}>
+                <AppText variant="h2" color={colors.text.primary}>
+                  2. Choose a time
+                </AppText>
+
+                {timezone ? (
+                  <AppText variant="caption" color={colors.text.secondary}>
+                    All times are shown in the trainer’s timezone: {timezone}
+                  </AppText>
+                ) : null}
+              </View>
+
+              {isLoadingSlots ? (
+                <View
+                  style={{
+                    padding: spacing.xl,
+                    alignItems: 'center',
+                    gap: spacing.sm,
+                  }}
+                >
+                  <ActivityIndicator color={colors.brand.red} />
+
+                  <AppText variant="body" color={colors.text.secondary}>
+                    Checking available times…
+                  </AppText>
+                </View>
+              ) : availabilityError ? (
+                <View style={{ gap: spacing.md }}>
+                  <AppText variant="body" color={colors.text.secondary}>
+                    {availabilityError}
+                  </AppText>
+
+                  {renderPrimaryButton(
+                    'Retry availability',
+                    () => void loadAvailability(),
+                    isSubmitting,
+                  )}
+                </View>
+              ) : availableSlots.length === 0 ? (
+                <View
+                  style={{
+                    padding: spacing.lg,
+                    gap: spacing.sm,
+                    borderRadius: 12,
+                    backgroundColor: colors.background.secondary,
+                    borderWidth: 1,
+                    borderColor: colors.border.default,
+                  }}
+                >
+                  <AppText variant="body" color={colors.text.primary}>
+                    No available sessions on this date.
+                  </AppText>
+
+                  <AppText variant="caption" color={colors.text.secondary}>
+                    Choose another date or check back later. Sessions must fit within the
+                    trainer’s working hours and cannot overlap pending or confirmed
+                    bookings.
+                  </AppText>
+                </View>
+              ) : (
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    flexWrap: 'wrap',
+                    gap: spacing.sm,
+                  }}
+                >
+                  {availableSlots.map((slot) => {
+                    const isSelected = selectedStartTime === slot.start;
+
+                    return (
+                      <Pressable
+                        key={slot.start}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: isSelected }}
+                        disabled={isSubmitting}
+                        onPress={() => setSelectedStartTime(slot.start)}
+                        style={{
+                          minWidth: 100,
+                          minHeight: 46,
+                          paddingHorizontal: spacing.md,
+                          borderRadius: 12,
+                          borderWidth: 1,
+                          borderColor: isSelected
+                            ? colors.brand.red
+                            : colors.border.default,
+                          backgroundColor: isSelected
+                            ? colors.brand.red
+                            : colors.background.secondary,
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                      >
+                        <AppText
+                          variant="button"
+                          color={isSelected ? '#FFFFFF' : colors.text.primary}
+                        >
+                          {slot.label}
+                        </AppText>
+                      </Pressable>
+                    );
+                  })}
+                </View>
               )}
-            </Pressable>
+            </View>
+
+            <View style={{ gap: spacing.sm }}>
+              <AppText variant="h2" color={colors.text.primary}>
+                3. Add a note
+              </AppText>
+
+              <Input
+                label="Notes for your trainer (optional)"
+                value={notes}
+                onChangeText={setNotes}
+                placeholder="Share your goals or anything your trainer should know."
+                multiline
+                maxLength={1000}
+                textAlignVertical="top"
+                style={{
+                  minHeight: 100,
+                  paddingTop: spacing.md,
+                }}
+                editable={!isSubmitting}
+              />
+            </View>
+
+            {selectedSlot ? (
+              <View
+                style={{
+                  padding: spacing.lg,
+                  gap: spacing.sm,
+                  borderRadius: 16,
+                  borderWidth: 1,
+                  borderColor: colors.border.default,
+                  backgroundColor: colors.background.secondary,
+                }}
+              >
+                <AppText variant="h2" color={colors.text.primary}>
+                  Booking summary
+                </AppText>
+
+                <AppText variant="body" color={colors.text.secondary}>
+                  {formatSelectedDate(selectedDateKey)}
+                </AppText>
+
+                <AppText variant="body" color={colors.text.secondary}>
+                  {selectedSlot.label} – {formatTimeLabel(selectedSlot.end)}
+                </AppText>
+
+                <AppText variant="caption" color={colors.text.secondary}>
+                  {timezone}
+                </AppText>
+
+                <AppText variant="button" color={colors.brand.red}>
+                  {trainer.session_duration_minutes} minutes ·{' '}
+                  {formatRate(trainer.session_rate!, trainer.currency)}
+                </AppText>
+              </View>
+            ) : null}
+
+            {renderPrimaryButton(
+              isSubmitting ? 'Sending request…' : 'Send booking request',
+              () => void handleSubmit(),
+              isSubmitting ||
+                isLoadingSlots ||
+                Boolean(availabilityError) ||
+                !selectedSlot,
+            )}
           </>
         )}
       </ScrollView>

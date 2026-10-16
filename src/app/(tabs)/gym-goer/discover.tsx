@@ -1,6 +1,5 @@
 import { router } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
-
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -9,10 +8,14 @@ import {
   ScrollView,
   View,
 } from 'react-native';
-
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/AppText';
+import { Input } from '@/components/Input';
+import {
+  TrainerSpecialtyFilters,
+  type TrainerSpecialty,
+} from '@/components/TrainerSpecialtyFilters';
 import {
   discoverPublishedTrainers,
   type PublishedTrainer,
@@ -27,6 +30,8 @@ export default function DiscoverScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedSpecialties, setSelectedSpecialties] = useState<TrainerSpecialty[]>([]);
 
   const loadTrainers = useCallback(async (refresh = false) => {
     if (refresh) {
@@ -80,6 +85,54 @@ export default function DiscoverScreen() {
     };
   }, []);
 
+  const onToggleSpecialty = useCallback((specialty: TrainerSpecialty) => {
+    setSelectedSpecialties((current) =>
+      current.includes(specialty)
+        ? current.filter((item) => item !== specialty)
+        : [...current, specialty],
+    );
+  }, []);
+
+  const onClearSpecialties = useCallback(() => {
+    setSelectedSpecialties([]);
+  }, []);
+
+  const filteredTrainers = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+
+    return trainers.filter((trainer) => {
+      const fullName = [trainer.first_name, trainer.last_name].filter(Boolean).join(' ');
+
+      const searchableFields = [
+        fullName,
+        trainer.professional_bio,
+        trainer.location,
+        ...(trainer.specialities ?? []),
+        ...(trainer.qualifications ?? []),
+        ...(trainer.certifications ?? []),
+      ];
+
+      const matchesSearch =
+        !query || searchableFields.some((field) => field?.toLowerCase().includes(query));
+
+      const trainerSpecialties = (trainer.specialities ?? []).map((specialty) =>
+        specialty.toLowerCase(),
+      );
+
+      const matchesSpecialty =
+        selectedSpecialties.length === 0 ||
+        selectedSpecialties.some((specialty) =>
+          trainerSpecialties.some(
+            (trainerSpecialty) =>
+              trainerSpecialty.includes(specialty.toLowerCase()) ||
+              specialty.toLowerCase().includes(trainerSpecialty),
+          ),
+        );
+
+      return matchesSearch && matchesSpecialty;
+    });
+  }, [trainers, searchQuery, selectedSpecialties]);
+
   const formatRate = (trainer: PublishedTrainer) => {
     if (trainer.session_rate == null) {
       return 'Rate not set';
@@ -119,11 +172,15 @@ export default function DiscoverScreen() {
         }
         showsVerticalScrollIndicator={false}
       >
+        {/* Screen heading */}
         <View style={{ gap: spacing.sm }}>
           <AppText
             variant="caption"
             color={colors.brand.red}
-            style={{ letterSpacing: 1.5, textTransform: 'uppercase' }}
+            style={{
+              letterSpacing: 1.5,
+              textTransform: 'uppercase',
+            }}
           >
             FIND YOUR COACH
           </AppText>
@@ -141,6 +198,34 @@ export default function DiscoverScreen() {
           </AppText>
         </View>
 
+        {/* Search input and filter button */}
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: spacing.sm,
+            marginTop: spacing.xs,
+          }}
+        >
+          <View style={{ flex: 1 }}>
+            <Input
+              accessibilityLabel="Search trainers"
+              placeholder="Search by name or expertise"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              returnKeyType="search"
+              autoCapitalize="none"
+            />
+          </View>
+
+          <TrainerSpecialtyFilters
+            selectedSpecialties={selectedSpecialties}
+            onToggleSpecialty={onToggleSpecialty}
+            onClearSpecialties={onClearSpecialties}
+          />
+        </View>
+
+        {/* Loading state */}
         {isLoading ? (
           <View
             style={{
@@ -151,11 +236,13 @@ export default function DiscoverScreen() {
             }}
           >
             <ActivityIndicator size="large" color={colors.brand.red} />
+
             <AppText variant="body" color={colors.text.secondary}>
               Finding published trainers…
             </AppText>
           </View>
         ) : errorMessage ? (
+          /* Error state */
           <View
             style={{
               padding: spacing.lg,
@@ -191,6 +278,7 @@ export default function DiscoverScreen() {
             </Pressable>
           </View>
         ) : trainers.length === 0 ? (
+          /* No published trainers */
           <View
             style={{
               padding: spacing.xl,
@@ -209,13 +297,58 @@ export default function DiscoverScreen() {
               Published trainer profiles will appear here. Check back soon.
             </AppText>
           </View>
-        ) : (
-          <View style={{ gap: spacing.md }}>
-            <AppText variant="h2" color={colors.text.primary}>
-              AVAILABLE TRAINERS ({trainers.length})
+        ) : filteredTrainers.length === 0 ? (
+          /* No matching trainers */
+          <View
+            style={{
+              padding: spacing.xl,
+              borderRadius: 16,
+              borderWidth: 1,
+              borderColor: colors.border.default,
+              backgroundColor: colors.background.secondary,
+              gap: spacing.md,
+            }}
+          >
+            <AppText variant="h3" color={colors.text.primary}>
+              No trainers found
             </AppText>
 
-            {trainers.map((trainer) => {
+            <AppText variant="body" color={colors.text.secondary}>
+              No trainers match your current search and expertise filters. Try changing
+              your search or filters.
+            </AppText>
+
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Clear search and filters"
+              onPress={() => {
+                setSearchQuery('');
+                onClearSpecialties();
+              }}
+              style={{
+                minHeight: 48,
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: 12,
+                backgroundColor: colors.brand.red,
+                paddingHorizontal: spacing.lg,
+              }}
+            >
+              <AppText variant="button" color="#FFFFFF">
+                Clear search and filters
+              </AppText>
+            </Pressable>
+          </View>
+        ) : (
+          /* Trainer results */
+          <View style={{ gap: spacing.md }}>
+            <AppText variant="h2" color={colors.text.primary}>
+              {searchQuery.trim() || selectedSpecialties.length > 0
+                ? `SEARCH RESULTS (${filteredTrainers.length})`
+                : `AVAILABLE TRAINERS (${filteredTrainers.length})`}
+            </AppText>
+
+            {filteredTrainers.map((trainer) => {
               const fullName = [trainer.first_name, trainer.last_name]
                 .filter(Boolean)
                 .join(' ')
@@ -227,14 +360,10 @@ export default function DiscoverScreen() {
                   accessibilityRole="button"
                   accessibilityLabel={`View profile for ${fullName || 'TRAINR Coach'}`}
                   onPress={() => {
-                    console.log('[Discover] Trainer card tapped:', trainer.trainer_id);
-
                     router.push({
                       pathname: '/(tabs)/trainer-profile/[id]',
                       params: { id: trainer.trainer_id },
                     });
-
-                    console.log('[Discover] Navigation requested');
                   }}
                   style={{
                     padding: spacing.lg,
@@ -255,7 +384,9 @@ export default function DiscoverScreen() {
                     {trainer.avatar_url ? (
                       <Image
                         source={{ uri: trainer.avatar_url }}
-                        accessibilityLabel={`Profile photo of ${fullName || 'TRAINR Coach'}`}
+                        accessibilityLabel={`Profile photo of ${
+                          fullName || 'TRAINR Coach'
+                        }`}
                         resizeMode="cover"
                         style={{
                           width: 76,
@@ -312,6 +443,7 @@ export default function DiscoverScreen() {
                       <AppText variant="caption" color={colors.text.tertiary}>
                         SPECIALTIES
                       </AppText>
+
                       <AppText variant="body" color={colors.text.primary}>
                         {trainer.specialities.join(' · ')}
                       </AppText>
