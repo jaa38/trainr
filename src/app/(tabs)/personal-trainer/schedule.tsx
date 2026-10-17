@@ -1,6 +1,6 @@
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useFocusEffect } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -133,6 +133,7 @@ export default function ScheduleScreen() {
   const { user } = useAuth();
   const { colors, spacing } = useTrainrTheme();
 
+  const [now, setNow] = useState(() => new Date());
   const [activeView, setActiveView] = useState<ScheduleView>('Upcoming');
   const [trainerTimezone, setTrainerTimezone] = useState(DEFAULT_TIMEZONE);
   const [bookings, setBookings] = useState<Booking[]>([]);
@@ -155,6 +156,14 @@ export default function ScheduleScreen() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [availabilityError, setAvailabilityError] = useState<string | null>(null);
   const [updatingBookingId, setUpdatingBookingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setNow(new Date());
+    }, 30_000);
+
+    return () => clearInterval(interval);
+  }, []);
 
   const loadSchedule = useCallback(
     async (refresh = false) => {
@@ -442,10 +451,38 @@ export default function ScheduleScreen() {
     }
   }
 
-  async function updateBookingStatus(booking: Booking, status: 'confirmed' | 'declined') {
+  async function updateBookingStatus(
+    booking: Booking,
+    status: 'confirmed' | 'declined' | 'completed',
+  ) {
     if (!user) return;
 
-    const action = status === 'confirmed' ? 'confirm' : 'decline';
+    if (status === 'completed') {
+      if (booking.status !== 'confirmed') {
+        Alert.alert(
+          'Cannot complete session',
+          'Only confirmed sessions can be marked as completed.',
+        );
+        return;
+      }
+
+      if (new Date(booking.scheduled_end).getTime() > now.getTime()) {
+        Alert.alert(
+          'Session has not ended',
+          'You can mark this session as completed after its scheduled end time.',
+        );
+        return;
+      }
+    } else if (booking.status !== 'pending') {
+      Alert.alert(
+        'Booking already updated',
+        'Refresh your schedule before trying again.',
+      );
+      return;
+    }
+
+    const action =
+      status === 'confirmed' ? 'confirm' : status === 'declined' ? 'decline' : 'complete';
 
     setUpdatingBookingId(booking.id);
 
@@ -455,7 +492,7 @@ export default function ScheduleScreen() {
         .update({ status })
         .eq('id', booking.id)
         .eq('trainer_id', user.id)
-        .eq('status', 'pending')
+        .eq('status', booking.status)
         .select('id');
 
       if (error) throw error;
@@ -463,7 +500,7 @@ export default function ScheduleScreen() {
       if (!data?.length) {
         Alert.alert(
           'Booking not updated',
-          'This request may already have been updated. Refresh the schedule and try again.',
+          'The booking may have changed. Refresh your schedule and try again.',
         );
 
         await loadSchedule(true);
@@ -473,10 +510,16 @@ export default function ScheduleScreen() {
       await loadSchedule(true);
 
       Alert.alert(
-        status === 'confirmed' ? 'Session confirmed' : 'Request declined',
+        status === 'confirmed'
+          ? 'Session confirmed'
+          : status === 'declined'
+            ? 'Request declined'
+            : 'Session completed',
         status === 'confirmed'
           ? 'The session has been confirmed.'
-          : 'The booking request has been declined.',
+          : status === 'declined'
+            ? 'The booking request has been declined.'
+            : 'The session is now marked as completed. The gym-goer can leave a review.',
       );
     } catch (error) {
       console.error(`[Trainer Schedule] Unable to ${action} booking:`, error);
@@ -1069,6 +1112,47 @@ export default function ScheduleScreen() {
                         )}
                       </Pressable>
                     </View>
+                  ) : null}
+
+                  {/* Complete confirmed sessions after their scheduled end time */}
+                  {booking.status === 'confirmed' &&
+                  activeView === 'Upcoming' &&
+                  new Date(booking.scheduled_end).getTime() <= now.getTime() ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="Mark session as completed"
+                      disabled={isUpdating}
+                      onPress={() => {
+                        Alert.alert(
+                          'Complete session?',
+                          'Confirm that this training session has taken place.',
+                          [
+                            { text: 'Cancel', style: 'cancel' },
+                            {
+                              text: 'Complete session',
+                              onPress: () =>
+                                void updateBookingStatus(booking, 'completed'),
+                            },
+                          ],
+                        );
+                      }}
+                      style={({ pressed }) => ({
+                        minHeight: 48,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        borderRadius: 12,
+                        backgroundColor: colors.brand.red,
+                        opacity: isUpdating ? 0.6 : pressed ? 0.8 : 1,
+                      })}
+                    >
+                      {isUpdating ? (
+                        <ActivityIndicator color="#FFFFFF" />
+                      ) : (
+                        <AppText variant="button" color="#FFFFFF">
+                          Complete session
+                        </AppText>
+                      )}
+                    </Pressable>
                   ) : null}
                 </View>
               );

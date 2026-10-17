@@ -1,6 +1,14 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, ArrowRight, Award, Clock, MapPin } from 'lucide-react-native';
-import { useCallback, useEffect, useState } from 'react';
+import {
+  ArrowLeft,
+  ArrowRight,
+  Award,
+  BadgeCheck,
+  Clock,
+  MapPin,
+  Star,
+} from 'lucide-react-native';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -10,6 +18,12 @@ import {
   discoverPublishedTrainers,
   type PublishedTrainer,
 } from '@/services/trainer-discovery';
+import {
+  getTrainerProfileExtras,
+  getTrainerReviews,
+  type TrainerProfileExtras,
+  type TrainerReview,
+} from '@/services/trainer-reviews';
 import { useTrainrTheme } from '@/theme';
 
 export default function TrainerProfileScreen() {
@@ -18,50 +32,26 @@ export default function TrainerProfileScreen() {
   const { colors, spacing } = theme;
 
   const [trainer, setTrainer] = useState<PublishedTrainer | null>(null);
+  const [extras, setExtras] = useState<TrainerProfileExtras | null>(null);
+  const [reviews, setReviews] = useState<TrainerReview[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-
-  const loadTrainer = useCallback(async () => {
-    if (!id) {
-      setTrainer(null);
-      setErrorMessage(
-        'No trainer was selected. Return to Discover and choose a trainer.',
-      );
-      setIsLoading(false);
-      return;
-    }
-
-    setIsLoading(true);
-    setErrorMessage(null);
-
-    try {
-      const trainers = await discoverPublishedTrainers();
-      const selectedTrainer = trainers.find((item) => item.trainer_id === id);
-      setTrainer(selectedTrainer ?? null);
-
-      if (!selectedTrainer) {
-        setErrorMessage('This trainer profile is unavailable.');
-      }
-    } catch (error) {
-      console.error('[Trainer Profile] Unable to load trainer:', error);
-      setErrorMessage('We couldn’t load this trainer’s profile. Please try again.');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [id]);
 
   useEffect(() => {
     let isActive = true;
 
-    async function fetchTrainer() {
+    async function loadProfile() {
+      setIsLoading(true);
+      setErrorMessage(null);
+      setTrainer(null);
+      setExtras(null);
+      setReviews([]);
+
       if (!id) {
-        if (isActive) {
-          setTrainer(null);
-          setErrorMessage(
-            'No trainer was selected. Return to Discover and choose a trainer.',
-          );
-          setIsLoading(false);
-        }
+        setErrorMessage(
+          'No trainer was selected. Return to Discover and choose a trainer.',
+        );
+        setIsLoading(false);
         return;
       }
 
@@ -69,23 +59,54 @@ export default function TrainerProfileScreen() {
         const trainers = await discoverPublishedTrainers();
         const selectedTrainer = trainers.find((item) => item.trainer_id === id);
 
-        if (isActive) {
-          setTrainer(selectedTrainer ?? null);
-          setErrorMessage(
-            selectedTrainer ? null : 'This trainer profile is unavailable.',
+        if (!isActive) return;
+
+        if (!selectedTrainer) {
+          setErrorMessage('This trainer profile is unavailable.');
+          setIsLoading(false);
+          return;
+        }
+
+        setTrainer(selectedTrainer);
+        setIsLoading(false);
+
+        // These requests are independent of the core profile.
+        const [extrasResult, reviewsResult] = await Promise.allSettled([
+          getTrainerProfileExtras(selectedTrainer.trainer_id),
+          getTrainerReviews(selectedTrainer.trainer_id),
+        ]);
+
+        if (!isActive) return;
+
+        if (extrasResult.status === 'fulfilled') {
+          setExtras(extrasResult.value);
+        } else {
+          console.error(
+            '[Trainer Profile] Unable to load profile extras:',
+            extrasResult.reason,
+          );
+        }
+
+        if (reviewsResult.status === 'fulfilled') {
+          setReviews(reviewsResult.value);
+        } else {
+          console.error(
+            '[Trainer Profile] Unable to load reviews:',
+            reviewsResult.reason,
           );
         }
       } catch (error) {
         console.error('[Trainer Profile] Unable to load trainer:', error);
+
         if (isActive) {
           setErrorMessage('We couldn’t load this trainer’s profile. Please try again.');
+          setIsLoading(false);
         }
-      } finally {
-        if (isActive) setIsLoading(false);
       }
     }
 
-    void fetchTrainer();
+    void loadProfile();
+
     return () => {
       isActive = false;
     };
@@ -116,6 +137,14 @@ export default function TrainerProfileScreen() {
       .slice(0, 2)
       .toUpperCase() || 'T';
 
+  const goBack = () => {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/(tabs)/gym-goer/discover');
+    }
+  };
+
   const renderSection = (title: string, content: string | null | undefined) => {
     if (!content?.trim()) return null;
 
@@ -138,14 +167,6 @@ export default function TrainerProfileScreen() {
         </AppText>
       </View>
     );
-  };
-
-  const goBack = () => {
-    if (router.canGoBack()) {
-      router.back();
-    } else {
-      router.replace('/(tabs)/gym-goer/discover');
-    }
   };
 
   const renderPageMessage = (
@@ -174,22 +195,138 @@ export default function TrainerProfileScreen() {
       >
         <ArrowRight size={24} color={colors.brand.red} />
       </View>
+
       <AppText variant="h2" color={colors.text.primary}>
         {title}
       </AppText>
+
       <AppText variant="body" color={colors.text.secondary}>
         {message}
       </AppText>
+
       <Button onPress={onAction} variant="primary" fullWidth>
         {actionLabel}
       </Button>
     </View>
   );
 
+  const renderReviews = () => (
+    <View
+      style={{
+        padding: spacing.lg,
+        borderRadius: 16,
+        borderWidth: 1,
+        borderColor: colors.border.default,
+        backgroundColor: colors.background.secondary,
+        gap: spacing.md,
+      }}
+    >
+      <AppText variant="h3" color={colors.text.primary}>
+        Reviews
+      </AppText>
+
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: spacing.sm,
+        }}
+      >
+        <Star
+          size={22}
+          color={colors.brand.red}
+          fill={(extras?.review_count ?? 0) > 0 ? colors.brand.red : 'transparent'}
+        />
+
+        <AppText variant="h2" color={colors.text.primary}>
+          {(extras?.average_rating ?? 0).toFixed(1)}
+        </AppText>
+
+        <AppText variant="bodySmall" color={colors.text.secondary}>
+          ({extras?.review_count ?? 0}{' '}
+          {(extras?.review_count ?? 0) === 1 ? 'review' : 'reviews'})
+        </AppText>
+      </View>
+
+      {reviews.length === 0 ? (
+        <AppText variant="body" color={colors.text.secondary}>
+          No reviews yet. Reviews will appear here when gym-goers leave feedback for this
+          trainer.
+        </AppText>
+      ) : (
+        <View style={{ gap: spacing.md }}>
+          {reviews.map((review) => (
+            <View
+              key={review.id}
+              style={{
+                paddingTop: spacing.md,
+                borderTopWidth: 1,
+                borderTopColor: colors.border.default,
+                gap: spacing.sm,
+              }}
+            >
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: spacing.sm,
+                }}
+              >
+                <AppText variant="bodySmall" color={colors.text.secondary}>
+                  TRAINR member
+                </AppText>
+
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 4,
+                  }}
+                >
+                  <Star size={14} color={colors.brand.red} fill={colors.brand.red} />
+                  <AppText variant="bodySmall" color={colors.text.primary}>
+                    {review.rating}/5
+                  </AppText>
+                </View>
+              </View>
+
+              {review.review_text?.trim() ? (
+                <AppText variant="body" color={colors.text.primary}>
+                  {review.review_text}
+                </AppText>
+              ) : (
+                <AppText variant="bodySmall" color={colors.text.secondary}>
+                  Rating submitted without a written comment.
+                </AppText>
+              )}
+
+              <AppText variant="caption" color={colors.text.tertiary}>
+                {new Date(review.created_at).toLocaleDateString()}
+              </AppText>
+            </View>
+          ))}
+        </View>
+      )}
+    </View>
+  );
+
+  const bookSession = () => {
+    if (!trainer) return;
+
+    router.push({
+      pathname: '/(tabs)/booking/[trainerId]',
+      params: { trainerId: trainer.trainer_id },
+    });
+  };
+
   return (
     <SafeAreaView
       edges={['top']}
-      style={{ flex: 1, backgroundColor: colors.background.primary }}
+      style={{
+        flex: 1,
+        backgroundColor: colors.background.primary,
+      }}
     >
       <ScrollView
         contentContainerStyle={{
@@ -318,12 +455,36 @@ export default function TrainerProfileScreen() {
                   {fullName || 'TRAINR Coach'}
                 </AppText>
 
+                {extras?.verification_status === 'verified' ? (
+                  <View
+                    accessibilityLabel="Verified trainer"
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: spacing.xs,
+                    }}
+                  >
+                    <BadgeCheck size={17} color={colors.brand.red} />
+                    <AppText variant="bodySmall" color={colors.brand.red}>
+                      Verified trainer
+                    </AppText>
+                  </View>
+                ) : null}
+
                 <AppText variant="bodySmall" color={colors.text.secondary} align="center">
                   Personal trainer
                 </AppText>
               </View>
 
-              {trainer.location ? (
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexWrap: 'wrap',
+                  gap: spacing.md,
+                }}
+              >
                 <View
                   style={{
                     flexDirection: 'row',
@@ -331,12 +492,35 @@ export default function TrainerProfileScreen() {
                     gap: spacing.xs,
                   }}
                 >
-                  <MapPin size={16} color={colors.text.secondary} />
+                  <Star
+                    size={16}
+                    color={colors.brand.red}
+                    fill={
+                      (extras?.review_count ?? 0) > 0 ? colors.brand.red : 'transparent'
+                    }
+                  />
                   <AppText variant="bodySmall" color={colors.text.secondary}>
-                    {trainer.location}
+                    {(extras?.average_rating ?? 0).toFixed(1)} (
+                    {extras?.review_count ?? 0}{' '}
+                    {(extras?.review_count ?? 0) === 1 ? 'review' : 'reviews'})
                   </AppText>
                 </View>
-              ) : null}
+
+                {trainer.location ? (
+                  <View
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: spacing.xs,
+                    }}
+                  >
+                    <MapPin size={16} color={colors.text.secondary} />
+                    <AppText variant="bodySmall" color={colors.text.secondary}>
+                      {trainer.location}
+                    </AppText>
+                  </View>
+                ) : null}
+              </View>
 
               {trainer.years_experience != null ? (
                 <View
@@ -381,12 +565,7 @@ export default function TrainerProfileScreen() {
                 size="large"
                 variant="primary"
                 rightIcon={<ArrowRight size={18} color="#FFFFFF" />}
-                onPress={() => {
-                  router.push({
-                    pathname: '/(tabs)/booking/[trainerId]',
-                    params: { trainerId: trainer.trainer_id },
-                  });
-                }}
+                onPress={bookSession}
               >
                 Book a session
               </Button>
@@ -399,6 +578,48 @@ export default function TrainerProfileScreen() {
                 Booking will be available once session scheduling is implemented.
               </AppText>
             </View>
+
+            {/* Training formats */}
+            {extras?.training_formats && extras.training_formats.length > 0 ? (
+              <View
+                style={{
+                  padding: spacing.lg,
+                  borderRadius: 16,
+                  borderWidth: 1,
+                  borderColor: colors.border.default,
+                  backgroundColor: colors.background.secondary,
+                  gap: spacing.md,
+                }}
+              >
+                <AppText variant="h3" color={colors.text.primary}>
+                  Training formats
+                </AppText>
+
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    flexWrap: 'wrap',
+                    gap: spacing.sm,
+                  }}
+                >
+                  {extras.training_formats.map((format) => (
+                    <View
+                      key={format}
+                      style={{
+                        paddingHorizontal: spacing.md,
+                        paddingVertical: spacing.sm,
+                        borderRadius: 999,
+                        backgroundColor: colors.brand.redLight,
+                      }}
+                    >
+                      <AppText variant="bodySmall" color={colors.brand.red}>
+                        {format}
+                      </AppText>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            ) : null}
 
             {/* About */}
             {renderSection('About the trainer', trainer.professional_bio)}
@@ -418,6 +639,7 @@ export default function TrainerProfileScreen() {
                 <AppText variant="h3" color={colors.text.primary}>
                   Specialties
                 </AppText>
+
                 <View
                   style={{
                     flexDirection: 'row',
@@ -448,6 +670,7 @@ export default function TrainerProfileScreen() {
               ? renderSection('Qualifications', trainer.qualifications.join(' · '))
               : null}
 
+            {/* Certifications */}
             {trainer.certifications?.length ? (
               <View
                 style={{
@@ -471,6 +694,7 @@ export default function TrainerProfileScreen() {
                     Certifications
                   </AppText>
                 </View>
+
                 <View style={{ gap: spacing.sm }}>
                   {trainer.certifications.map((certification, index) => (
                     <View
@@ -503,18 +727,16 @@ export default function TrainerProfileScreen() {
 
             {renderSection('Coaching approach', trainer.coaching_approach)}
 
-            {/* Final booking action for long profiles */}
+            {/* Reviews */}
+            {renderReviews()}
+
+            {/* Final booking action */}
             <Button
               fullWidth
               size="large"
               variant="primary"
               rightIcon={<ArrowRight size={18} color="#FFFFFF" />}
-              onPress={() => {
-                router.push({
-                  pathname: '/(tabs)/booking/[trainerId]',
-                  params: { trainerId: trainer.trainer_id },
-                });
-              }}
+              onPress={bookSession}
             >
               Book a session
             </Button>
