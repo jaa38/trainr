@@ -195,6 +195,7 @@ export function TrainerFilters({
     );
   }
 
+  // Shared styling for the labelled Location, Day and Price filters.
   const filterButtonStyle = (active: boolean) => ({
     minHeight: theme.sizes.inputHeight,
     paddingHorizontal: spacing.md,
@@ -279,6 +280,7 @@ export function TrainerFilters({
 
         {!mainFilterButtonOnly ? (
           <>
+            {/* Location filter */}
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={
@@ -291,7 +293,6 @@ export function TrainerFilters({
               onPress={() => setLocationSheetVisible(true)}
               style={({ pressed }) => ({
                 ...filterButtonStyle(Boolean(selectedLocation)),
-                maxWidth: 200,
                 opacity: pressed ? 0.7 : 1,
               })}
             >
@@ -302,12 +303,12 @@ export function TrainerFilters({
               <AppText
                 variant="bodySmall"
                 color={selectedLocation ? colors.brand.red : colors.text.primary}
-                numberOfLines={1}
               >
                 {selectedLocation ?? 'Location'}
               </AppText>
             </Pressable>
 
+            {/* Training day filter */}
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={
@@ -324,7 +325,7 @@ export function TrainerFilters({
               })}
             >
               <CalendarDays
-                size={17}
+                size={18}
                 color={selectedDay ? colors.brand.red : colors.text.primary}
               />
               <AppText
@@ -335,6 +336,7 @@ export function TrainerFilters({
               </AppText>
             </Pressable>
 
+            {/* Session price filter */}
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Filter trainers by price"
@@ -351,7 +353,6 @@ export function TrainerFilters({
                 color={hasPriceFilter ? colors.brand.red : colors.text.primary}
                 strokeWidth={2}
               />
-
               <AppText
                 variant="bodySmall"
                 color={hasPriceFilter ? colors.brand.red : colors.text.primary}
@@ -397,7 +398,6 @@ export function TrainerFilters({
             <AppText variant="h3" color={colors.text.primary}>
               Fitness goals
             </AppText>
-
             <AppText variant="bodySmall" color={colors.text.secondary}>
               Choose what you want to achieve.
             </AppText>
@@ -421,7 +421,6 @@ export function TrainerFilters({
             <AppText variant="h3" color={colors.text.primary}>
               Areas of expertise
             </AppText>
-
             <AppText variant="bodySmall" color={colors.text.secondary}>
               Choose the expertise you want in a trainer.
             </AppText>
@@ -592,7 +591,6 @@ export function TrainerFilters({
             <AppText variant="h3" color={colors.text.primary}>
               Currency
             </AppText>
-
             <AppText variant="bodySmall" color={colors.text.secondary}>
               Select a currency so trainers with different currencies are not compared
               directly.
@@ -617,7 +615,6 @@ export function TrainerFilters({
             <AppText variant="h3" color={colors.text.primary}>
               Price range
             </AppText>
-
             <AppText variant="bodySmall" color={colors.text.secondary}>
               {selectedCurrency
                 ? `Enter your budget in ${selectedCurrency}.`
@@ -632,7 +629,6 @@ export function TrainerFilters({
               onMinimumPriceChange,
               'Minimum session price',
             )}
-
             {renderPriceInput(
               'Maximum',
               maximumPrice,

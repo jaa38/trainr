@@ -11,6 +11,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/AppText';
+import { Button } from '@/components/Button';
 import { Input } from '@/components/Input';
 import {
   TrainerFilters,
@@ -26,6 +27,7 @@ import {
   type PublishedTrainer,
 } from '@/services/trainer-discovery';
 import { useTrainrTheme } from '@/theme';
+import { ArrowRight } from 'lucide-react-native';
 
 export default function DiscoverScreen() {
   const theme = useTrainrTheme();
@@ -176,8 +178,6 @@ export default function DiscoverScreen() {
     [trainers],
   );
 
-  // Use the selected currency when it remains available.
-  // Otherwise, fall back to the first available currency without updating state in an effect.
   const effectiveCurrency =
     selectedCurrency && availableCurrencies.includes(selectedCurrency)
       ? selectedCurrency
@@ -286,6 +286,7 @@ export default function DiscoverScreen() {
       const trainerDays = (trainer.availability?.days ?? []).map((day) =>
         day.trim().toLowerCase(),
       );
+
       const matchesDay = !selectedDay || trainerDays.includes(selectedDay.toLowerCase());
 
       const trainerCurrency = (trainer.currency ?? '').trim().toUpperCase();
@@ -425,6 +426,7 @@ export default function DiscoverScreen() {
       .trim();
 
     const isRecommended = isTrainerRecommended(trainer);
+    const specialties = (trainer.specialities ?? []).slice(0, 3);
 
     return (
       <Pressable
@@ -438,14 +440,15 @@ export default function DiscoverScreen() {
           });
         }}
         style={{
-          padding: spacing.lg,
-          borderRadius: 18,
+          padding: spacing.md,
+          borderRadius: 16,
           borderWidth: 1,
           borderColor: colors.border.default,
           backgroundColor: colors.background.secondary,
           gap: spacing.md,
         }}
       >
+        {/* Trainer identity */}
         <View
           style={{
             flexDirection: 'row',
@@ -459,9 +462,9 @@ export default function DiscoverScreen() {
               accessibilityLabel={`Profile photo of ${fullName || 'TRAINR Coach'}`}
               resizeMode="cover"
               style={{
-                width: 76,
-                height: 76,
-                borderRadius: 38,
+                width: 64,
+                height: 64,
+                borderRadius: 32,
                 backgroundColor: colors.background.primary,
               }}
             />
@@ -469,9 +472,9 @@ export default function DiscoverScreen() {
             <View
               accessibilityLabel="Default trainer profile image"
               style={{
-                width: 76,
-                height: 76,
-                borderRadius: 38,
+                width: 64,
+                height: 64,
+                borderRadius: 32,
                 alignItems: 'center',
                 justifyContent: 'center',
                 backgroundColor: colors.background.primary,
@@ -486,77 +489,96 @@ export default function DiscoverScreen() {
           )}
 
           <View style={{ flex: 1, gap: spacing.xs }}>
+            {isRecommended ? (
+              <View
+                style={{
+                  alignSelf: 'flex-start',
+                  paddingHorizontal: spacing.sm,
+                  paddingVertical: 2,
+                  borderRadius: theme.radius.md,
+                  backgroundColor: colors.brand.redLight,
+                }}
+              >
+                <AppText variant="caption" color={colors.brand.red}>
+                  RECOMMENDED FOR YOU
+                </AppText>
+              </View>
+            ) : null}
+
             <AppText variant="h3" color={colors.text.primary}>
               {fullName || 'TRAINR Coach'}
             </AppText>
 
-            {trainer.location ? (
-              <AppText variant="bodySmall" color={colors.text.secondary}>
-                {trainer.location}
-              </AppText>
-            ) : null}
+            <AppText variant="bodySmall" color={colors.text.secondary}>
+              {[
+                trainer.location?.trim(),
+                trainer.years_experience != null
+                  ? `${trainer.years_experience} ${
+                      trainer.years_experience === 1 ? 'year' : 'years'
+                    } experience`
+                  : null,
+              ]
+                .filter(Boolean)
+                .join(' · ') || 'Personal trainer'}
+            </AppText>
           </View>
         </View>
 
-        {isRecommended ? (
-          <View
-            style={{
-              alignSelf: 'flex-start',
-              paddingHorizontal: spacing.sm,
-              paddingVertical: spacing.xs,
-              borderRadius: theme.radius.md,
-              backgroundColor: colors.brand.redLight,
-            }}
-          >
-            <AppText variant="caption" color={colors.brand.red}>
-              RECOMMENDED FOR YOU
-            </AppText>
-          </View>
-        ) : null}
-
-        {trainer.professional_bio ? (
+        {/* Specialties: show a maximum of three */}
+        {specialties.length > 0 ? (
           <AppText
-            variant="body"
+            variant="bodySmall"
             color={colors.text.secondary}
-            style={{ lineHeight: 22 }}
+            style={{ lineHeight: 20 }}
           >
-            {trainer.professional_bio}
+            {specialties.join(' · ')}
+            {(trainer.specialities?.length ?? 0) > 3
+              ? ' · +' + ((trainer.specialities?.length ?? 0) - 3) + ' more'
+              : ''}
           </AppText>
         ) : null}
 
-        {trainer.specialities?.length ? (
-          <View style={{ gap: spacing.xs }}>
-            <AppText variant="caption" color={colors.text.tertiary}>
-              SPECIALTIES
-            </AppText>
-            <AppText variant="body" color={colors.text.primary}>
-              {trainer.specialities.join(' · ')}
-            </AppText>
-          </View>
-        ) : null}
-
-        {trainer.years_experience != null ? (
-          <AppText variant="bodySmall" color={colors.text.secondary}>
-            {trainer.years_experience} {trainer.years_experience === 1 ? 'year' : 'years'}{' '}
-            of experience
-          </AppText>
-        ) : null}
-
+        {/* Price and profile action */}
         <View
           style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: spacing.md,
             paddingTop: spacing.md,
             borderTopWidth: 1,
             borderTopColor: colors.border.default,
           }}
         >
-          <AppText variant="h3" color={colors.brand.red}>
-            {formatRate(trainer)}
-          </AppText>
-        </View>
+          <View style={{ flex: 1, gap: spacing.xs }}>
+            <AppText variant="h3" color={colors.brand.red}>
+              {formatRate(trainer)}
+            </AppText>
 
-        <AppText variant="button" color={colors.brand.red}>
-          View profile →
-        </AppText>
+            <AppText variant="caption" color={colors.text.tertiary}>
+              Per session
+            </AppText>
+          </View>
+
+          <Button
+            variant="primary"
+            size="medium"
+            accessibilityLabel={`View profile for ${fullName || 'TRAINR Coach'}`}
+            onPress={() => {
+              router.push({
+                pathname: '/(tabs)/trainer-profile/[id]',
+                params: { id: trainer.trainer_id },
+              });
+            }}
+            rightIcon={<ArrowRight size={18} color="#FFFFFF" />}
+            style={{
+              borderRadius: theme.radius.md,
+              paddingHorizontal: spacing.md,
+            }}
+          >
+            View profile
+          </Button>
+        </View>
       </Pressable>
     );
   };
@@ -620,60 +642,20 @@ export default function DiscoverScreen() {
           </AppText>
         </View>
 
+        {/* Search bar and all filter icons */}
         <View style={{ gap: spacing.sm, marginTop: spacing.xs }}>
-          {/* Search field and main filter button */}
-          <View
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: spacing.sm,
-            }}
-          >
-            <View style={{ flex: 1, minWidth: 0 }}>
-              <Input
-                accessibilityLabel="Search trainers"
-                placeholder="Search trainers, skills, or location"
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-                returnKeyType="search"
-                autoCapitalize="none"
-              />
-            </View>
+          <Input
+            accessibilityLabel="Search trainers"
+            placeholder="Search trainers, skills, or location"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            returnKeyType="search"
+            autoCapitalize="none"
+            containerStyle={{ width: '100%' }}
+          />
 
-            <View
-              style={{
-                width: theme.sizes.inputHeight,
-                flexShrink: 0,
-              }}
-            >
-              <TrainerFilters
-                showMainFilterButton
-                mainFilterButtonOnly
-                selectedSpecialties={selectedSpecialties}
-                selectedGoals={selectedFitnessGoals}
-                locations={availableLocations}
-                selectedLocation={selectedLocation}
-                selectedDay={selectedDay}
-                minimumPrice={minimumPrice}
-                maximumPrice={maximumPrice}
-                availableCurrencies={availableCurrencies}
-                selectedCurrency={effectiveCurrency}
-                onMinimumPriceChange={setMinimumPrice}
-                onMaximumPriceChange={setMaximumPrice}
-                onSelectCurrency={setSelectedCurrency}
-                onToggleSpecialty={onToggleSpecialty}
-                onToggleGoal={onToggleFitnessGoal}
-                onSelectLocation={setSelectedLocation}
-                onSelectDay={setSelectedDay}
-                onClearPrice={onClearPrice}
-                onClearAll={onClearAllFilters}
-              />
-            </View>
-          </View>
-
-          {/* Location, Day and Price chips */}
           <TrainerFilters
-            showMainFilterButton={false}
+            showMainFilterButton
             selectedSpecialties={selectedSpecialties}
             selectedGoals={selectedFitnessGoals}
             locations={availableLocations}
@@ -717,7 +699,6 @@ export default function DiscoverScreen() {
             }}
           >
             <ActivityIndicator size="large" color={colors.brand.red} />
-
             <AppText variant="body" color={colors.text.secondary}>
               Finding published trainers…
             </AppText>
