@@ -1,3 +1,4 @@
+
 import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
@@ -12,6 +13,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/AppText';
 import { Input } from '@/components/Input';
+import {
+  TrainerFilters,
+  type FitnessGoal,
+  type TrainingDay,
+} from '@/components/TrainerFilters';
+import type { TrainerSpecialty } from '@/components/TrainerSpecialtyFilters';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/providers/AuthProvider';
 import { getSpecialtiesForFitnessGoals } from '@/services/fitness-goal-matching';
@@ -20,9 +27,6 @@ import {
   type PublishedTrainer,
 } from '@/services/trainer-discovery';
 import { useTrainrTheme } from '@/theme';
-
-import { TrainerFilters, type FitnessGoal } from '@/components/TrainerFilters';
-import type { TrainerSpecialty } from '@/components/TrainerSpecialtyFilters';
 
 export default function DiscoverScreen() {
   const theme = useTrainrTheme();
@@ -37,10 +41,19 @@ export default function DiscoverScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedSpecialties, setSelectedSpecialties] = useState<TrainerSpecialty[]>([]);
-  const [selectedFitnessGoals, setSelectedFitnessGoals] = useState<FitnessGoal[]>([]);
+  const [selectedSpecialties, setSelectedSpecialties] = useState<
+    TrainerSpecialty[]
+  >([]);
+  const [selectedFitnessGoals, setSelectedFitnessGoals] = useState<FitnessGoal[]>(
+    [],
+  );
   const [selectedLocation, setSelectedLocation] = useState<string | null>(null);
+  const [selectedDay, setSelectedDay] = useState<TrainingDay | null>(null);
+  const [minimumPrice, setMinimumPrice] = useState('');
+  const [maximumPrice, setMaximumPrice] = useState('');
+  const [selectedCurrency, setSelectedCurrency] = useState<string | null>(null);
 
   const loadTrainers = useCallback(async (refresh = false) => {
     if (refresh) {
@@ -141,6 +154,40 @@ export default function DiscoverScreen() {
     };
   }, [user]);
 
+  const availableLocations = useMemo(
+    () =>
+      [
+        ...new Set(
+          trainers
+            .map((trainer) => trainer.location?.trim())
+            .filter((location): location is string => Boolean(location)),
+        ),
+      ].sort((a, b) => a.localeCompare(b)),
+    [trainers],
+  );
+
+  const availableCurrencies = useMemo(
+    () =>
+      [
+        ...new Set(
+          trainers
+            .filter(
+              (trainer) =>
+                trainer.session_rate != null && Boolean(trainer.currency?.trim()),
+            )
+            .map((trainer) => trainer.currency!.trim().toUpperCase()),
+        ),
+      ].sort((a, b) => a.localeCompare(b)),
+    [trainers],
+  );
+
+  // Use the selected currency when it remains available.
+  // Otherwise, fall back to the first available currency without updating state in an effect.
+  const effectiveCurrency =
+    selectedCurrency && availableCurrencies.includes(selectedCurrency)
+      ? selectedCurrency
+      : (availableCurrencies[0] ?? null);
+
   const onToggleSpecialty = useCallback((specialty: TrainerSpecialty) => {
     setSelectedSpecialties((current) =>
       current.includes(specialty)
@@ -165,6 +212,19 @@ export default function DiscoverScreen() {
     setSelectedFitnessGoals([]);
   }, []);
 
+  const onClearPrice = useCallback(() => {
+    setMinimumPrice('');
+    setMaximumPrice('');
+  }, []);
+
+  const onClearAllFilters = useCallback(() => {
+    onClearSpecialties();
+    onClearFitnessGoals();
+    setSelectedLocation(null);
+    setSelectedDay(null);
+    onClearPrice();
+  }, [onClearSpecialties, onClearFitnessGoals, onClearPrice]);
+
   const filteredTrainers = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
 
@@ -176,8 +236,21 @@ export default function DiscoverScreen() {
       (specialty) => specialty.toLowerCase(),
     );
 
+    const hasPriceFilter =
+      minimumPrice.trim() !== '' || maximumPrice.trim() !== '';
+
+    const minimum = minimumPrice.trim() === '' ? null : Number(minimumPrice);
+    const maximum = maximumPrice.trim() === '' ? null : Number(maximumPrice);
+
+    const validPriceRange =
+      (minimum === null || (Number.isFinite(minimum) && minimum >= 0)) &&
+      (maximum === null || (Number.isFinite(maximum) && maximum >= 0)) &&
+      !(minimum !== null && maximum !== null && minimum > maximum);
+
     const matchingTrainers = trainers.filter((trainer) => {
-      const fullName = [trainer.first_name, trainer.last_name].filter(Boolean).join(' ');
+      const fullName = [trainer.first_name, trainer.last_name]
+        .filter(Boolean)
+        .join(' ');
 
       const searchableFields = [
         fullName,
@@ -189,7 +262,10 @@ export default function DiscoverScreen() {
       ];
 
       const matchesSearch =
-        !query || searchableFields.some((field) => field?.toLowerCase().includes(query));
+        !query ||
+        searchableFields.some((field) =>
+          field?.toLowerCase().includes(query),
+        );
 
       const trainerSpecialties = (trainer.specialities ?? []).map((specialty) =>
         specialty.toLowerCase(),
@@ -218,12 +294,35 @@ export default function DiscoverScreen() {
       const matchesLocation =
         !selectedLocation || trainer.location?.trim() === selectedLocation;
 
-      return matchesSearch && matchesSpecialty && matchesFitnessGoal && matchesLocation;
+      const trainerDays = (trainer.availability?.days ?? []).map((day) =>
+        day.trim().toLowerCase(),
+      );
+      const matchesDay =
+        !selectedDay || trainerDays.includes(selectedDay.toLowerCase());
+
+      const trainerCurrency = (trainer.currency ?? '').trim().toUpperCase();
+
+      const matchesPrice =
+        !hasPriceFilter ||
+        (validPriceRange &&
+          effectiveCurrency !== null &&
+          trainer.session_rate !== null &&
+          trainerCurrency === effectiveCurrency &&
+          (minimum === null || trainer.session_rate >= minimum) &&
+          (maximum === null || trainer.session_rate <= maximum));
+
+      return (
+        matchesSearch &&
+        matchesSpecialty &&
+        matchesFitnessGoal &&
+        matchesLocation &&
+        matchesDay &&
+        matchesPrice
+      );
     });
 
-    // Keep all matching trainers, but rank relevant trainers first.
     return matchingTrainers
-      .map((trainer, index) => {
+      .map((trainer) => {
         const trainerSpecialties = (trainer.specialities ?? []).map((specialty) =>
           specialty.toLowerCase(),
         );
@@ -236,7 +335,7 @@ export default function DiscoverScreen() {
           ),
         ).length;
 
-        return { trainer, index, relevanceScore };
+        return { trainer, relevanceScore };
       })
       .sort((a, b) => {
         const relevanceDifference = b.relevanceScore - a.relevanceScore;
@@ -253,7 +352,9 @@ export default function DiscoverScreen() {
           return firstNameDifference;
         }
 
-        return (a.trainer.last_name ?? '').localeCompare(b.trainer.last_name ?? '');
+        return (a.trainer.last_name ?? '').localeCompare(
+          b.trainer.last_name ?? '',
+        );
       })
       .map(({ trainer }) => trainer);
   }, [
@@ -261,20 +362,13 @@ export default function DiscoverScreen() {
     searchQuery,
     selectedSpecialties,
     selectedFitnessGoals,
+    selectedLocation,
+    selectedDay,
     savedFitnessGoals,
+    minimumPrice,
+    maximumPrice,
+    effectiveCurrency,
   ]);
-
-  const availableLocations = useMemo(
-    () =>
-      [
-        ...new Set(
-          trainers
-            .map((trainer) => trainer.location?.trim())
-            .filter((location): location is string => Boolean(location)),
-        ),
-      ].sort((a, b) => a.localeCompare(b)),
-    [trainers],
-  );
 
   const savedGoalSpecialties = useMemo(
     () =>
@@ -334,7 +428,9 @@ export default function DiscoverScreen() {
     }).format(trainer.session_rate);
 
     return `${trainer.currency ?? ''} ${amount}${
-      trainer.session_duration_minutes ? ` / ${trainer.session_duration_minutes} min` : ''
+      trainer.session_duration_minutes
+        ? ` / ${trainer.session_duration_minutes} min`
+        : ''
     }`.trim();
   };
 
@@ -457,8 +553,8 @@ export default function DiscoverScreen() {
 
         {trainer.years_experience != null ? (
           <AppText variant="bodySmall" color={colors.text.secondary}>
-            {trainer.years_experience} {trainer.years_experience === 1 ? 'year' : 'years'}{' '}
-            of experience
+            {trainer.years_experience}{' '}
+            {trainer.years_experience === 1 ? 'year' : 'years'} of experience
           </AppText>
         ) : null}
 
@@ -484,7 +580,11 @@ export default function DiscoverScreen() {
   const hasActiveFilters =
     searchQuery.trim().length > 0 ||
     selectedSpecialties.length > 0 ||
-    selectedFitnessGoals.length > 0;
+    selectedFitnessGoals.length > 0 ||
+    selectedLocation !== null ||
+    selectedDay !== null ||
+    minimumPrice.trim() !== '' ||
+    maximumPrice.trim() !== '';
 
   return (
     <SafeAreaView
@@ -511,7 +611,6 @@ export default function DiscoverScreen() {
         }
         showsVerticalScrollIndicator={false}
       >
-        {/* Screen heading */}
         <View style={{ gap: spacing.sm }}>
           <AppText
             variant="caption"
@@ -537,7 +636,6 @@ export default function DiscoverScreen() {
           </AppText>
         </View>
 
-        {/* Search input and filter buttons */}
         <View
           style={{
             flexDirection: 'row',
@@ -562,18 +660,23 @@ export default function DiscoverScreen() {
             selectedGoals={selectedFitnessGoals}
             locations={availableLocations}
             selectedLocation={selectedLocation}
+            selectedDay={selectedDay}
+            minimumPrice={minimumPrice}
+            maximumPrice={maximumPrice}
+            availableCurrencies={availableCurrencies}
+            selectedCurrency={effectiveCurrency}
+            onMinimumPriceChange={setMinimumPrice}
+            onMaximumPriceChange={setMaximumPrice}
+            onSelectCurrency={setSelectedCurrency}
             onToggleSpecialty={onToggleSpecialty}
             onToggleGoal={onToggleFitnessGoal}
             onSelectLocation={setSelectedLocation}
-            onClearAll={() => {
-              onClearSpecialties();
-              onClearFitnessGoals();
-              setSelectedLocation(null);
-            }}
+            onSelectDay={setSelectedDay}
+            onClearPrice={onClearPrice}
+            onClearAll={onClearAllFilters}
           />
         </View>
 
-        {/* Saved fitness-goal status */}
         {!isLoadingGoals && !goalsError && savedFitnessGoals.length > 0 ? (
           <AppText variant="bodySmall" color={colors.text.secondary}>
             Your saved fitness goals are ready for personalised recommendations.
@@ -586,7 +689,6 @@ export default function DiscoverScreen() {
           </AppText>
         ) : null}
 
-        {/* Loading state */}
         {isLoading ? (
           <View
             style={{
@@ -603,7 +705,6 @@ export default function DiscoverScreen() {
             </AppText>
           </View>
         ) : errorMessage ? (
-          /* Error state */
           <View
             style={{
               padding: spacing.lg,
@@ -639,7 +740,6 @@ export default function DiscoverScreen() {
             </Pressable>
           </View>
         ) : trainers.length === 0 ? (
-          /* No published trainers */
           <View
             style={{
               padding: spacing.xl,
@@ -659,7 +759,6 @@ export default function DiscoverScreen() {
             </AppText>
           </View>
         ) : filteredTrainers.length === 0 ? (
-          /* No matching trainers */
           <View
             style={{
               padding: spacing.xl,
@@ -684,9 +783,7 @@ export default function DiscoverScreen() {
               accessibilityLabel="Clear search and filters"
               onPress={() => {
                 setSearchQuery('');
-                onClearSpecialties();
-                onClearFitnessGoals();
-                setSelectedLocation(null);
+                onClearAllFilters();
               }}
               style={{
                 minHeight: 48,
@@ -703,7 +800,6 @@ export default function DiscoverScreen() {
             </Pressable>
           </View>
         ) : (
-          /* Trainer results */
           <View style={{ gap: spacing.xl }}>
             {recommendedTrainers.length > 0 ? (
               <View style={{ gap: spacing.md }}>

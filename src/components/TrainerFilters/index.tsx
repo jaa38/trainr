@@ -1,6 +1,6 @@
-import { MapPin, SlidersHorizontal } from 'lucide-react-native';
+import { CalendarDays, MapPin, SlidersHorizontal } from 'lucide-react-native';
 import React from 'react';
-import { Pressable, View } from 'react-native';
+import { Pressable, TextInput, View } from 'react-native';
 
 import { AppText } from '@/components/AppText';
 import { BottomSheet } from '@/components/BottomSheet';
@@ -21,6 +21,17 @@ export const FITNESS_GOALS = [
   { id: 'sports_performance', label: 'Improve sports performance' },
 ] as const;
 
+export const TRAINING_DAYS = [
+  'Monday',
+  'Tuesday',
+  'Wednesday',
+  'Thursday',
+  'Friday',
+  'Saturday',
+  'Sunday',
+] as const;
+
+export type TrainingDay = (typeof TRAINING_DAYS)[number];
 export type FitnessGoal = (typeof FITNESS_GOALS)[number]['id'];
 
 type TrainerFiltersProps = {
@@ -28,9 +39,19 @@ type TrainerFiltersProps = {
   selectedGoals: FitnessGoal[];
   locations: string[];
   selectedLocation: string | null;
+  selectedDay: TrainingDay | null;
+  minimumPrice: string;
+  maximumPrice: string;
+  availableCurrencies: string[];
+  selectedCurrency: string | null;
+  onMinimumPriceChange: (value: string) => void;
+  onMaximumPriceChange: (value: string) => void;
+  onSelectCurrency: (currency: string | null) => void;
   onToggleSpecialty: (specialty: TrainerSpecialty) => void;
   onToggleGoal: (goal: FitnessGoal) => void;
   onSelectLocation: (location: string | null) => void;
+  onSelectDay: (day: TrainingDay | null) => void;
+  onClearPrice: () => void;
   onClearAll: () => void;
 };
 
@@ -39,9 +60,19 @@ export function TrainerFilters({
   selectedGoals,
   locations,
   selectedLocation,
+  selectedDay,
+  minimumPrice,
+  maximumPrice,
+  availableCurrencies,
+  selectedCurrency,
+  onMinimumPriceChange,
+  onMaximumPriceChange,
+  onSelectCurrency,
   onToggleSpecialty,
   onToggleGoal,
   onSelectLocation,
+  onSelectDay,
+  onClearPrice,
   onClearAll,
 }: TrainerFiltersProps) {
   const theme = useTrainrTheme();
@@ -49,9 +80,28 @@ export function TrainerFilters({
 
   const [visible, setVisible] = React.useState(false);
   const [locationSheetVisible, setLocationSheetVisible] = React.useState(false);
+  const [priceSheetVisible, setPriceSheetVisible] = React.useState(false);
+  const [availabilitySheetVisible, setAvailabilitySheetVisible] = React.useState(false);
+
+  const hasPriceFilter = minimumPrice.trim() !== '' || maximumPrice.trim() !== '';
 
   const activeFilterCount =
-    selectedSpecialties.length + selectedGoals.length + (selectedLocation ? 1 : 0);
+    selectedSpecialties.length +
+    selectedGoals.length +
+    (selectedLocation ? 1 : 0) +
+    (selectedDay ? 1 : 0) +
+    (hasPriceFilter ? 1 : 0);
+
+  const minimum = minimumPrice.trim() === '' ? null : Number(minimumPrice);
+  const maximum = maximumPrice.trim() === '' ? null : Number(maximumPrice);
+
+  const priceError =
+    (minimum !== null && (!Number.isFinite(minimum) || minimum < 0)) ||
+    (maximum !== null && (!Number.isFinite(maximum) || maximum < 0))
+      ? 'Enter valid, non-negative prices.'
+      : minimum !== null && maximum !== null && minimum > maximum
+        ? 'Minimum price cannot exceed maximum price.'
+        : null;
 
   function renderOption(label: string, selected: boolean, onPress: () => void) {
     return (
@@ -103,9 +153,47 @@ export function TrainerFilters({
     );
   }
 
+  function renderPriceInput(
+    label: string,
+    value: string,
+    onChangeText: (text: string) => void,
+    accessibilityLabel: string,
+  ) {
+    return (
+      <View style={{ flex: 1, gap: spacing.xs }}>
+        <AppText variant="bodySmall" color={colors.text.secondary}>
+          {label}
+        </AppText>
+
+        <TextInput
+          accessibilityLabel={accessibilityLabel}
+          value={value}
+          onChangeText={(text) => {
+            if (/^\d*\.?\d{0,2}$/.test(text)) {
+              onChangeText(text);
+            }
+          }}
+          keyboardType="decimal-pad"
+          placeholder="0"
+          placeholderTextColor={colors.text.tertiary}
+          style={{
+            minHeight: theme.sizes.inputHeight,
+            paddingHorizontal: spacing.md,
+            borderRadius: theme.radius.md,
+            borderWidth: 1,
+            borderColor: colors.border.default,
+            backgroundColor: colors.surface.default,
+            color: colors.text.primary,
+            fontSize: 16,
+          }}
+        />
+      </View>
+    );
+  }
+
   return (
     <>
-      {/* Filter and location buttons */}
+      {/* Filter, location, availability and price buttons */}
       <View
         style={{
           flexDirection: 'row',
@@ -208,6 +296,72 @@ export function TrainerFilters({
               {selectedLocation ?? 'Location'}
             </AppText>
           </View>
+        </Pressable>
+
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={
+            selectedDay
+              ? `Availability: ${selectedDay}`
+              : 'Filter trainers by availability'
+          }
+          accessibilityHint="Choose a day when you want to train"
+          accessibilityState={{ expanded: availabilitySheetVisible }}
+          onPress={() => setAvailabilitySheetVisible(true)}
+          hitSlop={4}
+          style={({ pressed }) => ({
+            height: theme.sizes.inputHeight,
+            paddingHorizontal: spacing.sm,
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: spacing.xs,
+            borderRadius: theme.radius.md,
+            borderWidth: 1,
+            borderColor: selectedDay ? colors.brand.red : colors.border.default,
+            backgroundColor: selectedDay ? colors.brand.redLight : colors.surface.default,
+            opacity: pressed ? 0.7 : 1,
+          })}
+        >
+          <CalendarDays
+            size={17}
+            color={selectedDay ? colors.brand.red : colors.text.primary}
+          />
+          <AppText
+            variant="bodySmall"
+            color={selectedDay ? colors.brand.red : colors.text.primary}
+          >
+            {selectedDay ?? 'Day'}
+          </AppText>
+        </Pressable>
+
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Filter trainers by price"
+          accessibilityHint="Opens minimum and maximum session price filters"
+          accessibilityState={{ expanded: priceSheetVisible }}
+          onPress={() => setPriceSheetVisible(true)}
+          hitSlop={4}
+          style={({ pressed }) => ({
+            height: theme.sizes.inputHeight,
+            paddingHorizontal: spacing.md,
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderRadius: theme.radius.md,
+            borderWidth: 1,
+            borderColor: hasPriceFilter ? colors.brand.red : colors.border.default,
+            backgroundColor: hasPriceFilter
+              ? colors.brand.redLight
+              : colors.surface.default,
+            opacity: pressed ? 0.7 : 1,
+          })}
+        >
+          <AppText
+            variant="bodySmall"
+            color={hasPriceFilter ? colors.brand.red : colors.text.primary}
+          >
+            Price
+          </AppText>
         </Pressable>
       </View>
 
@@ -362,6 +516,143 @@ export function TrainerFilters({
               No trainer locations are available yet.
             </AppText>
           )}
+        </View>
+      </BottomSheet>
+
+      {/* Availability day selection bottom sheet */}
+      <BottomSheet
+        visible={availabilitySheetVisible}
+        onClose={() => setAvailabilitySheetVisible(false)}
+        title="Training availability"
+        subtitle="Choose the day you prefer to train. This shows trainers who list that day in their weekly schedule."
+        maxHeight="75%"
+        footer={
+          <View style={{ gap: spacing.sm, paddingBottom: spacing.sm }}>
+            {selectedDay ? (
+              <Button
+                variant="outline"
+                fullWidth
+                onPress={() => {
+                  onSelectDay(null);
+                  setAvailabilitySheetVisible(false);
+                }}
+              >
+                Clear day
+              </Button>
+            ) : null}
+            <Button
+              variant="primary"
+              fullWidth
+              onPress={() => setAvailabilitySheetVisible(false)}
+            >
+              Done
+            </Button>
+          </View>
+        }
+      >
+        <View style={{ gap: spacing.sm }}>
+          {TRAINING_DAYS.map((day) =>
+            renderOption(day, selectedDay === day, () => onSelectDay(day)),
+          )}
+        </View>
+      </BottomSheet>
+
+      {/* Price filter bottom sheet */}
+      <BottomSheet
+        visible={priceSheetVisible}
+        onClose={() => setPriceSheetVisible(false)}
+        title="Session price"
+        subtitle="Set a price range for individual training sessions."
+        maxHeight="75%"
+        footer={
+          <View style={{ gap: spacing.sm, paddingBottom: spacing.sm }}>
+            <Button
+              variant="outline"
+              fullWidth
+              onPress={() => {
+                onClearPrice();
+                setPriceSheetVisible(false);
+              }}
+            >
+              Clear price
+            </Button>
+
+            <Button
+              variant="primary"
+              fullWidth
+              disabled={Boolean(priceError)}
+              onPress={() => setPriceSheetVisible(false)}
+            >
+              Apply price filter
+            </Button>
+          </View>
+        }
+      >
+        <View style={{ gap: spacing.lg }}>
+          <View style={{ gap: spacing.xs }}>
+            <AppText variant="h3" color={colors.text.primary}>
+              Currency
+            </AppText>
+
+            <AppText variant="bodySmall" color={colors.text.secondary}>
+              Select a currency so trainers with different currencies are not compared
+              directly.
+            </AppText>
+          </View>
+
+          {availableCurrencies.length > 0 ? (
+            <View style={{ gap: spacing.sm }}>
+              {availableCurrencies.map((currency) =>
+                renderOption(currency, selectedCurrency === currency, () =>
+                  onSelectCurrency(currency),
+                ),
+              )}
+            </View>
+          ) : (
+            <AppText variant="bodySmall" color={colors.text.secondary}>
+              No trainer session prices are available yet.
+            </AppText>
+          )}
+
+          <View style={{ gap: spacing.xs }}>
+            <AppText variant="h3" color={colors.text.primary}>
+              Price range
+            </AppText>
+
+            <AppText variant="bodySmall" color={colors.text.secondary}>
+              {selectedCurrency
+                ? `Enter your budget in ${selectedCurrency}.`
+                : 'Select a currency to set your budget.'}
+            </AppText>
+          </View>
+
+          <View style={{ flexDirection: 'row', gap: spacing.md }}>
+            {renderPriceInput(
+              'Minimum',
+              minimumPrice,
+              onMinimumPriceChange,
+              'Minimum session price',
+            )}
+
+            {renderPriceInput(
+              'Maximum',
+              maximumPrice,
+              onMaximumPriceChange,
+              'Maximum session price',
+            )}
+          </View>
+
+          {priceError ? (
+            <AppText variant="bodySmall" color={colors.brand.red}>
+              {priceError}
+            </AppText>
+          ) : null}
+
+          {availableCurrencies.length > 1 ? (
+            <AppText variant="bodySmall" color={colors.text.secondary}>
+              Prices are filtered within the selected currency only.
+            </AppText>
+          ) : null}
         </View>
       </BottomSheet>
     </>
