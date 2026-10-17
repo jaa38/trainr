@@ -1,4 +1,5 @@
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+
 import {
   ArrowLeft,
   ArrowRight,
@@ -6,9 +7,12 @@ import {
   BadgeCheck,
   Clock,
   MapPin,
+  ShieldCheck,
+  ShieldX,
   Star,
 } from 'lucide-react-native';
-import { useEffect, useState } from 'react';
+
+import { useCallback, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -37,80 +41,81 @@ export default function TrainerProfileScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  useEffect(() => {
-    let isActive = true;
+  useFocusEffect(
+    useCallback(() => {
+      let isActive = true;
 
-    async function loadProfile() {
-      setIsLoading(true);
-      setErrorMessage(null);
-      setTrainer(null);
-      setExtras(null);
-      setReviews([]);
+      async function loadProfile() {
+        setIsLoading(true);
+        setErrorMessage(null);
+        setTrainer(null);
+        setExtras(null);
+        setReviews([]);
 
-      if (!id) {
-        setErrorMessage(
-          'No trainer was selected. Return to Discover and choose a trainer.',
-        );
-        setIsLoading(false);
-        return;
-      }
-
-      try {
-        const trainers = await discoverPublishedTrainers();
-        const selectedTrainer = trainers.find((item) => item.trainer_id === id);
-
-        if (!isActive) return;
-
-        if (!selectedTrainer) {
-          setErrorMessage('This trainer profile is unavailable.');
+        if (!id) {
+          setErrorMessage(
+            'No trainer was selected. Return to Discover and choose a trainer.',
+          );
           setIsLoading(false);
           return;
         }
 
-        setTrainer(selectedTrainer);
-        setIsLoading(false);
+        try {
+          const trainers = await discoverPublishedTrainers();
+          const selectedTrainer = trainers.find((item) => item.trainer_id === id);
 
-        // These requests are independent of the core profile.
-        const [extrasResult, reviewsResult] = await Promise.allSettled([
-          getTrainerProfileExtras(selectedTrainer.trainer_id),
-          getTrainerReviews(selectedTrainer.trainer_id),
-        ]);
+          if (!isActive) return;
 
-        if (!isActive) return;
+          if (!selectedTrainer) {
+            setErrorMessage('This trainer profile is unavailable.');
+            setIsLoading(false);
+            return;
+          }
 
-        if (extrasResult.status === 'fulfilled') {
-          setExtras(extrasResult.value);
-        } else {
-          console.error(
-            '[Trainer Profile] Unable to load profile extras:',
-            extrasResult.reason,
-          );
-        }
-
-        if (reviewsResult.status === 'fulfilled') {
-          setReviews(reviewsResult.value);
-        } else {
-          console.error(
-            '[Trainer Profile] Unable to load reviews:',
-            reviewsResult.reason,
-          );
-        }
-      } catch (error) {
-        console.error('[Trainer Profile] Unable to load trainer:', error);
-
-        if (isActive) {
-          setErrorMessage('We couldn’t load this trainer’s profile. Please try again.');
+          setTrainer(selectedTrainer);
           setIsLoading(false);
+
+          const [extrasResult, reviewsResult] = await Promise.allSettled([
+            getTrainerProfileExtras(selectedTrainer.trainer_id),
+            getTrainerReviews(selectedTrainer.trainer_id),
+          ]);
+
+          if (!isActive) return;
+
+          if (extrasResult.status === 'fulfilled') {
+            setExtras(extrasResult.value);
+          } else {
+            console.error(
+              '[Trainer Profile] Unable to load profile extras:',
+              extrasResult.reason,
+            );
+          }
+
+          if (reviewsResult.status === 'fulfilled') {
+            setReviews(reviewsResult.value);
+          } else {
+            console.error(
+              '[Trainer Profile] Unable to load reviews:',
+              reviewsResult.reason,
+            );
+          }
+        } catch (error) {
+          console.error('[Trainer Profile] Unable to load trainer:', error);
+
+          if (isActive) {
+            setErrorMessage('We couldn’t load this trainer’s profile. Please try again.');
+            setIsLoading(false);
+          }
         }
       }
-    }
 
-    void loadProfile();
+      void loadProfile();
 
-    return () => {
-      isActive = false;
-    };
-  }, [id]);
+      return () => {
+        isActive = false;
+      };
+    }, [id]),
+  );
 
   const formatRate = (item: PublishedTrainer) => {
     if (item.session_rate == null) return 'Rate not set';
@@ -162,6 +167,7 @@ export default function TrainerProfileScreen() {
         <AppText variant="h3" color={colors.text.primary}>
           {title}
         </AppText>
+
         <AppText variant="body" color={colors.text.secondary}>
           {content}
         </AppText>
@@ -285,6 +291,7 @@ export default function TrainerProfileScreen() {
                   }}
                 >
                   <Star size={14} color={colors.brand.red} fill={colors.brand.red} />
+
                   <AppText variant="bodySmall" color={colors.text.primary}>
                     {review.rating}/5
                   </AppText>
@@ -352,6 +359,7 @@ export default function TrainerProfileScreen() {
           }}
         >
           <ArrowLeft size={18} color={colors.text.primary} />
+
           <AppText variant="button" color={colors.text.primary}>
             Discover
           </AppText>
@@ -367,6 +375,7 @@ export default function TrainerProfileScreen() {
             }}
           >
             <ActivityIndicator size="large" color={colors.brand.red} />
+
             <AppText variant="body" color={colors.text.secondary}>
               Loading trainer profile…
             </AppText>
@@ -455,19 +464,45 @@ export default function TrainerProfileScreen() {
                   {fullName || 'TRAINR Coach'}
                 </AppText>
 
-                {extras?.verification_status === 'verified' ? (
+                {extras?.verification_status ? (
                   <View
-                    accessibilityLabel="Verified trainer"
+                    accessibilityRole="text"
+                    accessibilityLabel={`Trainer verification status: ${extras.verification_status}`}
                     style={{
                       flexDirection: 'row',
                       alignItems: 'center',
                       gap: spacing.xs,
                     }}
                   >
-                    <BadgeCheck size={17} color={colors.brand.red} />
-                    <AppText variant="bodySmall" color={colors.brand.red}>
-                      Verified trainer
-                    </AppText>
+                    {extras.verification_status === 'verified' ? (
+                      <>
+                        <BadgeCheck size={17} color={colors.brand.red} />
+                        <AppText variant="bodySmall" color={colors.brand.red}>
+                          Verified trainer
+                        </AppText>
+                      </>
+                    ) : extras.verification_status === 'pending' ? (
+                      <>
+                        <Clock size={17} color={colors.text.secondary} />
+                        <AppText variant="bodySmall" color={colors.text.secondary}>
+                          Verification pending
+                        </AppText>
+                      </>
+                    ) : extras.verification_status === 'rejected' ? (
+                      <>
+                        <ShieldX size={17} color={colors.text.secondary} />
+                        <AppText variant="bodySmall" color={colors.text.secondary}>
+                          Verification unsuccessful
+                        </AppText>
+                      </>
+                    ) : (
+                      <>
+                        <ShieldCheck size={17} color={colors.text.secondary} />
+                        <AppText variant="bodySmall" color={colors.text.secondary}>
+                          Not verified
+                        </AppText>
+                      </>
+                    )}
                   </View>
                 ) : null}
 
@@ -499,6 +534,7 @@ export default function TrainerProfileScreen() {
                       (extras?.review_count ?? 0) > 0 ? colors.brand.red : 'transparent'
                     }
                   />
+
                   <AppText variant="bodySmall" color={colors.text.secondary}>
                     {(extras?.average_rating ?? 0).toFixed(1)} (
                     {extras?.review_count ?? 0}{' '}
@@ -515,6 +551,7 @@ export default function TrainerProfileScreen() {
                     }}
                   >
                     <MapPin size={16} color={colors.text.secondary} />
+
                     <AppText variant="bodySmall" color={colors.text.secondary}>
                       {trainer.location}
                     </AppText>
@@ -531,6 +568,7 @@ export default function TrainerProfileScreen() {
                   }}
                 >
                   <Clock size={16} color={colors.text.secondary} />
+
                   <AppText variant="bodySmall" color={colors.text.secondary}>
                     {trainer.years_experience}{' '}
                     {trainer.years_experience === 1 ? 'year' : 'years'} of experience
@@ -555,6 +593,7 @@ export default function TrainerProfileScreen() {
                 <AppText variant="caption" color={colors.text.secondary}>
                   SESSION RATE
                 </AppText>
+
                 <AppText variant="h2" color={colors.brand.red} align="center">
                   {formatRate(trainer)}
                 </AppText>
@@ -569,14 +608,6 @@ export default function TrainerProfileScreen() {
               >
                 Book a session
               </Button>
-
-              <AppText
-                variant="caption"
-                color={colors.text.tertiary}
-                style={{ textAlign: 'center' }}
-              >
-                Booking will be available once session scheduling is implemented.
-              </AppText>
             </View>
 
             {/* Training formats */}
@@ -690,6 +721,7 @@ export default function TrainerProfileScreen() {
                   }}
                 >
                   <Award size={20} color={colors.brand.red} />
+
                   <AppText variant="h3" color={colors.text.primary}>
                     Certifications
                   </AppText>
@@ -714,6 +746,7 @@ export default function TrainerProfileScreen() {
                           marginTop: 7,
                         }}
                       />
+
                       <View style={{ flex: 1 }}>
                         <AppText variant="body" color={colors.text.primary}>
                           {certification}
