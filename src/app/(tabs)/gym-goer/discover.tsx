@@ -12,19 +12,26 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/AppText';
 import { Input } from '@/components/Input';
-import {
-  TrainerSpecialtyFilters,
-  type TrainerSpecialty,
-} from '@/components/TrainerSpecialtyFilters';
+import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/providers/AuthProvider';
+import { getSpecialtiesForFitnessGoals } from '@/services/fitness-goal-matching';
 import {
   discoverPublishedTrainers,
   type PublishedTrainer,
 } from '@/services/trainer-discovery';
 import { useTrainrTheme } from '@/theme';
 
+import { TrainerFilters, type FitnessGoal } from '@/components/TrainerFilters';
+import type { TrainerSpecialty } from '@/components/TrainerSpecialtyFilters';
+
 export default function DiscoverScreen() {
   const theme = useTrainrTheme();
   const { colors, spacing } = theme;
+  const { user } = useAuth();
+
+  const [savedFitnessGoals, setSavedFitnessGoals] = useState<string[]>([]);
+  const [isLoadingGoals, setIsLoadingGoals] = useState(true);
+  const [goalsError, setGoalsError] = useState<string | null>(null);
 
   const [trainers, setTrainers] = useState<PublishedTrainer[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -32,6 +39,7 @@ export default function DiscoverScreen() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSpecialties, setSelectedSpecialties] = useState<TrainerSpecialty[]>([]);
+  const [selectedFitnessGoals, setSelectedFitnessGoals] = useState<FitnessGoal[]>([]);
 
   const loadTrainers = useCallback(async (refresh = false) => {
     if (refresh) {
@@ -85,6 +93,53 @@ export default function DiscoverScreen() {
     };
   }, []);
 
+  useEffect(() => {
+    let isActive = true;
+
+    async function loadSavedFitnessGoals() {
+      if (!user) {
+        setSavedFitnessGoals([]);
+        setGoalsError(null);
+        setIsLoadingGoals(false);
+        return;
+      }
+
+      setIsLoadingGoals(true);
+      setGoalsError(null);
+
+      try {
+        const { data, error } = await supabase
+          .from('gym_goer_fitness_goals')
+          .select('goal')
+          .eq('user_id', user.id);
+
+        if (error) {
+          throw error;
+        }
+
+        if (isActive) {
+          setSavedFitnessGoals((data ?? []).map((item) => item.goal));
+        }
+      } catch (error) {
+        console.error('[Discover] Unable to load saved fitness goals:', error);
+
+        if (isActive) {
+          setGoalsError('We couldn’t load your saved fitness goals.');
+        }
+      } finally {
+        if (isActive) {
+          setIsLoadingGoals(false);
+        }
+      }
+    }
+
+    void loadSavedFitnessGoals();
+
+    return () => {
+      isActive = false;
+    };
+  }, [user]);
+
   const onToggleSpecialty = useCallback((specialty: TrainerSpecialty) => {
     setSelectedSpecialties((current) =>
       current.includes(specialty)
@@ -97,10 +152,30 @@ export default function DiscoverScreen() {
     setSelectedSpecialties([]);
   }, []);
 
+  const onToggleFitnessGoal = useCallback((goal: FitnessGoal) => {
+    setSelectedFitnessGoals((current) =>
+      current.includes(goal)
+        ? current.filter((item) => item !== goal)
+        : [...current, goal],
+    );
+  }, []);
+
+  const onClearFitnessGoals = useCallback(() => {
+    setSelectedFitnessGoals([]);
+  }, []);
+
   const filteredTrainers = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
 
-    return trainers.filter((trainer) => {
+    const goalSpecialties = getSpecialtiesForFitnessGoals(selectedFitnessGoals).map(
+      (specialty) => specialty.toLowerCase(),
+    );
+
+    const savedGoalSpecialties = getSpecialtiesForFitnessGoals(savedFitnessGoals).map(
+      (specialty) => specialty.toLowerCase(),
+    );
+
+    const matchingTrainers = trainers.filter((trainer) => {
       const fullName = [trainer.first_name, trainer.last_name].filter(Boolean).join(' ');
 
       const searchableFields = [
@@ -129,9 +204,45 @@ export default function DiscoverScreen() {
           ),
         );
 
-      return matchesSearch && matchesSpecialty;
+      const matchesFitnessGoal =
+        selectedFitnessGoals.length === 0 ||
+        goalSpecialties.some((goalSpecialty) =>
+          trainerSpecialties.some(
+            (trainerSpecialty) =>
+              trainerSpecialty.includes(goalSpecialty) ||
+              goalSpecialty.includes(trainerSpecialty),
+          ),
+        );
+
+      return matchesSearch && matchesSpecialty && matchesFitnessGoal;
     });
-  }, [trainers, searchQuery, selectedSpecialties]);
+
+    // Keep all matching trainers, but rank relevant trainers first.
+    return matchingTrainers
+      .map((trainer, index) => {
+        const trainerSpecialties = (trainer.specialities ?? []).map((specialty) =>
+          specialty.toLowerCase(),
+        );
+
+        const relevanceScore = savedGoalSpecialties.filter((goalSpecialty) =>
+          trainerSpecialties.some(
+            (trainerSpecialty) =>
+              trainerSpecialty.includes(goalSpecialty) ||
+              goalSpecialty.includes(trainerSpecialty),
+          ),
+        ).length;
+
+        return { trainer, index, relevanceScore };
+      })
+      .sort((a, b) => b.relevanceScore - a.relevanceScore || a.index - b.index)
+      .map(({ trainer }) => trainer);
+  }, [
+    trainers,
+    searchQuery,
+    selectedSpecialties,
+    selectedFitnessGoals,
+    savedFitnessGoals,
+  ]);
 
   const formatRate = (trainer: PublishedTrainer) => {
     if (trainer.session_rate == null) {
@@ -146,6 +257,11 @@ export default function DiscoverScreen() {
       trainer.session_duration_minutes ? ` / ${trainer.session_duration_minutes} min` : ''
     }`.trim();
   };
+
+  const hasActiveFilters =
+    searchQuery.trim().length > 0 ||
+    selectedSpecialties.length > 0 ||
+    selectedFitnessGoals.length > 0;
 
   return (
     <SafeAreaView
@@ -198,7 +314,7 @@ export default function DiscoverScreen() {
           </AppText>
         </View>
 
-        {/* Search input and filter button */}
+        {/* Search input and filter buttons */}
         <View
           style={{
             flexDirection: 'row',
@@ -218,12 +334,30 @@ export default function DiscoverScreen() {
             />
           </View>
 
-          <TrainerSpecialtyFilters
+          <TrainerFilters
             selectedSpecialties={selectedSpecialties}
+            selectedGoals={selectedFitnessGoals}
             onToggleSpecialty={onToggleSpecialty}
-            onClearSpecialties={onClearSpecialties}
+            onToggleGoal={onToggleFitnessGoal}
+            onClearAll={() => {
+              onClearSpecialties();
+              onClearFitnessGoals();
+            }}
           />
         </View>
+
+        {/* Saved fitness-goal status */}
+        {!isLoadingGoals && !goalsError && savedFitnessGoals.length > 0 ? (
+          <AppText variant="bodySmall" color={colors.text.secondary}>
+            Your saved fitness goals are ready for personalised recommendations.
+          </AppText>
+        ) : null}
+
+        {goalsError ? (
+          <AppText variant="bodySmall" color={colors.text.secondary}>
+            {goalsError}
+          </AppText>
+        ) : null}
 
         {/* Loading state */}
         {isLoading ? (
@@ -314,8 +448,8 @@ export default function DiscoverScreen() {
             </AppText>
 
             <AppText variant="body" color={colors.text.secondary}>
-              No trainers match your current search and expertise filters. Try changing
-              your search or filters.
+              No trainers match your current search and filters. Try changing your search
+              or filters.
             </AppText>
 
             <Pressable
@@ -324,6 +458,7 @@ export default function DiscoverScreen() {
               onPress={() => {
                 setSearchQuery('');
                 onClearSpecialties();
+                onClearFitnessGoals();
               }}
               style={{
                 minHeight: 48,
@@ -343,7 +478,7 @@ export default function DiscoverScreen() {
           /* Trainer results */
           <View style={{ gap: spacing.md }}>
             <AppText variant="h2" color={colors.text.primary}>
-              {searchQuery.trim() || selectedSpecialties.length > 0
+              {hasActiveFilters
                 ? `SEARCH RESULTS (${filteredTrainers.length})`
                 : `AVAILABLE TRAINERS (${filteredTrainers.length})`}
             </AppText>
@@ -353,6 +488,22 @@ export default function DiscoverScreen() {
                 .filter(Boolean)
                 .join(' ')
                 .trim();
+
+              const trainerSpecialties = (trainer.specialities ?? []).map((specialty) =>
+                specialty.toLowerCase(),
+              );
+
+              const savedGoalSpecialties = getSpecialtiesForFitnessGoals(
+                savedFitnessGoals,
+              ).map((specialty) => specialty.toLowerCase());
+
+              const isRecommended = savedGoalSpecialties.some((goalSpecialty) =>
+                trainerSpecialties.some(
+                  (trainerSpecialty) =>
+                    trainerSpecialty.includes(goalSpecialty) ||
+                    goalSpecialty.includes(trainerSpecialty),
+                ),
+              );
 
               return (
                 <Pressable
@@ -427,6 +578,22 @@ export default function DiscoverScreen() {
                       ) : null}
                     </View>
                   </View>
+
+                  {isRecommended ? (
+                    <View
+                      style={{
+                        alignSelf: 'flex-start',
+                        paddingHorizontal: spacing.sm,
+                        paddingVertical: spacing.xs,
+                        borderRadius: theme.radius.md,
+                        backgroundColor: colors.brand.redLight,
+                      }}
+                    >
+                      <AppText variant="caption" color={colors.brand.red}>
+                        RECOMMENDED FOR YOU
+                      </AppText>
+                    </View>
+                  ) : null}
 
                   {trainer.professional_bio ? (
                     <AppText

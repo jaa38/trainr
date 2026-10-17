@@ -70,7 +70,7 @@ export function TrainerSpecialtyFilters({
         onClose={() => setVisible(false)}
         title="Filter trainers"
         subtitle="Choose one or more areas of expertise."
-        snapPoints={['60%', '90%']}
+        maxHeight="90%"
       >
         <View style={{ gap: spacing.md }}>
           {TRAINER_SPECIALTIES.map((specialty) => {
