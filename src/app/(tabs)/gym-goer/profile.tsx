@@ -1,3 +1,5 @@
+import { router } from 'expo-router';
+import { ArrowRight } from 'lucide-react-native';
 import { useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -153,6 +155,34 @@ export default function GymGoerProfileScreen() {
             </AppText>
           </View>
         ))}
+
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="View saved trainers"
+          onPress={() => router.push('/(tabs)/favourites')}
+          style={{
+            minHeight: 68,
+            flexDirection: 'row',
+            alignItems: 'center',
+            padding: spacing.lg,
+            gap: spacing.md,
+            borderRadius: 16,
+            borderWidth: 1,
+            borderColor: colors.border.default,
+            backgroundColor: colors.background.secondary,
+          }}
+        >
+          <View style={{ flex: 1, gap: spacing.xs }}>
+            <AppText variant="h3" color={colors.text.primary}>
+              Saved Trainers
+            </AppText>
+            <AppText variant="bodySmall" color={colors.text.secondary}>
+              View and manage your favourite coaches.
+            </AppText>
+          </View>
+
+          <ArrowRight size={20} color={colors.text.secondary} />
+        </Pressable>
 
         {errorMessage && (
           <AppText variant="bodySmall" color={colors.text.error}>

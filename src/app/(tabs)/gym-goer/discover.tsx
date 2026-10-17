@@ -27,7 +27,7 @@ import {
   type PublishedTrainer,
 } from '@/services/trainer-discovery';
 import { useTrainrTheme } from '@/theme';
-import { ArrowRight } from 'lucide-react-native';
+import { ArrowRight, Heart } from 'lucide-react-native';
 
 export default function DiscoverScreen() {
   const theme = useTrainrTheme();
@@ -39,6 +39,10 @@ export default function DiscoverScreen() {
   const [goalsError, setGoalsError] = useState<string | null>(null);
 
   const [trainers, setTrainers] = useState<PublishedTrainer[]>([]);
+  const [favouriteTrainerIds, setFavouriteTrainerIds] = useState<string[]>([]);
+  const [isLoadingFavourites, setIsLoadingFavourites] = useState(true);
+  const [favouriteActionId, setFavouriteActionId] = useState<string | null>(null);
+
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -145,6 +149,47 @@ export default function DiscoverScreen() {
     }
 
     void loadSavedFitnessGoals();
+
+    return () => {
+      isActive = false;
+    };
+  }, [user]);
+
+  useEffect(() => {
+    let isActive = true;
+
+    async function loadFavourites() {
+      if (!user) {
+        setFavouriteTrainerIds([]);
+        setIsLoadingFavourites(false);
+        return;
+      }
+
+      setIsLoadingFavourites(true);
+
+      try {
+        const { data, error } = await supabase
+          .from('trainer_favourites')
+          .select('trainer_id')
+          .eq('gym_goer_id', user.id);
+
+        if (error) {
+          throw error;
+        }
+
+        if (isActive) {
+          setFavouriteTrainerIds((data ?? []).map((item) => item.trainer_id));
+        }
+      } catch (error) {
+        console.error('[Discover] Unable to load favourites:', error);
+      } finally {
+        if (isActive) {
+          setIsLoadingFavourites(false);
+        }
+      }
+    }
+
+    void loadFavourites();
 
     return () => {
       isActive = false;
@@ -419,6 +464,52 @@ export default function DiscoverScreen() {
     }`.trim();
   };
 
+  const toggleFavourite = useCallback(
+    async (trainerId: string) => {
+      if (!user || favouriteActionId) {
+        return;
+      }
+
+      const isFavourite = favouriteTrainerIds.includes(trainerId);
+
+      setFavouriteActionId(trainerId);
+
+      try {
+        if (isFavourite) {
+          const { error } = await supabase
+            .from('trainer_favourites')
+            .delete()
+            .eq('gym_goer_id', user.id)
+            .eq('trainer_id', trainerId);
+
+          if (error) {
+            throw error;
+          }
+
+          setFavouriteTrainerIds((current) => current.filter((id) => id !== trainerId));
+        } else {
+          const { error } = await supabase.from('trainer_favourites').insert({
+            gym_goer_id: user.id,
+            trainer_id: trainerId,
+          });
+
+          if (error) {
+            throw error;
+          }
+
+          setFavouriteTrainerIds((current) =>
+            current.includes(trainerId) ? current : [...current, trainerId],
+          );
+        }
+      } catch (error) {
+        console.error('[Discover] Unable to update favourite:', error);
+      } finally {
+        setFavouriteActionId(null);
+      }
+    },
+    [user, favouriteActionId, favouriteTrainerIds],
+  );
+
   const renderTrainerCard = (trainer: PublishedTrainer) => {
     const fullName = [trainer.first_name, trainer.last_name]
       .filter(Boolean)
@@ -505,9 +596,69 @@ export default function DiscoverScreen() {
               </View>
             ) : null}
 
-            <AppText variant="h3" color={colors.text.primary}>
-              {fullName || 'TRAINR Coach'}
-            </AppText>
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: spacing.sm,
+              }}
+            >
+              <View style={{ flex: 1 }}>
+                <AppText variant="h3" color={colors.text.primary}>
+                  {fullName || 'TRAINR Coach'}
+                </AppText>
+              </View>
+
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={
+                  favouriteTrainerIds.includes(trainer.trainer_id)
+                    ? `Remove ${fullName || 'trainer'} from favourites`
+                    : `Add ${fullName || 'trainer'} to favourites`
+                }
+                accessibilityState={{
+                  selected: favouriteTrainerIds.includes(trainer.trainer_id),
+                  disabled:
+                    !user ||
+                    isLoadingFavourites ||
+                    favouriteActionId === trainer.trainer_id,
+                }}
+                disabled={
+                  !user || isLoadingFavourites || favouriteActionId === trainer.trainer_id
+                }
+                hitSlop={8}
+                onPress={() => void toggleFavourite(trainer.trainer_id)}
+                style={{
+                  width: 44,
+                  height: 44,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderRadius: 22,
+                  backgroundColor: colors.background.primary,
+                  borderWidth: 1,
+                  borderColor: colors.border.default,
+                }}
+              >
+                {favouriteActionId === trainer.trainer_id ? (
+                  <ActivityIndicator size="small" color={colors.brand.red} />
+                ) : (
+                  <Heart
+                    size={21}
+                    color={
+                      favouriteTrainerIds.includes(trainer.trainer_id)
+                        ? colors.brand.red
+                        : colors.text.secondary
+                    }
+                    fill={
+                      favouriteTrainerIds.includes(trainer.trainer_id)
+                        ? colors.brand.red
+                        : 'transparent'
+                    }
+                  />
+                )}
+              </Pressable>
+            </View>
 
             <AppText variant="bodySmall" color={colors.text.secondary}>
               {[
