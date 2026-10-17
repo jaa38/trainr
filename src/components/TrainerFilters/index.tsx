@@ -1,6 +1,6 @@
-import { CalendarDays, MapPin, SlidersHorizontal } from 'lucide-react-native';
+import { CalendarDays, MapPin, SlidersHorizontal, Wallet } from 'lucide-react-native';
 import React from 'react';
-import { Pressable, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, TextInput, View } from 'react-native';
 
 import { AppText } from '@/components/AppText';
 import { BottomSheet } from '@/components/BottomSheet';
@@ -44,6 +44,8 @@ type TrainerFiltersProps = {
   maximumPrice: string;
   availableCurrencies: string[];
   selectedCurrency: string | null;
+  showMainFilterButton?: boolean;
+  mainFilterButtonOnly?: boolean;
   onMinimumPriceChange: (value: string) => void;
   onMaximumPriceChange: (value: string) => void;
   onSelectCurrency: (currency: string | null) => void;
@@ -56,6 +58,8 @@ type TrainerFiltersProps = {
 };
 
 export function TrainerFilters({
+  showMainFilterButton = true,
+  mainFilterButtonOnly = false,
   selectedSpecialties,
   selectedGoals,
   locations,
@@ -191,179 +195,173 @@ export function TrainerFilters({
     );
   }
 
+  const filterButtonStyle = (active: boolean) => ({
+    minHeight: theme.sizes.inputHeight,
+    paddingHorizontal: spacing.md,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    gap: spacing.xs,
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    borderColor: active ? colors.brand.red : colors.border.default,
+    backgroundColor: active ? colors.brand.redLight : colors.surface.default,
+  });
+
   return (
     <>
-      {/* Filter, location, availability and price buttons */}
-      <View
-        style={{
+      {/* Horizontally scrollable discovery filters */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{
           flexDirection: 'row',
           alignItems: 'center',
           gap: spacing.sm,
+          paddingVertical: spacing.xs,
+          paddingRight: spacing.xs,
         }}
       >
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={
-            activeFilterCount > 0
-              ? `Filter trainers, ${activeFilterCount} selections active`
-              : 'Filter trainers'
-          }
-          accessibilityHint="Opens fitness goal and trainer specialty filters"
-          accessibilityState={{ expanded: visible }}
-          onPress={() => setVisible(true)}
-          hitSlop={4}
-          style={({ pressed }) => ({
-            width: theme.sizes.inputHeight,
-            height: theme.sizes.inputHeight,
-            alignItems: 'center',
-            justifyContent: 'center',
-            borderRadius: theme.radius.md,
-            borderWidth: 1,
-            borderColor: activeFilterCount > 0 ? colors.brand.red : colors.border.default,
-            backgroundColor:
-              activeFilterCount > 0 ? colors.brand.redLight : colors.surface.default,
-            opacity: pressed ? 0.7 : 1,
-          })}
-        >
-          <SlidersHorizontal
-            size={20}
-            color={activeFilterCount > 0 ? colors.brand.red : colors.text.primary}
-            strokeWidth={2}
-          />
+        {showMainFilterButton ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={
+              activeFilterCount > 0
+                ? `Filter trainers, ${activeFilterCount} selections active`
+                : 'Filter trainers'
+            }
+            accessibilityHint="Opens fitness goal and trainer specialty filters"
+            accessibilityState={{ expanded: visible }}
+            onPress={() => setVisible(true)}
+            style={({ pressed }) => ({
+              width: theme.sizes.inputHeight,
+              height: theme.sizes.inputHeight,
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: theme.radius.md,
+              borderWidth: 1,
+              borderColor:
+                activeFilterCount > 0 ? colors.brand.red : colors.border.default,
+              backgroundColor:
+                activeFilterCount > 0 ? colors.brand.redLight : colors.surface.default,
+              opacity: pressed ? 0.7 : 1,
+            })}
+          >
+            <SlidersHorizontal
+              size={20}
+              color={activeFilterCount > 0 ? colors.brand.red : colors.text.primary}
+              strokeWidth={2}
+            />
 
-          {activeFilterCount > 0 ? (
-            <View
-              style={{
-                position: 'absolute',
-                top: -5,
-                right: -5,
-                minWidth: 18,
-                height: 18,
-                paddingHorizontal: 4,
-                borderRadius: 9,
-                alignItems: 'center',
-                justifyContent: 'center',
-                backgroundColor: colors.brand.red,
-              }}
+            {activeFilterCount > 0 ? (
+              <View
+                style={{
+                  position: 'absolute',
+                  top: -5,
+                  right: -5,
+                  minWidth: 18,
+                  height: 18,
+                  paddingHorizontal: 4,
+                  borderRadius: 9,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backgroundColor: colors.brand.red,
+                }}
+              >
+                <AppText variant="caption" color="#FFFFFF">
+                  {activeFilterCount}
+                </AppText>
+              </View>
+            ) : null}
+          </Pressable>
+        ) : null}
+
+        {!mainFilterButtonOnly ? (
+          <>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={
+                selectedLocation
+                  ? `Location: ${selectedLocation}`
+                  : 'Filter trainers by location'
+              }
+              accessibilityHint="Opens available trainer locations"
+              accessibilityState={{ expanded: locationSheetVisible }}
+              onPress={() => setLocationSheetVisible(true)}
+              style={({ pressed }) => ({
+                ...filterButtonStyle(Boolean(selectedLocation)),
+                maxWidth: 200,
+                opacity: pressed ? 0.7 : 1,
+              })}
             >
-              <AppText variant="caption" color="#FFFFFF">
-                {activeFilterCount}
+              <MapPin
+                size={18}
+                color={selectedLocation ? colors.brand.red : colors.text.primary}
+              />
+              <AppText
+                variant="bodySmall"
+                color={selectedLocation ? colors.brand.red : colors.text.primary}
+                numberOfLines={1}
+              >
+                {selectedLocation ?? 'Location'}
               </AppText>
-            </View>
-          ) : null}
-        </Pressable>
+            </Pressable>
 
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={
-            selectedLocation
-              ? `Location: ${selectedLocation}`
-              : 'Filter trainers by location'
-          }
-          accessibilityHint="Opens available trainer locations"
-          accessibilityState={{ expanded: locationSheetVisible }}
-          onPress={() => setLocationSheetVisible(true)}
-          hitSlop={4}
-          style={({ pressed }) => ({
-            minWidth: theme.sizes.inputHeight,
-            maxWidth: 200,
-            height: theme.sizes.inputHeight,
-            paddingHorizontal: spacing.sm,
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: spacing.xs,
-            borderRadius: theme.radius.md,
-            borderWidth: 1,
-            borderColor: selectedLocation ? colors.brand.red : colors.border.default,
-            backgroundColor: selectedLocation
-              ? colors.brand.redLight
-              : colors.surface.default,
-            opacity: pressed ? 0.7 : 1,
-          })}
-        >
-          <MapPin
-            size={18}
-            color={selectedLocation ? colors.brand.red : colors.text.primary}
-          />
-
-          <View style={{ flexShrink: 1 }}>
-            <AppText
-              variant="bodySmall"
-              color={selectedLocation ? colors.brand.red : colors.text.primary}
-              numberOfLines={1}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={
+                selectedDay
+                  ? `Availability: ${selectedDay}`
+                  : 'Filter trainers by availability'
+              }
+              accessibilityHint="Choose a day when you want to train"
+              accessibilityState={{ expanded: availabilitySheetVisible }}
+              onPress={() => setAvailabilitySheetVisible(true)}
+              style={({ pressed }) => ({
+                ...filterButtonStyle(Boolean(selectedDay)),
+                opacity: pressed ? 0.7 : 1,
+              })}
             >
-              {selectedLocation ?? 'Location'}
-            </AppText>
-          </View>
-        </Pressable>
+              <CalendarDays
+                size={17}
+                color={selectedDay ? colors.brand.red : colors.text.primary}
+              />
+              <AppText
+                variant="bodySmall"
+                color={selectedDay ? colors.brand.red : colors.text.primary}
+              >
+                {selectedDay ?? 'Day'}
+              </AppText>
+            </Pressable>
 
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={
-            selectedDay
-              ? `Availability: ${selectedDay}`
-              : 'Filter trainers by availability'
-          }
-          accessibilityHint="Choose a day when you want to train"
-          accessibilityState={{ expanded: availabilitySheetVisible }}
-          onPress={() => setAvailabilitySheetVisible(true)}
-          hitSlop={4}
-          style={({ pressed }) => ({
-            height: theme.sizes.inputHeight,
-            paddingHorizontal: spacing.sm,
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: spacing.xs,
-            borderRadius: theme.radius.md,
-            borderWidth: 1,
-            borderColor: selectedDay ? colors.brand.red : colors.border.default,
-            backgroundColor: selectedDay ? colors.brand.redLight : colors.surface.default,
-            opacity: pressed ? 0.7 : 1,
-          })}
-        >
-          <CalendarDays
-            size={17}
-            color={selectedDay ? colors.brand.red : colors.text.primary}
-          />
-          <AppText
-            variant="bodySmall"
-            color={selectedDay ? colors.brand.red : colors.text.primary}
-          >
-            {selectedDay ?? 'Day'}
-          </AppText>
-        </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Filter trainers by price"
+              accessibilityHint="Opens minimum and maximum session price filters"
+              accessibilityState={{ expanded: priceSheetVisible }}
+              onPress={() => setPriceSheetVisible(true)}
+              style={({ pressed }) => ({
+                ...filterButtonStyle(hasPriceFilter),
+                opacity: pressed ? 0.7 : 1,
+              })}
+            >
+              <Wallet
+                size={18}
+                color={hasPriceFilter ? colors.brand.red : colors.text.primary}
+                strokeWidth={2}
+              />
 
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Filter trainers by price"
-          accessibilityHint="Opens minimum and maximum session price filters"
-          accessibilityState={{ expanded: priceSheetVisible }}
-          onPress={() => setPriceSheetVisible(true)}
-          hitSlop={4}
-          style={({ pressed }) => ({
-            height: theme.sizes.inputHeight,
-            paddingHorizontal: spacing.md,
-            alignItems: 'center',
-            justifyContent: 'center',
-            borderRadius: theme.radius.md,
-            borderWidth: 1,
-            borderColor: hasPriceFilter ? colors.brand.red : colors.border.default,
-            backgroundColor: hasPriceFilter
-              ? colors.brand.redLight
-              : colors.surface.default,
-            opacity: pressed ? 0.7 : 1,
-          })}
-        >
-          <AppText
-            variant="bodySmall"
-            color={hasPriceFilter ? colors.brand.red : colors.text.primary}
-          >
-            Price
-          </AppText>
-        </Pressable>
-      </View>
+              <AppText
+                variant="bodySmall"
+                color={hasPriceFilter ? colors.brand.red : colors.text.primary}
+              >
+                Price
+              </AppText>
+            </Pressable>
+          </>
+        ) : null}
+      </ScrollView>
 
       {/* Fitness goal and specialty filters */}
       <BottomSheet
@@ -540,6 +538,7 @@ export function TrainerFilters({
                 Clear day
               </Button>
             ) : null}
+
             <Button
               variant="primary"
               fullWidth

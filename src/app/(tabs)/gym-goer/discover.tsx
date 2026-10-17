@@ -1,4 +1,3 @@
-
 import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
@@ -43,12 +42,8 @@ export default function DiscoverScreen() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedSpecialties, setSelectedSpecialties] = useState<
-    TrainerSpecialty[]
-  >([]);
-  const [selectedFitnessGoals, setSelectedFitnessGoals] = useState<FitnessGoal[]>(
-    [],
-  );
+  const [selectedSpecialties, setSelectedSpecialties] = useState<TrainerSpecialty[]>([]);
+  const [selectedFitnessGoals, setSelectedFitnessGoals] = useState<FitnessGoal[]>([]);
   const [selectedLocation, setSelectedLocation] = useState<string | null>(null);
   const [selectedDay, setSelectedDay] = useState<TrainingDay | null>(null);
   const [minimumPrice, setMinimumPrice] = useState('');
@@ -236,8 +231,7 @@ export default function DiscoverScreen() {
       (specialty) => specialty.toLowerCase(),
     );
 
-    const hasPriceFilter =
-      minimumPrice.trim() !== '' || maximumPrice.trim() !== '';
+    const hasPriceFilter = minimumPrice.trim() !== '' || maximumPrice.trim() !== '';
 
     const minimum = minimumPrice.trim() === '' ? null : Number(minimumPrice);
     const maximum = maximumPrice.trim() === '' ? null : Number(maximumPrice);
@@ -248,9 +242,7 @@ export default function DiscoverScreen() {
       !(minimum !== null && maximum !== null && minimum > maximum);
 
     const matchingTrainers = trainers.filter((trainer) => {
-      const fullName = [trainer.first_name, trainer.last_name]
-        .filter(Boolean)
-        .join(' ');
+      const fullName = [trainer.first_name, trainer.last_name].filter(Boolean).join(' ');
 
       const searchableFields = [
         fullName,
@@ -262,10 +254,7 @@ export default function DiscoverScreen() {
       ];
 
       const matchesSearch =
-        !query ||
-        searchableFields.some((field) =>
-          field?.toLowerCase().includes(query),
-        );
+        !query || searchableFields.some((field) => field?.toLowerCase().includes(query));
 
       const trainerSpecialties = (trainer.specialities ?? []).map((specialty) =>
         specialty.toLowerCase(),
@@ -297,8 +286,7 @@ export default function DiscoverScreen() {
       const trainerDays = (trainer.availability?.days ?? []).map((day) =>
         day.trim().toLowerCase(),
       );
-      const matchesDay =
-        !selectedDay || trainerDays.includes(selectedDay.toLowerCase());
+      const matchesDay = !selectedDay || trainerDays.includes(selectedDay.toLowerCase());
 
       const trainerCurrency = (trainer.currency ?? '').trim().toUpperCase();
 
@@ -352,9 +340,7 @@ export default function DiscoverScreen() {
           return firstNameDifference;
         }
 
-        return (a.trainer.last_name ?? '').localeCompare(
-          b.trainer.last_name ?? '',
-        );
+        return (a.trainer.last_name ?? '').localeCompare(b.trainer.last_name ?? '');
       })
       .map(({ trainer }) => trainer);
   }, [
@@ -428,9 +414,7 @@ export default function DiscoverScreen() {
     }).format(trainer.session_rate);
 
     return `${trainer.currency ?? ''} ${amount}${
-      trainer.session_duration_minutes
-        ? ` / ${trainer.session_duration_minutes} min`
-        : ''
+      trainer.session_duration_minutes ? ` / ${trainer.session_duration_minutes} min` : ''
     }`.trim();
   };
 
@@ -553,8 +537,8 @@ export default function DiscoverScreen() {
 
         {trainer.years_experience != null ? (
           <AppText variant="bodySmall" color={colors.text.secondary}>
-            {trainer.years_experience}{' '}
-            {trainer.years_experience === 1 ? 'year' : 'years'} of experience
+            {trainer.years_experience} {trainer.years_experience === 1 ? 'year' : 'years'}{' '}
+            of experience
           </AppText>
         ) : null}
 
@@ -636,26 +620,60 @@ export default function DiscoverScreen() {
           </AppText>
         </View>
 
-        <View
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: spacing.sm,
-            marginTop: spacing.xs,
-          }}
-        >
-          <View style={{ flex: 1 }}>
-            <Input
-              accessibilityLabel="Search trainers"
-              placeholder="Search by name or expertise"
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              returnKeyType="search"
-              autoCapitalize="none"
-            />
+        <View style={{ gap: spacing.sm, marginTop: spacing.xs }}>
+          {/* Search field and main filter button */}
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: spacing.sm,
+            }}
+          >
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Input
+                accessibilityLabel="Search trainers"
+                placeholder="Search trainers, skills, or location"
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                returnKeyType="search"
+                autoCapitalize="none"
+              />
+            </View>
+
+            <View
+              style={{
+                width: theme.sizes.inputHeight,
+                flexShrink: 0,
+              }}
+            >
+              <TrainerFilters
+                showMainFilterButton
+                mainFilterButtonOnly
+                selectedSpecialties={selectedSpecialties}
+                selectedGoals={selectedFitnessGoals}
+                locations={availableLocations}
+                selectedLocation={selectedLocation}
+                selectedDay={selectedDay}
+                minimumPrice={minimumPrice}
+                maximumPrice={maximumPrice}
+                availableCurrencies={availableCurrencies}
+                selectedCurrency={effectiveCurrency}
+                onMinimumPriceChange={setMinimumPrice}
+                onMaximumPriceChange={setMaximumPrice}
+                onSelectCurrency={setSelectedCurrency}
+                onToggleSpecialty={onToggleSpecialty}
+                onToggleGoal={onToggleFitnessGoal}
+                onSelectLocation={setSelectedLocation}
+                onSelectDay={setSelectedDay}
+                onClearPrice={onClearPrice}
+                onClearAll={onClearAllFilters}
+              />
+            </View>
           </View>
 
+          {/* Location, Day and Price chips */}
           <TrainerFilters
+            showMainFilterButton={false}
             selectedSpecialties={selectedSpecialties}
             selectedGoals={selectedFitnessGoals}
             locations={availableLocations}
