@@ -40,6 +40,7 @@ export default function DiscoverScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSpecialties, setSelectedSpecialties] = useState<TrainerSpecialty[]>([]);
   const [selectedFitnessGoals, setSelectedFitnessGoals] = useState<FitnessGoal[]>([]);
+  const [selectedLocation, setSelectedLocation] = useState<string | null>(null);
 
   const loadTrainers = useCallback(async (refresh = false) => {
     if (refresh) {
@@ -214,7 +215,10 @@ export default function DiscoverScreen() {
           ),
         );
 
-      return matchesSearch && matchesSpecialty && matchesFitnessGoal;
+      const matchesLocation =
+        !selectedLocation || trainer.location?.trim() === selectedLocation;
+
+      return matchesSearch && matchesSpecialty && matchesFitnessGoal && matchesLocation;
     });
 
     // Keep all matching trainers, but rank relevant trainers first.
@@ -234,7 +238,23 @@ export default function DiscoverScreen() {
 
         return { trainer, index, relevanceScore };
       })
-      .sort((a, b) => b.relevanceScore - a.relevanceScore || a.index - b.index)
+      .sort((a, b) => {
+        const relevanceDifference = b.relevanceScore - a.relevanceScore;
+
+        if (relevanceDifference !== 0) {
+          return relevanceDifference;
+        }
+
+        const firstNameDifference = (a.trainer.first_name ?? '').localeCompare(
+          b.trainer.first_name ?? '',
+        );
+
+        if (firstNameDifference !== 0) {
+          return firstNameDifference;
+        }
+
+        return (a.trainer.last_name ?? '').localeCompare(b.trainer.last_name ?? '');
+      })
       .map(({ trainer }) => trainer);
   }, [
     trainers,
@@ -243,6 +263,66 @@ export default function DiscoverScreen() {
     selectedFitnessGoals,
     savedFitnessGoals,
   ]);
+
+  const availableLocations = useMemo(
+    () =>
+      [
+        ...new Set(
+          trainers
+            .map((trainer) => trainer.location?.trim())
+            .filter((location): location is string => Boolean(location)),
+        ),
+      ].sort((a, b) => a.localeCompare(b)),
+    [trainers],
+  );
+
+  const savedGoalSpecialties = useMemo(
+    () =>
+      getSpecialtiesForFitnessGoals(savedFitnessGoals).map((specialty) =>
+        specialty.toLowerCase(),
+      ),
+    [savedFitnessGoals],
+  );
+
+  const isTrainerRecommended = useCallback(
+    (trainer: PublishedTrainer) => {
+      const trainerSpecialties = (trainer.specialities ?? []).map((specialty) =>
+        specialty.toLowerCase(),
+      );
+
+      return savedGoalSpecialties.some((goalSpecialty) =>
+        trainerSpecialties.some(
+          (trainerSpecialty) =>
+            trainerSpecialty.includes(goalSpecialty) ||
+            goalSpecialty.includes(trainerSpecialty),
+        ),
+      );
+    },
+    [savedGoalSpecialties],
+  );
+
+  const recommendedTrainers = useMemo(
+    () => filteredTrainers.filter(isTrainerRecommended),
+    [filteredTrainers, isTrainerRecommended],
+  );
+
+  const otherTrainers = useMemo(
+    () =>
+      filteredTrainers
+        .filter((trainer) => !isTrainerRecommended(trainer))
+        .sort((a, b) => {
+          const firstNameDifference = (a.first_name ?? '').localeCompare(
+            b.first_name ?? '',
+          );
+
+          if (firstNameDifference !== 0) {
+            return firstNameDifference;
+          }
+
+          return (a.last_name ?? '').localeCompare(b.last_name ?? '');
+        }),
+    [filteredTrainers, isTrainerRecommended],
+  );
 
   const formatRate = (trainer: PublishedTrainer) => {
     if (trainer.session_rate == null) {
@@ -256,6 +336,149 @@ export default function DiscoverScreen() {
     return `${trainer.currency ?? ''} ${amount}${
       trainer.session_duration_minutes ? ` / ${trainer.session_duration_minutes} min` : ''
     }`.trim();
+  };
+
+  const renderTrainerCard = (trainer: PublishedTrainer) => {
+    const fullName = [trainer.first_name, trainer.last_name]
+      .filter(Boolean)
+      .join(' ')
+      .trim();
+
+    const isRecommended = isTrainerRecommended(trainer);
+
+    return (
+      <Pressable
+        key={trainer.trainer_id}
+        accessibilityRole="button"
+        accessibilityLabel={`View profile for ${fullName || 'TRAINR Coach'}`}
+        onPress={() => {
+          router.push({
+            pathname: '/(tabs)/trainer-profile/[id]',
+            params: { id: trainer.trainer_id },
+          });
+        }}
+        style={{
+          padding: spacing.lg,
+          borderRadius: 18,
+          borderWidth: 1,
+          borderColor: colors.border.default,
+          backgroundColor: colors.background.secondary,
+          gap: spacing.md,
+        }}
+      >
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: spacing.md,
+          }}
+        >
+          {trainer.avatar_url ? (
+            <Image
+              source={{ uri: trainer.avatar_url }}
+              accessibilityLabel={`Profile photo of ${fullName || 'TRAINR Coach'}`}
+              resizeMode="cover"
+              style={{
+                width: 76,
+                height: 76,
+                borderRadius: 38,
+                backgroundColor: colors.background.primary,
+              }}
+            />
+          ) : (
+            <View
+              accessibilityLabel="Default trainer profile image"
+              style={{
+                width: 76,
+                height: 76,
+                borderRadius: 38,
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: colors.background.primary,
+                borderWidth: 1,
+                borderColor: colors.border.default,
+              }}
+            >
+              <AppText variant="h2" color={colors.brand.red}>
+                {fullName.charAt(0).toUpperCase() || 'T'}
+              </AppText>
+            </View>
+          )}
+
+          <View style={{ flex: 1, gap: spacing.xs }}>
+            <AppText variant="h3" color={colors.text.primary}>
+              {fullName || 'TRAINR Coach'}
+            </AppText>
+
+            {trainer.location ? (
+              <AppText variant="bodySmall" color={colors.text.secondary}>
+                {trainer.location}
+              </AppText>
+            ) : null}
+          </View>
+        </View>
+
+        {isRecommended ? (
+          <View
+            style={{
+              alignSelf: 'flex-start',
+              paddingHorizontal: spacing.sm,
+              paddingVertical: spacing.xs,
+              borderRadius: theme.radius.md,
+              backgroundColor: colors.brand.redLight,
+            }}
+          >
+            <AppText variant="caption" color={colors.brand.red}>
+              RECOMMENDED FOR YOU
+            </AppText>
+          </View>
+        ) : null}
+
+        {trainer.professional_bio ? (
+          <AppText
+            variant="body"
+            color={colors.text.secondary}
+            style={{ lineHeight: 22 }}
+          >
+            {trainer.professional_bio}
+          </AppText>
+        ) : null}
+
+        {trainer.specialities?.length ? (
+          <View style={{ gap: spacing.xs }}>
+            <AppText variant="caption" color={colors.text.tertiary}>
+              SPECIALTIES
+            </AppText>
+            <AppText variant="body" color={colors.text.primary}>
+              {trainer.specialities.join(' · ')}
+            </AppText>
+          </View>
+        ) : null}
+
+        {trainer.years_experience != null ? (
+          <AppText variant="bodySmall" color={colors.text.secondary}>
+            {trainer.years_experience} {trainer.years_experience === 1 ? 'year' : 'years'}{' '}
+            of experience
+          </AppText>
+        ) : null}
+
+        <View
+          style={{
+            paddingTop: spacing.md,
+            borderTopWidth: 1,
+            borderTopColor: colors.border.default,
+          }}
+        >
+          <AppText variant="h3" color={colors.brand.red}>
+            {formatRate(trainer)}
+          </AppText>
+        </View>
+
+        <AppText variant="button" color={colors.brand.red}>
+          View profile →
+        </AppText>
+      </Pressable>
+    );
   };
 
   const hasActiveFilters =
@@ -337,11 +560,15 @@ export default function DiscoverScreen() {
           <TrainerFilters
             selectedSpecialties={selectedSpecialties}
             selectedGoals={selectedFitnessGoals}
+            locations={availableLocations}
+            selectedLocation={selectedLocation}
             onToggleSpecialty={onToggleSpecialty}
             onToggleGoal={onToggleFitnessGoal}
+            onSelectLocation={setSelectedLocation}
             onClearAll={() => {
               onClearSpecialties();
               onClearFitnessGoals();
+              setSelectedLocation(null);
             }}
           />
         </View>
@@ -459,6 +686,7 @@ export default function DiscoverScreen() {
                 setSearchQuery('');
                 onClearSpecialties();
                 onClearFitnessGoals();
+                setSelectedLocation(null);
               }}
               style={{
                 minHeight: 48,
@@ -476,172 +704,44 @@ export default function DiscoverScreen() {
           </View>
         ) : (
           /* Trainer results */
-          <View style={{ gap: spacing.md }}>
-            <AppText variant="h2" color={colors.text.primary}>
-              {hasActiveFilters
-                ? `SEARCH RESULTS (${filteredTrainers.length})`
-                : `AVAILABLE TRAINERS (${filteredTrainers.length})`}
-            </AppText>
-
-            {filteredTrainers.map((trainer) => {
-              const fullName = [trainer.first_name, trainer.last_name]
-                .filter(Boolean)
-                .join(' ')
-                .trim();
-
-              const trainerSpecialties = (trainer.specialities ?? []).map((specialty) =>
-                specialty.toLowerCase(),
-              );
-
-              const savedGoalSpecialties = getSpecialtiesForFitnessGoals(
-                savedFitnessGoals,
-              ).map((specialty) => specialty.toLowerCase());
-
-              const isRecommended = savedGoalSpecialties.some((goalSpecialty) =>
-                trainerSpecialties.some(
-                  (trainerSpecialty) =>
-                    trainerSpecialty.includes(goalSpecialty) ||
-                    goalSpecialty.includes(trainerSpecialty),
-                ),
-              );
-
-              return (
-                <Pressable
-                  key={trainer.trainer_id}
-                  accessibilityRole="button"
-                  accessibilityLabel={`View profile for ${fullName || 'TRAINR Coach'}`}
-                  onPress={() => {
-                    router.push({
-                      pathname: '/(tabs)/trainer-profile/[id]',
-                      params: { id: trainer.trainer_id },
-                    });
-                  }}
-                  style={{
-                    padding: spacing.lg,
-                    borderRadius: 18,
-                    borderWidth: 1,
-                    borderColor: colors.border.default,
-                    backgroundColor: colors.background.secondary,
-                    gap: spacing.md,
-                  }}
-                >
-                  <View
-                    style={{
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      gap: spacing.md,
-                    }}
-                  >
-                    {trainer.avatar_url ? (
-                      <Image
-                        source={{ uri: trainer.avatar_url }}
-                        accessibilityLabel={`Profile photo of ${
-                          fullName || 'TRAINR Coach'
-                        }`}
-                        resizeMode="cover"
-                        style={{
-                          width: 76,
-                          height: 76,
-                          borderRadius: 38,
-                          backgroundColor: colors.background.primary,
-                        }}
-                      />
-                    ) : (
-                      <View
-                        accessibilityLabel="Default trainer profile image"
-                        style={{
-                          width: 76,
-                          height: 76,
-                          borderRadius: 38,
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          backgroundColor: colors.background.primary,
-                          borderWidth: 1,
-                          borderColor: colors.border.default,
-                        }}
-                      >
-                        <AppText variant="h2" color={colors.brand.red}>
-                          {fullName.charAt(0).toUpperCase() || 'T'}
-                        </AppText>
-                      </View>
-                    )}
-
-                    <View style={{ flex: 1, gap: spacing.xs }}>
-                      <AppText variant="h3" color={colors.text.primary}>
-                        {fullName || 'TRAINR Coach'}
-                      </AppText>
-
-                      {trainer.location ? (
-                        <AppText variant="bodySmall" color={colors.text.secondary}>
-                          {trainer.location}
-                        </AppText>
-                      ) : null}
-                    </View>
-                  </View>
-
-                  {isRecommended ? (
-                    <View
-                      style={{
-                        alignSelf: 'flex-start',
-                        paddingHorizontal: spacing.sm,
-                        paddingVertical: spacing.xs,
-                        borderRadius: theme.radius.md,
-                        backgroundColor: colors.brand.redLight,
-                      }}
-                    >
-                      <AppText variant="caption" color={colors.brand.red}>
-                        RECOMMENDED FOR YOU
-                      </AppText>
-                    </View>
-                  ) : null}
-
-                  {trainer.professional_bio ? (
-                    <AppText
-                      variant="body"
-                      color={colors.text.secondary}
-                      style={{ lineHeight: 22 }}
-                    >
-                      {trainer.professional_bio}
-                    </AppText>
-                  ) : null}
-
-                  {trainer.specialities?.length ? (
-                    <View style={{ gap: spacing.xs }}>
-                      <AppText variant="caption" color={colors.text.tertiary}>
-                        SPECIALTIES
-                      </AppText>
-
-                      <AppText variant="body" color={colors.text.primary}>
-                        {trainer.specialities.join(' · ')}
-                      </AppText>
-                    </View>
-                  ) : null}
-
-                  {trainer.years_experience != null ? (
-                    <AppText variant="bodySmall" color={colors.text.secondary}>
-                      {trainer.years_experience}{' '}
-                      {trainer.years_experience === 1 ? 'year' : 'years'} of experience
-                    </AppText>
-                  ) : null}
-
-                  <View
-                    style={{
-                      paddingTop: spacing.md,
-                      borderTopWidth: 1,
-                      borderTopColor: colors.border.default,
-                    }}
-                  >
-                    <AppText variant="h3" color={colors.brand.red}>
-                      {formatRate(trainer)}
-                    </AppText>
-                  </View>
-
-                  <AppText variant="button" color={colors.brand.red}>
-                    View profile →
+          <View style={{ gap: spacing.xl }}>
+            {recommendedTrainers.length > 0 ? (
+              <View style={{ gap: spacing.md }}>
+                <View style={{ gap: spacing.xs }}>
+                  <AppText variant="h2" color={colors.text.primary}>
+                    RECOMMENDED FOR YOU
                   </AppText>
-                </Pressable>
-              );
-            })}
+
+                  <AppText variant="bodySmall" color={colors.text.secondary}>
+                    Trainers matched to your saved fitness goals.
+                  </AppText>
+                </View>
+
+                {recommendedTrainers.map(renderTrainerCard)}
+              </View>
+            ) : null}
+
+            {otherTrainers.length > 0 ? (
+              <View style={{ gap: spacing.md }}>
+                <View style={{ gap: spacing.xs }}>
+                  <AppText variant="h2" color={colors.text.primary}>
+                    {recommendedTrainers.length > 0
+                      ? 'EXPLORE ALL TRAINERS'
+                      : hasActiveFilters
+                        ? `SEARCH RESULTS (${otherTrainers.length})`
+                        : `AVAILABLE TRAINERS (${otherTrainers.length})`}
+                  </AppText>
+
+                  {recommendedTrainers.length > 0 ? (
+                    <AppText variant="bodySmall" color={colors.text.secondary}>
+                      Discover other trainers and their areas of expertise.
+                    </AppText>
+                  ) : null}
+                </View>
+
+                {otherTrainers.map(renderTrainerCard)}
+              </View>
+            ) : null}
           </View>
         )}
       </ScrollView>
