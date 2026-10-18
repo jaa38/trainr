@@ -1,3 +1,4 @@
+
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 
 import {
@@ -13,7 +14,13 @@ import {
 } from 'lucide-react-native';
 
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, Image, Pressable, ScrollView, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Image,
+  Pressable,
+  ScrollView,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/AppText';
@@ -36,8 +43,12 @@ export default function TrainerProfileScreen() {
   const { colors, spacing } = theme;
 
   const [trainer, setTrainer] = useState<PublishedTrainer | null>(null);
+
   const [extras, setExtras] = useState<TrainerProfileExtras | null>(null);
   const [reviews, setReviews] = useState<TrainerReview[]>([]);
+  const [extrasError, setExtrasError] = useState<string | null>(null);
+  const [reviewsError, setReviewsError] = useState<string | null>(null);
+
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -51,6 +62,8 @@ export default function TrainerProfileScreen() {
         setTrainer(null);
         setExtras(null);
         setReviews([]);
+        setExtrasError(null);
+        setReviewsError(null);
 
         if (!id) {
           setErrorMessage(
@@ -62,7 +75,9 @@ export default function TrainerProfileScreen() {
 
         try {
           const trainers = await discoverPublishedTrainers();
-          const selectedTrainer = trainers.find((item) => item.trainer_id === id);
+          const selectedTrainer = trainers.find(
+            (item) => item.trainer_id === id,
+          );
 
           if (!isActive) return;
 
@@ -89,6 +104,9 @@ export default function TrainerProfileScreen() {
               '[Trainer Profile] Unable to load profile extras:',
               extrasResult.reason,
             );
+            setExtrasError(
+              'Unable to load this trainer’s rating summary. Please try again.',
+            );
           }
 
           if (reviewsResult.status === 'fulfilled') {
@@ -98,12 +116,17 @@ export default function TrainerProfileScreen() {
               '[Trainer Profile] Unable to load reviews:',
               reviewsResult.reason,
             );
+            setReviewsError(
+              'Unable to load reviews for this trainer. Please try again.',
+            );
           }
         } catch (error) {
           console.error('[Trainer Profile] Unable to load trainer:', error);
 
           if (isActive) {
-            setErrorMessage('We couldn’t load this trainer’s profile. Please try again.');
+            setErrorMessage(
+              'We couldn’t load this trainer’s profile. Please try again.',
+            );
             setIsLoading(false);
           }
         }
@@ -125,7 +148,9 @@ export default function TrainerProfileScreen() {
     }).format(item.session_rate);
 
     return `${item.currency ?? ''} ${amount}${
-      item.session_duration_minutes ? ` / ${item.session_duration_minutes} min` : ''
+      item.session_duration_minutes
+        ? ` / ${item.session_duration_minutes} min`
+        : ''
     }`.trim();
   };
 
@@ -150,7 +175,10 @@ export default function TrainerProfileScreen() {
     }
   };
 
-  const renderSection = (title: string, content: string | null | undefined) => {
+  const renderSection = (
+    title: string,
+    content: string | null | undefined,
+  ) => {
     if (!content?.trim()) return null;
 
     return (
@@ -231,33 +259,79 @@ export default function TrainerProfileScreen() {
         Reviews
       </AppText>
 
-      <View
-        style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          gap: spacing.sm,
-        }}
-      >
-        <Star
-          size={22}
-          color={colors.brand.red}
-          fill={(extras?.review_count ?? 0) > 0 ? colors.brand.red : 'transparent'}
-        />
+      {extrasError ? (
+        <View
+          accessibilityRole="alert"
+          style={{
+            padding: spacing.md,
+            borderRadius: 12,
+            borderWidth: 1,
+            borderColor: colors.border.default,
+            gap: spacing.xs,
+          }}
+        >
+          <AppText variant="body" color={colors.text.secondary}>
+            {extrasError}
+          </AppText>
+        </View>
+      ) : extras ? (
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: spacing.sm,
+          }}
+        >
+          <Star
+            size={22}
+            color={colors.brand.red}
+            fill={extras.review_count > 0 ? colors.brand.red : 'transparent'}
+          />
 
-        <AppText variant="h2" color={colors.text.primary}>
-          {(extras?.average_rating ?? 0).toFixed(1)}
-        </AppText>
+          <AppText variant="h2" color={colors.text.primary}>
+            {extras.average_rating.toFixed(1)}
+          </AppText>
 
-        <AppText variant="bodySmall" color={colors.text.secondary}>
-          ({extras?.review_count ?? 0}{' '}
-          {(extras?.review_count ?? 0) === 1 ? 'review' : 'reviews'})
-        </AppText>
-      </View>
+          <AppText variant="bodySmall" color={colors.text.secondary}>
+            ({extras.review_count}{' '}
+            {extras.review_count === 1 ? 'review' : 'reviews'})
+          </AppText>
+        </View>
+      ) : (
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: spacing.sm,
+          }}
+        >
+          <ActivityIndicator size="small" color={colors.brand.red} />
+          <AppText variant="bodySmall" color={colors.text.secondary}>
+            Loading rating summary…
+          </AppText>
+        </View>
+      )}
 
-      {reviews.length === 0 ? (
+      {reviewsError ? (
+        <View
+          accessibilityRole="alert"
+          style={{
+            padding: spacing.md,
+            borderRadius: 12,
+            borderWidth: 1,
+            borderColor: colors.border.default,
+            gap: spacing.xs,
+          }}
+        >
+          <AppText variant="body" color={colors.text.secondary}>
+            {reviewsError}
+          </AppText>
+        </View>
+      ) : reviews.length === 0 ? (
         <AppText variant="body" color={colors.text.secondary}>
-          No reviews yet. Reviews will appear here when gym-goers leave feedback for this
-          trainer.
+          {extrasError
+            ? 'The review list could not be confirmed because the rating summary failed to load.'
+            : 'No reviews yet. Reviews will appear here when gym-goers leave feedback for this trainer.'}
         </AppText>
       ) : (
         <View style={{ gap: spacing.md }}>
@@ -290,7 +364,11 @@ export default function TrainerProfileScreen() {
                     gap: 4,
                   }}
                 >
-                  <Star size={14} color={colors.brand.red} fill={colors.brand.red} />
+                  <Star
+                    size={14}
+                    color={colors.brand.red}
+                    fill={colors.brand.red}
+                  />
 
                   <AppText variant="bodySmall" color={colors.text.primary}>
                     {review.rating}/5
@@ -531,14 +609,20 @@ export default function TrainerProfileScreen() {
                     size={16}
                     color={colors.brand.red}
                     fill={
-                      (extras?.review_count ?? 0) > 0 ? colors.brand.red : 'transparent'
+                      (extras?.review_count ?? 0) > 0
+                        ? colors.brand.red
+                        : 'transparent'
                     }
                   />
 
                   <AppText variant="bodySmall" color={colors.text.secondary}>
-                    {(extras?.average_rating ?? 0).toFixed(1)} (
-                    {extras?.review_count ?? 0}{' '}
-                    {(extras?.review_count ?? 0) === 1 ? 'review' : 'reviews'})
+                    {extrasError
+                      ? 'Rating unavailable'
+                      : extras
+                        ? `${extras.average_rating.toFixed(1)} (${extras.review_count} ${
+                            extras.review_count === 1 ? 'review' : 'reviews'
+                          })`
+                        : 'Loading rating…'}
                   </AppText>
                 </View>
 

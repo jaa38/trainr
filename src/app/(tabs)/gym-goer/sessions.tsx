@@ -1,7 +1,8 @@
-import { useFocusEffect } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -77,6 +78,8 @@ export default function SessionsScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [cancellingBookingId, setCancellingBookingId] = useState<string | null>(null);
+  const [currentTime] = useState(() => Date.now());
 
   const loadBookings = useCallback(
     async (refresh = false) => {
@@ -170,6 +173,56 @@ export default function SessionsScreen() {
     },
     [user],
   );
+
+  const handleCancelBooking = (booking: Booking) => {
+    if (!user || booking.status === 'cancelled') return;
+
+    Alert.alert(
+      'Cancel booking?',
+      'Are you sure you want to cancel this training session? This action cannot be undone.',
+      [
+        {
+          text: 'Keep booking',
+          style: 'cancel',
+        },
+        {
+          text: 'Cancel booking',
+          style: 'destructive',
+          onPress: () => {
+            void (async () => {
+              setCancellingBookingId(booking.id);
+
+              try {
+                const { error } = await supabase.rpc('cancel_trainer_booking', {
+                  p_booking_id: booking.id,
+                });
+
+                if (error) throw error;
+
+                await loadBookings(true);
+
+                Alert.alert(
+                  'Booking cancelled',
+                  'Your training session has been cancelled successfully.',
+                );
+              } catch (error) {
+                console.error('[Sessions] Unable to cancel booking:', error);
+
+                Alert.alert(
+                  'Unable to cancel booking',
+                  error instanceof Error
+                    ? error.message
+                    : 'We couldn’t cancel this booking. Please refresh and try again.',
+                );
+              } finally {
+                setCancellingBookingId(null);
+              }
+            })();
+          },
+        },
+      ],
+    );
+  };
 
   useFocusEffect(
     useCallback(() => {
@@ -492,6 +545,72 @@ export default function SessionsScreen() {
                     <AppText variant="body" color={colors.text.secondary}>
                       Notes: {booking.notes}
                     </AppText>
+                  ) : null}
+
+                  {(booking.status === 'pending' || booking.status === 'confirmed') &&
+                  new Date(booking.scheduled_start).getTime() > currentTime ? (
+                    <>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel="Reschedule booking"
+                        accessibilityState={{
+                          disabled: cancellingBookingId !== null,
+                        }}
+                        disabled={cancellingBookingId !== null}
+                        onPress={() =>
+                          router.push({
+                            pathname: '/(tabs)/booking/[trainerId]',
+                            params: {
+                              trainerId: booking.trainer_id,
+                              bookingId: booking.id,
+                            },
+                          })
+                        }
+                        style={({ pressed }) => ({
+                          minHeight: 48,
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          borderRadius: 12,
+                          borderWidth: 1,
+                          borderColor: colors.brand.red,
+                          opacity:
+                            cancellingBookingId !== null ? 0.6 : pressed ? 0.75 : 1,
+                        })}
+                      >
+                        <AppText variant="button" color={colors.brand.red}>
+                          Reschedule
+                        </AppText>
+                      </Pressable>
+
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel="Cancel booking"
+                        accessibilityState={{
+                          disabled: cancellingBookingId !== null,
+                          busy: cancellingBookingId === booking.id,
+                        }}
+                        disabled={cancellingBookingId !== null}
+                        onPress={() => handleCancelBooking(booking)}
+                        style={({ pressed }) => ({
+                          minHeight: 48,
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          borderRadius: 12,
+                          borderWidth: 1,
+                          borderColor: colors.text.error,
+                          opacity:
+                            cancellingBookingId !== null ? 0.6 : pressed ? 0.75 : 1,
+                        })}
+                      >
+                        {cancellingBookingId === booking.id ? (
+                          <ActivityIndicator color={colors.text.error} />
+                        ) : (
+                          <AppText variant="button" color={colors.text.error}>
+                            Cancel booking
+                          </AppText>
+                        )}
+                      </Pressable>
+                    </>
                   ) : null}
 
                   {booking.status === 'completed' ? (

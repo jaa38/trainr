@@ -266,7 +266,13 @@ function getBookingErrorMessage(error: unknown, context: BookingErrorContext): s
 }
 
 export default function BookingScreen() {
-  const { trainerId } = useLocalSearchParams<{ trainerId: string }>();
+  const { trainerId, bookingId } = useLocalSearchParams<{
+    trainerId: string;
+    bookingId?: string;
+  }>();
+
+  const activeBookingId = Array.isArray(bookingId) ? bookingId[0] : bookingId;
+  const isRescheduling = Boolean(activeBookingId);
   const { user, profile } = useAuth();
   const { colors, spacing } = useTrainrTheme();
 
@@ -359,10 +365,17 @@ export default function BookingScreen() {
     setSelectedStartTime(null);
 
     try {
-      const { data, error } = await supabase.rpc('get_trainer_booking_availability', {
-        p_trainer_id: trainerId,
-        p_date: selectedDateKey,
-      });
+      const { data, error } =
+        isRescheduling && activeBookingId
+          ? await supabase.rpc('get_trainer_reschedule_availability', {
+              p_trainer_id: trainerId,
+              p_date: selectedDateKey,
+              p_booking_id: activeBookingId,
+            })
+          : await supabase.rpc('get_trainer_booking_availability', {
+              p_trainer_id: trainerId,
+              p_date: selectedDateKey,
+            });
 
       if (error) throw error;
 
@@ -382,7 +395,20 @@ export default function BookingScreen() {
       setNowTimestamp(getCurrentTimestamp());
       setAvailability(response.availability);
       setTimezone(response.timezone);
-      setOccupiedSlots(response.occupied_slots ?? []);
+
+      // During rescheduling, the current booking must not block its own slot.
+      // Other pending and confirmed bookings remain unavailable.
+      setOccupiedSlots(
+        (response.occupied_slots ?? []).filter(
+          (slot) =>
+            !(
+              isRescheduling &&
+              activeBookingId &&
+              slot.start === slot.start &&
+              slot.end === slot.end
+            ),
+        ),
+      );
     } catch (error) {
       console.error('[Booking] Unable to load availability:', error);
 
@@ -390,7 +416,7 @@ export default function BookingScreen() {
     } finally {
       setIsLoadingSlots(false);
     }
-  }, [trainerId, trainer, selectedDateKey]);
+  }, [trainerId, trainer, selectedDateKey, isRescheduling, activeBookingId]);
 
   useEffect(() => {
     let isActive = true;
@@ -557,22 +583,34 @@ export default function BookingScreen() {
     setIsSubmitting(true);
 
     try {
-      const { error } = await supabase.from('trainer_bookings').insert({
-        gym_goer_id: user.id,
-        trainer_id: trainer.trainer_id,
-        scheduled_start: scheduledStart.toISOString(),
-        scheduled_end: scheduledEnd.toISOString(),
-        session_rate: trainer.session_rate,
-        currency: trainer.currency ?? 'NGN',
-        status: 'pending',
-        notes: notes.trim() || null,
-      });
+      if (isRescheduling && activeBookingId) {
+        const { error } = await supabase.rpc('reschedule_trainer_booking', {
+          p_booking_id: activeBookingId,
+          p_scheduled_start: scheduledStart.toISOString(),
+          p_scheduled_end: scheduledEnd.toISOString(),
+        });
 
-      if (error) throw error;
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from('trainer_bookings').insert({
+          gym_goer_id: user.id,
+          trainer_id: trainer.trainer_id,
+          scheduled_start: scheduledStart.toISOString(),
+          scheduled_end: scheduledEnd.toISOString(),
+          session_rate: trainer.session_rate,
+          currency: trainer.currency ?? 'NGN',
+          status: 'pending',
+          notes: notes.trim() || null,
+        });
+
+        if (error) throw error;
+      }
 
       Alert.alert(
-        'Request sent',
-        `Your ${selectedSlot.label} session on ${formatSelectedDate(selectedDateKey)} with ${trainerName} has been sent for confirmation. Times are shown in the trainer’s timezone (${timezone}).`,
+        isRescheduling ? 'Rescheduling requested' : 'Request sent',
+        isRescheduling
+          ? `Your session with ${trainerName} has been rescheduled to ${formatSelectedDate(selectedDateKey)} at ${selectedSlot.label}. The trainer must confirm the new time. Times are shown in the trainer’s timezone (${timezone}).`
+          : `Your ${selectedSlot.label} session on ${formatSelectedDate(selectedDateKey)} with ${trainerName} has been sent for confirmation. Times are shown in the trainer’s timezone (${timezone}).`,
         [
           {
             text: 'Done',
@@ -651,11 +689,13 @@ export default function BookingScreen() {
 
         <View style={{ gap: spacing.xs }}>
           <AppText variant="displayLarge" color={colors.text.primary}>
-            Book a session
+            {isRescheduling ? 'Reschedule session' : 'Book a session'}
           </AppText>
 
           <AppText variant="body" color={colors.text.secondary}>
-            Choose a date and an available time with your coach.
+            {isRescheduling
+              ? 'Choose a new date and available time for your session.'
+              : 'Choose a date and an available time with your coach.'}
           </AppText>
         </View>
 
@@ -714,7 +754,9 @@ export default function BookingScreen() {
               </AppText>
 
               <AppText variant="caption" color={colors.text.secondary}>
-                Your request remains pending until the trainer confirms it.
+                {isRescheduling
+                  ? 'Rescheduling a confirmed session will require the trainer to confirm the new time.'
+                  : 'Your request remains pending until the trainer confirms it.'}
               </AppText>
             </View>
 
@@ -921,7 +963,13 @@ export default function BookingScreen() {
             ) : null}
 
             {renderPrimaryButton(
-              isSubmitting ? 'Sending request…' : 'Send booking request',
+              isSubmitting
+                ? isRescheduling
+                  ? 'Rescheduling…'
+                  : 'Sending request…'
+                : isRescheduling
+                  ? 'Reschedule session'
+                  : 'Send booking request',
               () => void handleSubmit(),
               isSubmitting ||
                 isLoadingSlots ||
