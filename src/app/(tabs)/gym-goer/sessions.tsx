@@ -12,6 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/AppText';
+import { Button } from '@/components/Button';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/providers/AuthProvider';
 import { submitTrainerReview } from '@/services/trainer-reviews';
@@ -437,21 +438,13 @@ export default function SessionsScreen() {
             <AppText variant="body" color={colors.text.secondary}>
               {errorMessage}
             </AppText>
-            <Pressable
-              accessibilityRole="button"
+            <Button
+              variant="primary"
+              fullWidth
               onPress={() => void loadBookings()}
-              style={{
-                minHeight: 48,
-                alignItems: 'center',
-                justifyContent: 'center',
-                borderRadius: 12,
-                backgroundColor: colors.brand.red,
-              }}
             >
-              <AppText variant="button" color="#FFFFFF">
-                Try again
-              </AppText>
-            </Pressable>
+              Try again
+            </Button>
           </View>
         ) : visibleBookings.length === 0 ? (
           <View
@@ -550,12 +543,10 @@ export default function SessionsScreen() {
                   {(booking.status === 'pending' || booking.status === 'confirmed') &&
                   new Date(booking.scheduled_start).getTime() > currentTime ? (
                     <>
-                      <Pressable
-                        accessibilityRole="button"
+                      <Button
+                        variant="outline"
+                        fullWidth
                         accessibilityLabel="Reschedule booking"
-                        accessibilityState={{
-                          disabled: cancellingBookingId !== null,
-                        }}
                         disabled={cancellingBookingId !== null}
                         onPress={() =>
                           router.push({
@@ -566,50 +557,20 @@ export default function SessionsScreen() {
                             },
                           })
                         }
-                        style={({ pressed }) => ({
-                          minHeight: 48,
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          borderRadius: 12,
-                          borderWidth: 1,
-                          borderColor: colors.brand.red,
-                          opacity:
-                            cancellingBookingId !== null ? 0.6 : pressed ? 0.75 : 1,
-                        })}
                       >
-                        <AppText variant="button" color={colors.brand.red}>
-                          Reschedule
-                        </AppText>
-                      </Pressable>
+                        Reschedule
+                      </Button>
 
-                      <Pressable
-                        accessibilityRole="button"
+                      <Button
+                        variant="destructive"
+                        fullWidth
                         accessibilityLabel="Cancel booking"
-                        accessibilityState={{
-                          disabled: cancellingBookingId !== null,
-                          busy: cancellingBookingId === booking.id,
-                        }}
                         disabled={cancellingBookingId !== null}
+                        loading={cancellingBookingId === booking.id}
                         onPress={() => handleCancelBooking(booking)}
-                        style={({ pressed }) => ({
-                          minHeight: 48,
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          borderRadius: 12,
-                          borderWidth: 1,
-                          borderColor: colors.text.error,
-                          opacity:
-                            cancellingBookingId !== null ? 0.6 : pressed ? 0.75 : 1,
-                        })}
                       >
-                        {cancellingBookingId === booking.id ? (
-                          <ActivityIndicator color={colors.text.error} />
-                        ) : (
-                          <AppText variant="button" color={colors.text.error}>
-                            Cancel booking
-                          </AppText>
-                        )}
-                      </Pressable>
+                        Cancel booking
+                      </Button>
                     </>
                   ) : null}
 
@@ -629,21 +590,13 @@ export default function SessionsScreen() {
                     ) : (
                       <View style={{ gap: spacing.md }}>
                         {!isReviewFormOpen ? (
-                          <Pressable
-                            accessibilityRole="button"
+                          <Button
+                            variant="primary"
+                            fullWidth
                             onPress={() => openReviewForm(booking.id)}
-                            style={{
-                              minHeight: 48,
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              borderRadius: 12,
-                              backgroundColor: colors.brand.red,
-                            }}
                           >
-                            <AppText variant="button" color="#FFFFFF">
-                              Leave a review
-                            </AppText>
-                          </Pressable>
+                            Leave a review
+                          </Button>
                         ) : (
                           <View
                             style={{
@@ -752,42 +705,24 @@ export default function SessionsScreen() {
                               </AppText>
                             ) : null}
 
-                            <Pressable
-                              accessibilityRole="button"
+                            <Button
+                              variant="primary"
+                              fullWidth
+                              loading={isSubmittingReview}
                               disabled={isSubmittingReview}
                               onPress={() => void handleSubmitReview(booking)}
-                              style={{
-                                minHeight: 48,
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                borderRadius: 12,
-                                backgroundColor: colors.brand.red,
-                                opacity: isSubmittingReview ? 0.6 : 1,
-                              }}
                             >
-                              {isSubmittingReview ? (
-                                <ActivityIndicator color="#FFFFFF" />
-                              ) : (
-                                <AppText variant="button" color="#FFFFFF">
-                                  Submit review
-                                </AppText>
-                              )}
-                            </Pressable>
+                              Submit review
+                            </Button>
 
-                            <Pressable
-                              accessibilityRole="button"
+                            <Button
+                              variant="ghost"
+                              fullWidth
                               disabled={isSubmittingReview}
                               onPress={closeReviewForm}
-                              style={{
-                                minHeight: 44,
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                              }}
                             >
-                              <AppText variant="button" color={colors.text.secondary}>
-                                Cancel
-                              </AppText>
-                            </Pressable>
+                              Cancel
+                            </Button>
                           </View>
                         )}
                       </View>

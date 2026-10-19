@@ -1,0 +1,65 @@
+{
+  "version": "5",
+  "specifiers": {
+    "jsr:@deno/installer-shell-setup@*": "0.3.4"
+  },
+  "jsr": {
+    "@deno/installer-shell-setup@0.3.4": {
+      "integrity": "48665d1a737d487cce6874bc97bba70a5aeffa7053aca3f60df93c6fab8963b4"
+    }
+  },
+  "workspace": {
+    "packageJson": {
+      "dependencies": [
+        "npm:@expo-google-fonts/barlow-condensed@~0.4.1",
+        "npm:@expo-google-fonts/inter@~0.4.2",
+        "npm:@expo/ui@~57.0.24",
+        "npm:@expo/vector-icons@^15.0.2",
+        "npm:@gorhom/bottom-sheet@^5.2.14",
+        "npm:@hookform/resolvers@^5.9.1",
+        "npm:@react-native-community/datetimepicker@9.1.0",
+        "npm:@supabase/supabase-js@^2.117.3",
+        "npm:@testing-library/react-native@^14.1.0",
+        "npm:@types/jest@29.5.14",
+        "npm:@types/react@~19.2.2",
+        "npm:eslint-config-expo@~57.0.2",
+        "npm:eslint@9",
+        "npm:expo-constants@~57.0.21",
+        "npm:expo-device@~57.0.2",
+        "npm:expo-font@~57.0.4",
+        "npm:expo-glass-effect@~57.0.4",
+        "npm:expo-image-picker@~57.0.20",
+        "npm:expo-image@~57.0.5",
+        "npm:expo-linking@~57.0.13",
+        "npm:expo-router@~57.0.27",
+        "npm:expo-secure-store@~57.0.4",
+        "npm:expo-splash-screen@~57.0.10",
+        "npm:expo-sqlite@~57.0.4",
+        "npm:expo-status-bar@~57.0.1",
+        "npm:expo-symbols@~57.0.3",
+        "npm:expo-system-ui@~57.0.4",
+        "npm:expo-web-browser@~57.0.3",
+        "npm:expo@~57.0.29",
+        "npm:jest-expo@~57.0.6",
+        "npm:jest@29.7",
+        "npm:lucide-react-native@^1.58.0",
+        "npm:prettier@^3.9.10",
+        "npm:react-dom@19.2.3",
+        "npm:react-hook-form@^7.90.0",
+        "npm:react-native-gesture-handler@2.32",
+        "npm:react-native-reanimated@4.5.1",
+        "npm:react-native-safe-area-context@5.7",
+        "npm:react-native-screens@4.26",
+        "npm:react-native-svg@15.15.4",
+        "npm:react-native-url-polyfill@4",
+        "npm:react-native-web@0.21",
+        "npm:react-native-worklets@0.10.1",
+        "npm:react-native@0.86.3",
+        "npm:react@19.2.3",
+        "npm:supabase@^2.121.0",
+        "npm:typescript@~6.0.3",
+        "npm:zod@^4.6.7"
+      ]
+    }
+  }
+}
