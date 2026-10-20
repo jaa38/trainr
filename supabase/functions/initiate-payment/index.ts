@@ -1,6 +1,6 @@
-
 import "@supabase/functions-js/edge-runtime.d.ts";
 import { withSupabase } from "@supabase/server";
+import { isUuid, toKobo } from "../_shared/payment-validation.ts";
 
 const jsonResponse = (
   body: Record<string, unknown>,
@@ -11,19 +11,27 @@ const jsonResponse = (
     headers: { "Cache-Control": "no-store" },
   });
 
-const isUuid = (value: unknown): value is string =>
-  typeof value === "string" &&
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-    value,
-  );
+type PaymentReservation = {
+  payment_id: string;
+  booking_id: string;
+  provider_reference: string | null;
+  authorization_url: string | null;
+  payment_status: string;
+  was_created: boolean;
+  amount: number;
+  currency: string;
+};
+
+type InitializationClaim = {
+  payment_id: string;
+  initialization_status: string;
+  claimed: boolean;
+};
 
 export default {
   fetch: withSupabase({ auth: "user" }, async (req, ctx) => {
     if (req.method !== "POST") {
-      return jsonResponse(
-        { error: "Method not allowed." },
-        405,
-      );
+      return jsonResponse({ error: "Method not allowed." }, 405);
     }
 
     let body: {
@@ -40,14 +48,10 @@ export default {
       );
     }
 
-    if (
-      !isUuid(body.bookingId) ||
-      !isUuid(body.idempotencyKey)
-    ) {
+    if (!isUuid(body.bookingId) || !isUuid(body.idempotencyKey)) {
       return jsonResponse(
         {
-          error:
-            "Valid bookingId and idempotencyKey UUIDs are required.",
+          error: "Valid bookingId and idempotencyKey UUIDs are required.",
         },
         400,
       );
@@ -56,9 +60,9 @@ export default {
     const userId = ctx.userClaims?.id;
     const email = ctx.userClaims?.email;
 
-    if (!userId || typeof email !== "string" || !email) {
+    if (!userId || !email) {
       return jsonResponse(
-        { error: "A signed-in user with an email address is required." },
+        { error: "An authenticated user with an email is required." },
         401,
       );
     }
@@ -74,7 +78,7 @@ export default {
       );
     }
 
-    // Validate ownership and booking status using the user's RLS-scoped client.
+    // Read the booking using the authenticated user's Supabase context.
     const { data: booking, error: bookingError } = await ctx.supabase
       .from("trainer_bookings")
       .select("id, gym_goer_id, status, session_rate, currency")
@@ -86,7 +90,7 @@ export default {
       console.error("Booking lookup failed:", bookingError.message);
 
       return jsonResponse(
-        { error: "Unable to validate booking." },
+        { error: "Unable to retrieve the booking." },
         500,
       );
     }
@@ -100,193 +104,257 @@ export default {
 
     if (booking.status !== "confirmed") {
       return jsonResponse(
-        {
-          error: "Only confirmed bookings can be paid for.",
-          bookingStatus: booking.status,
-        },
+        { error: "Only confirmed bookings can be paid for." },
         409,
       );
     }
 
     if (booking.currency !== "NGN") {
       return jsonResponse(
-        {
-          error:
-            "Only NGN payments are currently supported.",
-        },
+        { error: "This payment currency is not supported yet." },
         409,
       );
     }
 
     const amountInNaira = Number(booking.session_rate);
-    const amountInKobo = Math.round(amountInNaira * 100);
+    const amountInKobo = toKobo(amountInNaira);
 
-    if (
-      !Number.isFinite(amountInNaira) ||
-      amountInNaira <= 0 ||
-      !Number.isSafeInteger(amountInKobo) ||
-      Math.abs(amountInNaira * 100 - amountInKobo) > 0.000001
-    ) {
+    if (amountInKobo === null) {
       return jsonResponse(
         { error: "Booking has an invalid payment amount." },
         409,
       );
     }
 
-    // Privileged database access is used only after ownership validation.
     const admin = ctx.supabaseAdmin;
 
-    // Reuse an existing attempt when the client retries with the same key.
-    const { data: keyedPayment, error: keyedPaymentError } = await admin
-      .from("booking_payments")
-      .select(
-        "id, booking_id, provider_reference, status, authorization_url",
-      )
-      .eq("gym_goer_id", userId)
-      .eq("idempotency_key", body.idempotencyKey)
-      .maybeSingle();
+    // Reserve or reuse a payment attempt atomically in PostgreSQL.
+    const {
+      data: reservation,
+      error: reservationError,
+    } = await admin.rpc("reserve_booking_payment_attempt", {
+      p_booking_id: booking.id,
+      p_gym_goer_id: userId,
+      p_idempotency_key: body.idempotencyKey,
+    });
 
-    if (keyedPaymentError) {
+    if (reservationError) {
       console.error(
-        "Idempotency lookup failed:",
-        keyedPaymentError.message,
+        "Payment reservation failed:",
+        reservationError.message,
       );
-
-      return jsonResponse(
-        { error: "Unable to check the existing payment attempt." },
-        500,
-      );
-    }
-
-    if (keyedPayment) {
-      if (keyedPayment.booking_id !== booking.id) {
-        return jsonResponse(
-          { error: "This idempotency key belongs to another booking." },
-          409,
-        );
-      }
-
-      if (keyedPayment.status === "successful") {
-        return jsonResponse(
-          { error: "This booking already has a successful payment." },
-          409,
-        );
-      }
-
-      if (
-        keyedPayment.status === "pending" &&
-        keyedPayment.authorization_url &&
-        keyedPayment.provider_reference
-      ) {
-        return jsonResponse({
-          paymentId: keyedPayment.id,
-          reference: keyedPayment.provider_reference,
-          authorizationUrl: keyedPayment.authorization_url,
-          status: "pending",
-        });
-      }
 
       return jsonResponse(
         {
           error:
-            "This payment attempt cannot be restarted automatically. Reconciliation is required.",
+            "Unable to reserve a payment attempt. Please check the payment status before retrying.",
         },
         409,
       );
     }
 
-    // Do not create a second attempt while another one is unresolved.
-    const { data: pendingPayment, error: pendingPaymentError } =
-      await admin
-        .from("booking_payments")
-        .select("id, provider_reference, authorization_url")
-        .eq("booking_id", booking.id)
-        .eq("status", "pending")
-        .maybeSingle();
+    const paymentAttempt = (
+      Array.isArray(reservation) ? reservation[0] : reservation
+    ) as PaymentReservation | null;
 
-    if (pendingPaymentError) {
-      console.error(
-        "Pending payment lookup failed:",
-        pendingPaymentError.message,
-      );
-
+    if (!paymentAttempt) {
       return jsonResponse(
-        { error: "Unable to check pending payments." },
+        { error: "No payment attempt was returned." },
         500,
       );
     }
 
-    if (pendingPayment) {
-      if (
-        pendingPayment.authorization_url &&
-        pendingPayment.provider_reference
-      ) {
-        return jsonResponse({
-          paymentId: pendingPayment.id,
-          reference: pendingPayment.provider_reference,
-          authorizationUrl: pendingPayment.authorization_url,
-          status: "pending",
-        });
-      }
+    const paymentId = paymentAttempt.payment_id;
+    const reference = paymentAttempt.provider_reference;
+
+    if (
+      paymentAttempt.booking_id !== booking.id ||
+      !paymentId ||
+      !isUuid(paymentId)
+    ) {
+      console.error("Payment reservation returned invalid identifiers.");
 
       return jsonResponse(
-        {
-          error:
-            "A payment attempt is already being processed. Please try again later.",
-        },
-        409,
+        { error: "The payment reservation could not be validated." },
+        500,
       );
     }
 
-    const paymentId = crypto.randomUUID();
-    const reference = `trainr_${crypto.randomUUID().replaceAll("-", "")}`;
-
-    // Create the pending record before contacting Paystack.
-    const { error: insertError } = await admin
-      .from("booking_payments")
-      .insert({
-        id: paymentId,
-        booking_id: booking.id,
-        gym_goer_id: userId,
-        amount: amountInNaira,
-        currency: "NGN",
-        provider: "paystack",
-        provider_reference: reference,
-        status: "pending",
-        idempotency_key: body.idempotencyKey,
+    if (paymentAttempt.payment_status === "successful") {
+      return jsonResponse({
+        paymentId,
+        reference,
+        status: "successful",
+        message: "This booking has already been paid for.",
       });
+    }
 
-    if (insertError) {
-      // A concurrent request may have won the unique-index race.
-      const { data: existingPayment } = await admin
+    if (paymentAttempt.payment_status !== "pending") {
+      return jsonResponse(
+        {
+          error: "The payment attempt requires reconciliation.",
+          paymentId,
+          reference,
+          status: paymentAttempt.payment_status,
+        },
+        409,
+      );
+    }
+
+    // Check persisted initialization state before reusing an existing checkout.
+    if (!paymentAttempt.was_created) {
+      const {
+        data: existingPayment,
+        error: existingPaymentError,
+      } = await admin
         .from("booking_payments")
-        .select("id, provider_reference, authorization_url")
-        .eq("booking_id", booking.id)
-        .eq("status", "pending")
+        .select("initialization_status, authorization_url")
+        .eq("id", paymentId)
+        .eq("gym_goer_id", userId)
         .maybeSingle();
 
+      if (existingPaymentError || !existingPayment) {
+        console.error(
+          "Unable to retrieve existing payment initialization state:",
+          existingPaymentError?.message ?? "Payment record not found.",
+        );
+
+        return jsonResponse(
+          {
+            error: "Unable to confirm the existing checkout state.",
+            paymentId,
+          },
+          500,
+        );
+      }
+
       if (
-        existingPayment?.authorization_url &&
-        existingPayment.provider_reference
+        existingPayment.initialization_status === "initialized" &&
+        existingPayment.authorization_url &&
+        paymentAttempt.authorization_url ===
+          existingPayment.authorization_url &&
+        reference
       ) {
         return jsonResponse({
-          paymentId: existingPayment.id,
-          reference: existingPayment.provider_reference,
+          paymentId,
+          reference,
           authorizationUrl: existingPayment.authorization_url,
           status: "pending",
         });
       }
 
-      console.error("Payment record creation failed:", insertError.message);
-
       return jsonResponse(
         {
           error:
-            "Unable to create a payment attempt. Check for an existing attempt before retrying.",
+            "The existing payment requires reconciliation before checkout can be reused.",
+          paymentId,
+          reference,
+          status: "pending",
+          initializationStatus: existingPayment.initialization_status,
         },
         409,
       );
     }
+
+    if (!reference) {
+      return jsonResponse(
+        {
+          error: "The new payment attempt has no provider reference.",
+          paymentId,
+        },
+        500,
+      );
+    }
+
+    // Confirm the reserved amount and currency match the booking.
+    const reservedAmount = Number(paymentAttempt.amount);
+    const reservedAmountInKobo = toKobo(reservedAmount);
+
+    if (
+      reservedAmountInKobo === null ||
+      reservedAmountInKobo !== amountInKobo ||
+      paymentAttempt.currency !== booking.currency
+    ) {
+      console.error("Reserved payment details do not match the booking.");
+
+      return jsonResponse(
+        {
+          error: "Reserved payment details do not match the booking.",
+          paymentId,
+          reference,
+        },
+        409,
+      );
+    }
+
+    // Claim initialization atomically before contacting Paystack.
+    const {
+      data: claimData,
+      error: claimError,
+    } = await admin.rpc("claim_booking_payment_initialization", {
+      p_payment_id: paymentId,
+    });
+
+    if (claimError) {
+      console.error(
+        "Payment initialization claim failed:",
+        claimError.message,
+      );
+
+      return jsonResponse(
+        {
+          error: "Unable to claim payment initialization. Please retry later.",
+          paymentId,
+          reference,
+        },
+        500,
+      );
+    }
+
+    const claim = (
+      Array.isArray(claimData) ? claimData[0] : claimData
+    ) as InitializationClaim | null;
+
+    if (!claim || claim.payment_id !== paymentId) {
+      return jsonResponse(
+        { error: "Unable to validate the initialization claim.", paymentId },
+        500,
+      );
+    }
+
+    if (!claim.claimed) {
+      return jsonResponse(
+        {
+          error:
+            "This payment cannot be initialized again without reconciliation.",
+          paymentId,
+          reference,
+          status: "pending",
+          initializationStatus: claim.initialization_status,
+        },
+        409,
+      );
+    }
+
+    // Uncertain provider outcomes must not trigger a blind retry.
+    const markReconciliationRequired = async () => {
+      const { error } = await admin
+        .from("booking_payments")
+        .update({
+          initialization_status: "reconciliation_required",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", paymentId)
+        .eq("status", "pending")
+        .eq("initialization_status", "initializing");
+
+      if (error) {
+        console.error(
+          "Unable to mark payment for reconciliation:",
+          error.message,
+        );
+      }
+    };
 
     let paystackResponse: Response;
 
@@ -313,19 +381,20 @@ export default {
         },
       );
     } catch (error) {
-      // The provider may have received the request even if we timed out.
-      // Keep the attempt pending so a retry cannot create another charge.
       console.error(
-        "Paystack request outcome is uncertain:",
+        "Paystack initialization outcome is uncertain:",
         error instanceof Error ? error.message : "Unknown network error",
       );
+
+      await markReconciliationRequired();
 
       return jsonResponse(
         {
           error:
-            "Payment initialization could not be confirmed. Do not start another attempt; reconciliation is required.",
+            "Payment initialization could not be confirmed. Reconciliation is required before retrying.",
           paymentId,
           reference,
+          status: "pending",
         },
         503,
       );
@@ -343,7 +412,7 @@ export default {
     try {
       result = await paystackResponse.json();
     } catch {
-      console.error("Paystack returned an unreadable response.");
+      await markReconciliationRequired();
 
       return jsonResponse(
         {
@@ -367,6 +436,8 @@ export default {
         result.message ?? `HTTP ${paystackResponse.status}`,
       );
 
+      await markReconciliationRequired();
+
       return jsonResponse(
         {
           error:
@@ -378,27 +449,78 @@ export default {
       );
     }
 
-    const { error: updateError } = await admin
-      .from("booking_payments")
-      .update({
-        authorization_url: result.data.authorization_url,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", paymentId)
-      .eq("status", "pending");
+    // Persist the checkout URL and initialized state.
+    // Any retry below reuses this response; it never initializes a new transaction.
+    const checkoutUrl = result.data.authorization_url;
 
-    if (updateError) {
-      // The provider may already have created a checkout session.
-      // Keep the reference for later reconciliation.
+    const saveCheckoutDetails = async () => {
+      return await admin
+        .from("booking_payments")
+        .update({
+          authorization_url: checkoutUrl,
+          initialization_status: "initialized",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", paymentId)
+        .eq("status", "pending")
+        .eq("initialization_status", "initializing")
+        .select("id")
+        .maybeSingle();
+    };
+
+    let { data: savedPayment, error: updateError } =
+      await saveCheckoutDetails();
+
+    if (updateError || !savedPayment) {
       console.error(
-        "Unable to save Paystack checkout URL:",
-        updateError.message,
+        "Initial checkout persistence was not confirmed:",
+        updateError?.message ?? "No row was updated.",
       );
+
+      // A write may have succeeded even when its response was lost.
+      const {
+        data: persistedPayment,
+        error: persistenceCheckError,
+      } = await admin
+        .from("booking_payments")
+        .select(
+          "id, provider_reference, authorization_url, status, initialization_status",
+        )
+        .eq("id", paymentId)
+        .eq("gym_goer_id", userId)
+        .maybeSingle();
+
+      const originalWriteSucceeded = !persistenceCheckError &&
+        persistedPayment?.id === paymentId &&
+        persistedPayment.provider_reference === reference &&
+        persistedPayment.authorization_url === checkoutUrl &&
+        persistedPayment.status === "pending" &&
+        persistedPayment.initialization_status === "initialized";
+
+      if (originalWriteSucceeded) {
+        savedPayment = { id: paymentId };
+        updateError = null;
+      } else {
+        // Retry the database write once, with the same provider response.
+        const retry = await saveCheckoutDetails();
+        savedPayment = retry.data;
+        updateError = retry.error;
+      }
+    }
+
+    if (updateError || !savedPayment) {
+      console.error(
+        "Unable to persist Paystack checkout details after retry:",
+        updateError?.message ??
+          "The payment state changed or no row was updated.",
+      );
+
+      await markReconciliationRequired();
 
       return jsonResponse(
         {
           error:
-            "Checkout was initialized, but its details could not be saved. Reconciliation is required.",
+            "Checkout may have been initialized, but TRAINR could not safely persist its details. Reconciliation is required.",
           paymentId,
           reference,
         },
@@ -409,7 +531,7 @@ export default {
     return jsonResponse({
       paymentId,
       reference,
-      authorizationUrl: result.data.authorization_url,
+      authorizationUrl: checkoutUrl,
       status: "pending",
     });
   }),

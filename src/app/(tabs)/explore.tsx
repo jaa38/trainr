@@ -12,6 +12,11 @@ export default function ExploreScreen() {
   const [status, setStatus] = useState<ConnectionStatus>('idle');
   const [message, setMessage] = useState('Run the test to verify your connection.');
 
+  const [authCheckStatus, setAuthCheckStatus] = useState<ConnectionStatus>('idle');
+  const [authCheckMessage, setAuthCheckMessage] = useState(
+    'Sign in to test authenticated Edge Function access.',
+  );
+
   async function testConnection() {
     setStatus('loading');
     setMessage('Connecting to Supabase...');
@@ -49,6 +54,46 @@ export default function ExploreScreen() {
     } catch {
       setStatus('error');
       setMessage('Connection failed. Check your .env values, network, and Metro logs.');
+    }
+  }
+
+  async function testAuthenticatedFunction() {
+    setAuthCheckStatus('loading');
+    setAuthCheckMessage('Checking your authenticated session...');
+
+    try {
+      const { data, error } = await supabase.auth.getSession();
+
+      if (error) throw error;
+
+      if (!data.session?.access_token) {
+        throw new Error('Please sign in before running this test.');
+      }
+
+      const { data: result, error: functionError } = await supabase.functions.invoke(
+        'auth-check',
+        {
+          method: 'GET',
+        },
+      );
+
+      if (functionError) {
+        throw functionError;
+      }
+
+      if (!result?.ok || result.authenticated !== true) {
+        throw new Error('The diagnostic function did not confirm authentication.');
+      }
+
+      setAuthCheckStatus('success');
+      setAuthCheckMessage('Authenticated request successful. No payment was created.');
+    } catch (error) {
+      setAuthCheckStatus('error');
+      setAuthCheckMessage(
+        error instanceof Error
+          ? error.message
+          : 'Authentication check failed. Check the app logs.',
+      );
     }
   }
 
@@ -122,6 +167,68 @@ export default function ExploreScreen() {
           ) : (
             <AppText variant="buttonLarge" color={theme.colors.text.inverse}>
               Test connection
+            </AppText>
+          )}
+        </Pressable>
+      </View>
+
+      <View
+        style={{
+          padding: theme.spacing.lg,
+          gap: theme.spacing.md,
+          borderRadius: theme.radius.lg,
+          borderWidth: 1,
+          borderColor: theme.colors.border.default,
+          backgroundColor: theme.colors.surface.default,
+        }}
+      >
+        <AppText variant="h3">Authenticated Edge Function</AppText>
+
+        <AppText
+          variant="body"
+          color={
+            authCheckStatus === 'success'
+              ? theme.colors.success
+              : authCheckStatus === 'error'
+                ? theme.colors.error
+                : theme.colors.text.secondary
+          }
+          accessibilityLiveRegion="polite"
+        >
+          {authCheckStatus === 'success'
+            ? 'Authentication successful'
+            : authCheckStatus === 'error'
+              ? 'Authentication check failed'
+              : authCheckStatus === 'loading'
+                ? 'Checking authentication...'
+                : 'Not tested yet'}
+        </AppText>
+
+        <AppText variant="body" color={theme.colors.text.secondary}>
+          {authCheckMessage}
+        </AppText>
+
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Test authenticated Edge Function"
+          accessibilityState={{ disabled: authCheckStatus === 'loading' }}
+          disabled={authCheckStatus === 'loading'}
+          onPress={testAuthenticatedFunction}
+          style={({ pressed }) => ({
+            minHeight: theme.sizes.buttonLarge,
+            alignItems: 'center',
+            justifyContent: 'center',
+            paddingHorizontal: theme.spacing.lg,
+            borderRadius: theme.radius.md,
+            backgroundColor: theme.colors.primary,
+            opacity: authCheckStatus === 'loading' ? 0.6 : pressed ? 0.8 : 1,
+          })}
+        >
+          {authCheckStatus === 'loading' ? (
+            <ActivityIndicator color={theme.colors.text.inverse} />
+          ) : (
+            <AppText variant="buttonLarge" color={theme.colors.text.inverse}>
+              Test authenticated function
             </AppText>
           )}
         </Pressable>

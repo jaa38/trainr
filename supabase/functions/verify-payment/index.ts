@@ -1,6 +1,10 @@
-
 import "@supabase/functions-js/edge-runtime.d.ts";
 import { withSupabase } from "@supabase/server";
+import {
+  isUuid,
+  matchesVerifiedTransaction,
+  toKobo,
+} from "../_shared/payment-validation.ts";
 
 const jsonResponse = (
   body: Record<string, unknown>,
@@ -10,12 +14,6 @@ const jsonResponse = (
     status,
     headers: { "Cache-Control": "no-store" },
   });
-
-const isUuid = (value: unknown): value is string =>
-  typeof value === "string" &&
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-    value,
-  );
 
 export default {
   fetch: withSupabase({ auth: "user" }, async (req, ctx) => {
@@ -112,14 +110,9 @@ export default {
     }
 
     const amountInNaira = Number(payment.amount);
-    const expectedAmountInKobo = Math.round(amountInNaira * 100);
+    const expectedAmountInKobo = toKobo(amountInNaira);
 
-    if (
-      !Number.isFinite(amountInNaira) ||
-      amountInNaira <= 0 ||
-      !Number.isSafeInteger(expectedAmountInKobo) ||
-      Math.abs(amountInNaira * 100 - expectedAmountInKobo) > 0.000001
-    ) {
+    if (expectedAmountInKobo === null) {
       return jsonResponse(
         { error: "Stored payment amount is invalid." },
         409,
@@ -130,7 +123,9 @@ export default {
 
     try {
       providerResponse = await fetch(
-        `https://api.paystack.co/transaction/verify/${encodeURIComponent(payment.provider_reference)}`,
+        `https://api.paystack.co/transaction/verify/${
+          encodeURIComponent(payment.provider_reference)
+        }`,
         {
           method: "GET",
           headers: {
@@ -150,7 +145,8 @@ export default {
         {
           paymentId: payment.id,
           status: "pending",
-          message: "Verification is temporarily unavailable. Please retry later.",
+          message:
+            "Verification is temporarily unavailable. Please retry later.",
         },
         503,
       );
@@ -186,7 +182,8 @@ export default {
         {
           paymentId: payment.id,
           status: "pending",
-          message: "Paystack could not confirm the transaction. Please retry later.",
+          message:
+            "Paystack could not confirm the transaction. Please retry later.",
         },
         502,
       );
@@ -196,9 +193,12 @@ export default {
 
     // Match the verified transaction against the stored payment.
     if (
-      transaction.reference !== payment.provider_reference ||
-      transaction.amount !== expectedAmountInKobo ||
-      transaction.currency !== payment.currency
+      !matchesVerifiedTransaction(
+        transaction,
+        payment.provider_reference,
+        expectedAmountInKobo,
+        payment.currency,
+      )
     ) {
       console.error(
         "Paystack transaction details did not match the payment record.",
@@ -287,13 +287,15 @@ export default {
     }
 
     // Final status transition is handled atomically in PostgreSQL.
-    const { data: confirmation, error: confirmationError } =
-      await admin.rpc("confirm_booking_payment", {
+    const { data: confirmation, error: confirmationError } = await admin.rpc(
+      "confirm_booking_payment",
+      {
         p_payment_id: payment.id,
         p_expected_reference: payment.provider_reference,
         p_expected_amount: amountInNaira,
         p_expected_currency: payment.currency,
-      });
+      },
+    );
 
     if (confirmationError) {
       console.error(
