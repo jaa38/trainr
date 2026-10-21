@@ -1,4 +1,6 @@
+import * as Crypto from 'expo-crypto';
 import { router, useFocusEffect } from 'expo-router';
+import * as WebBrowser from 'expo-web-browser';
 import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
@@ -35,6 +37,25 @@ type Booking = {
   } | null;
 };
 
+type BookingPayment = {
+  id?: string;
+  booking_id: string;
+  status: 'pending' | 'successful' | 'failed' | 'cancelled';
+  initialization_status: string;
+};
+
+type PaymentFunctionResponse = {
+  paymentId?: string;
+  reference?: string;
+  authorizationUrl?: string;
+  status?: 'pending' | 'successful' | 'failed' | 'cancelled';
+  providerStatus?: string;
+  initializationStatus?: string;
+  recovery?: string;
+  error?: string;
+  message?: string;
+};
+
 const HISTORY_STATUSES = ['declined', 'cancelled', 'completed'];
 
 function formatDate(value: string) {
@@ -63,12 +84,22 @@ function formatStatus(status: Booking['status']) {
   return status.charAt(0).toUpperCase() + status.slice(1);
 }
 
+function createIdempotencyKey(): string {
+  return Crypto.randomUUID();
+}
+
 export default function SessionsScreen() {
   const { user } = useAuth();
   const { colors, spacing } = useTrainrTheme();
 
   const [activeTab, setActiveTab] = useState<SessionTab>('Upcoming');
   const [bookings, setBookings] = useState<Booking[]>([]);
+  const [paymentStatuses, setPaymentStatuses] = useState<Map<string, BookingPayment>>(
+    new Map(),
+  );
+  const [processingPaymentBookingId, setProcessingPaymentBookingId] = useState<
+    string | null
+  >(null);
   const [reviewedBookingIds, setReviewedBookingIds] = useState<Set<string>>(new Set());
   const [reviewBookingId, setReviewBookingId] = useState<string | null>(null);
   const [reviewRating, setReviewRating] = useState(0);
@@ -86,6 +117,7 @@ export default function SessionsScreen() {
     async (refresh = false) => {
       if (!user) {
         setBookings([]);
+        setPaymentStatuses(new Map());
         setReviewedBookingIds(new Set());
         setIsLoading(false);
         setIsRefreshing(false);
@@ -143,6 +175,27 @@ export default function SessionsScreen() {
 
         setBookings(bookingsWithTrainers);
 
+        const { data: paymentRows, error: paymentsError } = await supabase
+          .from('booking_payments')
+          .select('id, booking_id, status, initialization_status, created_at')
+          .eq('gym_goer_id', user.id)
+          .order('created_at', { ascending: false });
+
+        if (paymentsError) {
+          console.error('[Sessions] Unable to load payment statuses:', paymentsError);
+          // Preserve the last known statuses when a refresh fails.
+        } else {
+          const latestPaymentsByBooking = new Map<string, BookingPayment>();
+
+          for (const payment of paymentRows ?? []) {
+            if (!latestPaymentsByBooking.has(payment.booking_id)) {
+              latestPaymentsByBooking.set(payment.booking_id, payment as BookingPayment);
+            }
+          }
+
+          setPaymentStatuses(latestPaymentsByBooking);
+        }
+
         const completedBookingIds = bookingsWithTrainers
           .filter((booking) => booking.status === 'completed')
           .map((booking) => booking.id);
@@ -182,10 +235,7 @@ export default function SessionsScreen() {
       'Cancel booking?',
       'Are you sure you want to cancel this training session? This action cannot be undone.',
       [
-        {
-          text: 'Keep booking',
-          style: 'cancel',
-        },
+        { text: 'Keep booking', style: 'cancel' },
         {
           text: 'Cancel booking',
           style: 'destructive',
@@ -223,6 +273,203 @@ export default function SessionsScreen() {
         },
       ],
     );
+  };
+
+  const handlePayForBooking = async (booking: Booking) => {
+    if (!user || booking.status !== 'confirmed') {
+      Alert.alert('Payment unavailable', 'Only confirmed bookings can be paid for.');
+      return;
+    }
+
+    if (processingPaymentBookingId) return;
+
+    setProcessingPaymentBookingId(booking.id);
+
+    try {
+      const { data: existingPayments, error: lookupError } = await supabase
+        .from('booking_payments')
+        .select('id, booking_id, status, initialization_status, created_at')
+        .eq('booking_id', booking.id)
+        .eq('gym_goer_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      if (lookupError) throw lookupError;
+
+      const existingPayment = existingPayments?.[0];
+
+      if (existingPayment?.status === 'successful') {
+        await loadBookings(true);
+        Alert.alert('Already paid', 'This booking has already been paid for.');
+        return;
+      }
+
+      let paymentId: string | undefined = existingPayment?.id;
+      let authorizationUrl: string | undefined;
+
+      if (existingPayment?.status === 'pending') {
+        if (!paymentId) {
+          Alert.alert(
+            'Payment needs review',
+            'We could not identify the existing payment. Please contact support.',
+          );
+          return;
+        }
+
+        const { data: verification, error: verificationError } =
+          await supabase.functions.invoke<PaymentFunctionResponse>('verify-payment', {
+            body: { paymentId },
+          });
+
+        if (verificationError) {
+          Alert.alert(
+            'Payment status unavailable',
+            'We could not verify your existing payment. No new transaction was created.',
+          );
+          return;
+        }
+
+        if (verification?.status === 'successful') {
+          await loadBookings(true);
+          Alert.alert(
+            'Payment confirmed',
+            'Your payment has been verified successfully.',
+          );
+          return;
+        }
+
+        if (verification?.status === 'failed') {
+          Alert.alert(
+            'Payment failed',
+            'Paystack reports that this transaction failed. Please contact support before trying again.',
+          );
+          return;
+        }
+
+        if (existingPayment.initialization_status !== 'initialized') {
+          Alert.alert(
+            'Payment needs review',
+            'Your existing payment requires reconciliation. No new transaction was created.',
+          );
+          return;
+        }
+
+        const { data: recovery, error: recoveryError } =
+          await supabase.functions.invoke<PaymentFunctionResponse>('recover-payment', {
+            body: { paymentId },
+          });
+
+        if (recoveryError) {
+          Alert.alert(
+            'Checkout unavailable',
+            'We could not recover your existing checkout. Please try again later.',
+          );
+          return;
+        }
+
+        if (recovery?.status === 'successful') {
+          await loadBookings(true);
+          Alert.alert(
+            'Payment confirmed',
+            'Your payment has been verified successfully.',
+          );
+          return;
+        }
+
+        if (
+          recovery?.recovery === 'reconciliation_required' ||
+          !recovery?.authorizationUrl
+        ) {
+          Alert.alert(
+            'Payment needs review',
+            recovery?.message ??
+              'We could not safely recover this checkout. No new transaction was created.',
+          );
+          return;
+        }
+
+        authorizationUrl = recovery.authorizationUrl;
+      } else if (!existingPayment) {
+        const { data: initialization, error: initializationError } =
+          await supabase.functions.invoke<PaymentFunctionResponse>('initiate-payment', {
+            body: {
+              bookingId: booking.id,
+              idempotencyKey: createIdempotencyKey(),
+            },
+          });
+
+        if (initializationError) {
+          Alert.alert(
+            'Payment initialization unavailable',
+            'Check your payment status before trying again. No automatic retry was made.',
+          );
+          return;
+        }
+
+        if (initialization?.status === 'successful') {
+          await loadBookings(true);
+          Alert.alert('Already paid', 'This booking has already been paid for.');
+          return;
+        }
+
+        if (initialization?.error) {
+          Alert.alert('Unable to start checkout', initialization.error);
+          return;
+        }
+
+        paymentId = initialization?.paymentId;
+        authorizationUrl = initialization?.authorizationUrl;
+      } else {
+        Alert.alert(
+          'Payment needs review',
+          'This payment is not in a state that can safely be retried. No new transaction was created.',
+        );
+        return;
+      }
+
+      if (!paymentId || !authorizationUrl?.startsWith('https://')) {
+        Alert.alert(
+          'Checkout unavailable',
+          'TRAINR could not safely obtain a valid checkout URL.',
+        );
+        return;
+      }
+
+      await WebBrowser.openBrowserAsync(authorizationUrl);
+
+      // Returning from checkout is not proof of payment; verify with Paystack.
+      const { data: finalVerification, error: finalVerificationError } =
+        await supabase.functions.invoke<PaymentFunctionResponse>('verify-payment', {
+          body: { paymentId },
+        });
+
+      await loadBookings(true);
+
+      if (finalVerificationError) {
+        Alert.alert(
+          'Payment status pending',
+          'We could not confirm your payment yet. Refresh Sessions later to check again.',
+        );
+      } else if (finalVerification?.status === 'successful') {
+        Alert.alert('Payment successful', 'Your payment has been verified.');
+      } else if (finalVerification?.status === 'failed') {
+        Alert.alert('Payment failed', 'Paystack reports that this transaction failed.');
+      } else {
+        Alert.alert(
+          'Payment not confirmed',
+          'Your payment is still pending. Refresh Sessions to check its status.',
+        );
+      }
+    } catch (error) {
+      console.error('[Sessions] Payment action failed:', error);
+
+      Alert.alert(
+        'Unable to process payment',
+        error instanceof Error ? error.message : 'Please try again later.',
+      );
+    } finally {
+      setProcessingPaymentBookingId(null);
+    }
   };
 
   useFocusEffect(
@@ -438,11 +685,7 @@ export default function SessionsScreen() {
             <AppText variant="body" color={colors.text.secondary}>
               {errorMessage}
             </AppText>
-            <Button
-              variant="primary"
-              fullWidth
-              onPress={() => void loadBookings()}
-            >
+            <Button variant="primary" fullWidth onPress={() => void loadBookings()}>
               Try again
             </Button>
           </View>
@@ -489,6 +732,16 @@ export default function SessionsScreen() {
 
               const isReviewed = reviewedBookingIds.has(booking.id);
               const isReviewFormOpen = reviewBookingId === booking.id;
+              const payment = paymentStatuses.get(booking.id);
+              const isPaid = payment?.status === 'successful';
+              const paymentNeedsReview =
+                payment?.status === 'failed' || payment?.status === 'cancelled';
+
+              const canPay =
+                booking.status === 'confirmed' &&
+                new Date(booking.scheduled_start).getTime() > currentTime &&
+                !isPaid &&
+                !paymentNeedsReview;
 
               return (
                 <View
@@ -532,12 +785,47 @@ export default function SessionsScreen() {
                     <AppText variant="caption" color={colors.text.secondary}>
                       STATUS: {formatStatus(booking.status).toUpperCase()}
                     </AppText>
+
+                    {isPaid ? (
+                      <AppText variant="caption" color={colors.text.secondary}>
+                        PAYMENT: PAID
+                      </AppText>
+                    ) : payment?.status === 'pending' ? (
+                      <AppText variant="caption" color={colors.text.secondary}>
+                        PAYMENT: PENDING
+                      </AppText>
+                    ) : payment?.status === 'failed' ? (
+                      <AppText variant="caption" color={colors.text.secondary}>
+                        PAYMENT: FAILED
+                      </AppText>
+                    ) : null}
                   </View>
 
                   {booking.notes ? (
                     <AppText variant="body" color={colors.text.secondary}>
                       Notes: {booking.notes}
                     </AppText>
+                  ) : null}
+
+                  {canPay ? (
+                    <Button
+                      variant="primary"
+                      fullWidth
+                      loading={processingPaymentBookingId === booking.id}
+                      disabled={
+                        processingPaymentBookingId !== null ||
+                        cancellingBookingId !== null
+                      }
+                      accessibilityLabel={`Pay ${formatCurrency(
+                        Number(booking.session_rate),
+                        booking.currency,
+                      )} for this session`}
+                      onPress={() => void handlePayForBooking(booking)}
+                    >
+                      {payment?.status === 'pending'
+                        ? 'Continue payment'
+                        : 'Pay for session'}
+                    </Button>
                   ) : null}
 
                   {(booking.status === 'pending' || booking.status === 'confirmed') &&
@@ -547,7 +835,10 @@ export default function SessionsScreen() {
                         variant="outline"
                         fullWidth
                         accessibilityLabel="Reschedule booking"
-                        disabled={cancellingBookingId !== null}
+                        disabled={
+                          cancellingBookingId !== null ||
+                          processingPaymentBookingId !== null
+                        }
                         onPress={() =>
                           router.push({
                             pathname: '/(tabs)/booking/[trainerId]',
@@ -565,7 +856,10 @@ export default function SessionsScreen() {
                         variant="destructive"
                         fullWidth
                         accessibilityLabel="Cancel booking"
-                        disabled={cancellingBookingId !== null}
+                        disabled={
+                          cancellingBookingId !== null ||
+                          processingPaymentBookingId !== null
+                        }
                         loading={cancellingBookingId === booking.id}
                         onPress={() => handleCancelBooking(booking)}
                       >
@@ -629,7 +923,9 @@ export default function SessionsScreen() {
                                   <Pressable
                                     key={star}
                                     accessibilityRole="radio"
-                                    accessibilityLabel={`${star} ${star === 1 ? 'star' : 'stars'}`}
+                                    accessibilityLabel={`${star} ${
+                                      star === 1 ? 'star' : 'stars'
+                                    }`}
                                     accessibilityState={{
                                       selected: reviewRating === star,
                                     }}
