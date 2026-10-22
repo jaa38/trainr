@@ -22,7 +22,14 @@ function createLookupContext(
     data: unknown;
     error: { message: string } | null;
   },
+  booking: Record<string, unknown> | null = {
+    id: "booking-test",
+    status: "confirmed",
+  },
 ) {
+  let updateCalls = 0;
+  let updateValues: Record<string, unknown> | null = null;
+
   const query = {
     select() {
       return query;
@@ -31,12 +38,27 @@ function createLookupContext(
       return query;
     },
     maybeSingle() {
-      return Promise.resolve({ data: payment, error: null });
+      return Promise.resolve({
+        data: payment,
+        error: null,
+      });
     },
   };
 
-  let updateCalls = 0;
-  let updateValues: Record<string, unknown> | null = null;
+  const bookingQuery = {
+    select() {
+      return bookingQuery;
+    },
+    eq() {
+      return bookingQuery;
+    },
+    maybeSingle() {
+      return Promise.resolve({
+        data: booking,
+        error: null,
+      });
+    },
+  };
 
   const updateQuery = {
     eq() {
@@ -64,7 +86,10 @@ function createLookupContext(
         });
       }
 
-      return Promise.resolve({ data: [], error: null });
+      return Promise.resolve({
+        data: [],
+        error: null,
+      });
     },
   };
 
@@ -72,6 +97,10 @@ function createLookupContext(
     userClaims: { id: "test-user" },
     supabaseAdmin: {
       from(table: string) {
+        if (table === "trainer_bookings") {
+          return bookingQuery;
+        }
+
         assertEquals(table, "booking_payments");
 
         return {
@@ -123,6 +152,10 @@ function postRecoveryRequest(paymentId = validPaymentId) {
 
 function createReconciliationContext(
   payment: Record<string, unknown>,
+  booking: Record<string, unknown> | null = {
+    id: "booking-test",
+    status: "confirmed",
+  },
 ) {
   let updateCalls = 0;
   let updateValues: Record<string, unknown> | null = null;
@@ -142,7 +175,7 @@ function createReconciliationContext(
     },
   };
 
-  const lookupQuery = {
+  const paymentLookupQuery = {
     select() {
       return this;
     },
@@ -150,7 +183,25 @@ function createReconciliationContext(
       return this;
     },
     maybeSingle() {
-      return Promise.resolve({ data: payment, error: null });
+      return Promise.resolve({
+        data: payment,
+        error: null,
+      });
+    },
+  };
+
+  const bookingLookupQuery = {
+    select() {
+      return this;
+    },
+    eq() {
+      return this;
+    },
+    maybeSingle() {
+      return Promise.resolve({
+        data: booking,
+        error: null,
+      });
     },
   };
 
@@ -158,6 +209,10 @@ function createReconciliationContext(
     userClaims: { id: "test-user" },
     supabaseAdmin: {
       from(table: string) {
+        if (table === "trainer_bookings") {
+          return bookingLookupQuery;
+        }
+
         assertEquals(table, "booking_payments");
 
         return {
@@ -166,7 +221,7 @@ function createReconciliationContext(
             updateValues = values;
             return updateQuery;
           },
-          ...lookupQuery,
+          ...paymentLookupQuery,
         };
       },
     },
@@ -267,6 +322,54 @@ Deno.test("returns the existing result for a successful payment", async () => {
   });
   assertEquals(fetchCalls, 0);
 });
+
+Deno.test(
+  "rejects recovery for a completed booking without contacting Paystack",
+  async () => {
+    let fetchCalls = 0;
+
+    const response = await handleRecoverPayment(
+      postRecoveryRequest(),
+      createLookupContext(
+        {
+          id: validPaymentId,
+          booking_id: "booking-test",
+          gym_goer_id: "test-user",
+          amount: 20000,
+          currency: "NGN",
+          provider: "paystack",
+          provider_reference: "trainr_test_reference",
+          authorization_url: "https://checkout.paystack.com/test",
+          status: "pending",
+          initialization_status: "reconciliation_required",
+        },
+        false,
+        undefined,
+        {
+          id: "booking-test",
+          status: "completed",
+        },
+      ),
+      {
+        getSecretKey: () => "test-secret",
+        fetch: async () => {
+          fetchCalls++;
+          throw new Error(
+            "Paystack must not be contacted for a completed booking.",
+          );
+        },
+      },
+    );
+
+    assertEquals(response.status, 409);
+    assertEquals(await response.json(), {
+      error: "Only confirmed bookings can recover payment checkout.",
+      paymentId: validPaymentId,
+      status: "pending",
+    });
+    assertEquals(fetchCalls, 0);
+  },
+);
 
 Deno.test("reuses an existing initialized checkout", async () => {
   let fetchCalls = 0;
@@ -730,5 +833,104 @@ Deno.test(
     const body = await response.json();
     assertEquals(body.status, "pending");
     assertEquals(body.initializationStatus, "reconciliation_required");
+  },
+);
+
+Deno.test(
+  "does not confirm payment when Paystack reports an abandoned transaction",
+  async () => {
+    let rpcCalls = 0;
+
+    const mock = createReconciliationContext({
+      id: validPaymentId,
+      amount: 20000,
+      currency: "NGN",
+      provider: "paystack",
+      provider_reference: "trainr_expected_reference",
+      authorization_url: "https://checkout.paystack.com/test-checkout",
+      status: "pending",
+      initialization_status: "reconciliation_required",
+    });
+
+    const mockContext = {
+      ...mock.mockContext,
+      supabaseAdmin: {
+        ...mock.mockContext.supabaseAdmin,
+        rpc() {
+          rpcCalls++;
+          return Promise.resolve({
+            data: null,
+            error: null,
+          });
+        },
+      },
+    };
+
+    const response = await handleRecoverPayment(
+      postRecoveryRequest(),
+      mockContext,
+      {
+        getSecretKey: () => "test-secret",
+        fetch: async () =>
+          Response.json({
+            status: true,
+            data: {
+              reference: "trainr_expected_reference",
+              status: "abandoned",
+              amount: 2000000,
+              currency: "NGN",
+            },
+          }),
+      },
+    );
+
+    assertEquals(response.status, 200);
+    assertEquals(rpcCalls, 0);
+
+    const body = await response.json();
+    assertEquals(body.status, "pending");
+    assertEquals(body.initializationStatus, "reconciliation_required");
+    assertEquals(body.providerStatus, "abandoned");
+  },
+);
+
+Deno.test(
+  "rejects recovery for a superseded payment without contacting Paystack",
+  async () => {
+    const payment = {
+      id: validPaymentId,
+      booking_id: "booking-test",
+      gym_goer_id: "test-user",
+      amount: 20000,
+      currency: "NGN",
+      provider: "paystack",
+      provider_reference: "trainr_old_reference",
+      authorization_url: "https://checkout.example/old",
+      status: "failed",
+      initialization_status: "initialized",
+      superseded_by: "550e8400-e29b-41d4-a716-446655440001",
+    };
+
+    const response = await handleRecoverPayment(
+      postRecoveryRequest(),
+      createLookupContext(payment),
+      {
+        getSecretKey: () => "test-secret",
+        fetch: async () => {
+          throw new Error(
+            "Paystack must not be called for a superseded payment.",
+          );
+        },
+      },
+    );
+
+    assertEquals(response.status, 409);
+    assertEquals(await response.json(), {
+      error:
+        "This payment attempt has been superseded. Please use the latest payment attempt or contact support.",
+      paymentId: validPaymentId,
+      supersededBy: payment.superseded_by,
+      status: "failed",
+    });
   },
 );

@@ -346,10 +346,15 @@ export default function SessionsScreen() {
           return;
         }
 
-        if (existingPayment.initialization_status !== 'initialized') {
+        const canResumeCheckout = existingPayment.initialization_status === 'initialized';
+
+        const requiresRecovery =
+          existingPayment.initialization_status === 'reconciliation_required';
+
+        if (!canResumeCheckout && !requiresRecovery) {
           Alert.alert(
             'Payment needs review',
-            'Your existing payment requires reconciliation. No new transaction was created.',
+            'This payment is not in a state that can safely be recovered. Please contact support.',
           );
           return;
         }

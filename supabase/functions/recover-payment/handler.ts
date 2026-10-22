@@ -120,7 +120,7 @@ export async function handleRecoverPayment(
   const { data: payment, error: paymentError } = await admin
     .from("booking_payments")
     .select(
-      "id, booking_id, gym_goer_id, amount, currency, provider, provider_reference, authorization_url, status, initialization_status",
+      "id, booking_id, gym_goer_id, amount, currency, provider, provider_reference, authorization_url, status, initialization_status, superseded_by",
     )
     .eq("id", body.paymentId)
     .eq("gym_goer_id", userId)
@@ -142,12 +142,67 @@ export async function handleRecoverPayment(
     );
   }
 
+  // A superseded attempt must never resume checkout or be confirmed
+  // through the recovery endpoint.
+  if (payment.superseded_by) {
+    return jsonResponse(
+      {
+        error:
+          "This payment attempt has been superseded. Please use the latest payment attempt or contact support.",
+        paymentId: payment.id,
+        supersededBy: payment.superseded_by,
+        status: payment.status,
+      },
+      409,
+    );
+  }
+
   if (payment.status === "successful") {
     return jsonResponse({
       paymentId: payment.id,
       status: "successful",
       message: "This payment has already been verified.",
     });
+  }
+
+  // Only allow recovery while the associated booking remains confirmed.
+  const { data: booking, error: bookingError } = await admin
+    .from("trainer_bookings")
+    .select("id, status")
+    .eq("id", payment.booking_id)
+    .eq("gym_goer_id", userId)
+    .maybeSingle();
+
+  if (bookingError) {
+    console.error(
+      "Recovery booking lookup failed:",
+      bookingError.message,
+    );
+
+    return jsonResponse(
+      {
+        error: "Unable to verify booking eligibility for payment recovery.",
+      },
+      500,
+    );
+  }
+
+  if (!booking) {
+    return jsonResponse(
+      { error: "Booking not found or not accessible." },
+      404,
+    );
+  }
+
+  if (booking.status !== "confirmed") {
+    return jsonResponse(
+      {
+        error: "Only confirmed bookings can recover payment checkout.",
+        paymentId: payment.id,
+        status: payment.status,
+      },
+      409,
+    );
   }
 
   if (payment.status !== "pending") {
