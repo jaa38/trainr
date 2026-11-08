@@ -128,4 +128,13 @@ BEGIN
 END;
 $function$;
 
+
+REVOKE ALL ON FUNCTION
+    public.confirm_booking_payment(uuid, text, numeric, text)
+FROM PUBLIC, anon, authenticated;
+
+GRANT EXECUTE ON FUNCTION
+    public.confirm_booking_payment(uuid, text, numeric, text)
+TO service_role;
+
 COMMIT;

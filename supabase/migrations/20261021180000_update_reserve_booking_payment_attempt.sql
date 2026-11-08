@@ -185,4 +185,13 @@ BEGIN
 END;
 $function$;
 
+
+REVOKE ALL ON FUNCTION
+    public.reserve_booking_payment_attempt(uuid, uuid, uuid)
+FROM PUBLIC, anon, authenticated;
+
+GRANT EXECUTE ON FUNCTION
+    public.reserve_booking_payment_attempt(uuid, uuid, uuid)
+TO service_role;
+
 COMMIT;
