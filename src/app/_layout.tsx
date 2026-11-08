@@ -13,6 +13,8 @@ import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import { useColorScheme } from 'react-native';
 
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+
 import {
   Inter_400Regular,
   Inter_500Medium,
@@ -227,14 +229,16 @@ export default function RootLayout() {
   }
 
   return (
-    <TrainrThemeProvider mode="system">
-      <ExpoThemeProvider
-        value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}
-      >
-        <AuthProvider>
-          <AuthenticatedNavigation />
-        </AuthProvider>
-      </ExpoThemeProvider>
-    </TrainrThemeProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <TrainrThemeProvider mode="system">
+        <ExpoThemeProvider
+          value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}
+        >
+          <AuthProvider>
+            <AuthenticatedNavigation />
+          </AuthProvider>
+        </ExpoThemeProvider>
+      </TrainrThemeProvider>
+    </GestureHandlerRootView>
   );
 }

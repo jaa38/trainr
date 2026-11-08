@@ -1,10 +1,12 @@
+import type { Href } from 'expo-router';
+
 import {
   TabList,
-  TabListProps,
+  type TabListProps,
   Tabs,
   TabSlot,
   TabTrigger,
-  TabTriggerSlotProps,
+  type TabTriggerSlotProps,
 } from 'expo-router/ui';
 import { Pressable, StyleSheet, useColorScheme, View } from 'react-native';
 
@@ -13,39 +15,123 @@ import { ThemedView } from './themed-view';
 
 import { Colors, MaxContentWidth, Spacing } from '@/constants/theme';
 
-export default function AppTabs() {
+type UserRole = 'gym-goer' | 'personal-trainer';
+
+type AppTabsProps = {
+  role: UserRole;
+};
+
+type TabConfig = {
+  name: string;
+  label: string;
+  href: Href;
+};
+
+const gymGoerTabs: TabConfig[] = [
+  {
+    name: 'home',
+    label: 'Home',
+    href: '/(tabs)/gym-goer',
+  },
+  {
+    name: 'discover',
+    label: 'Discover',
+    href: '/(tabs)/gym-goer/discover',
+  },
+  {
+    name: 'workouts',
+    label: 'Workouts',
+    href: '/(tabs)/gym-goer/workouts',
+  },
+  {
+    name: 'sessions',
+    label: 'Sessions',
+    href: '/(tabs)/gym-goer/sessions',
+  },
+  {
+    name: 'profile',
+    label: 'Profile',
+    href: '/(tabs)/gym-goer/profile',
+  },
+];
+
+const personalTrainerTabs: TabConfig[] = [
+  {
+    name: 'home',
+    label: 'Home',
+    href: '/(tabs)/personal-trainer',
+  },
+  {
+    name: 'clients',
+    label: 'Clients',
+    href: '/(tabs)/personal-trainer/clients',
+  },
+  {
+    name: 'schedule',
+    label: 'Schedule',
+    href: '/(tabs)/personal-trainer/schedule',
+  },
+  {
+    name: 'earnings',
+    label: 'Earnings',
+    href: '/(tabs)/personal-trainer/earnings',
+  },
+  {
+    name: 'more',
+    label: 'More',
+    href: '/(tabs)/personal-trainer/more',
+  },
+];
+
+export default function AppTabs({ role }: AppTabsProps) {
+  const tabs =
+    role === 'personal-trainer' ? personalTrainerTabs : gymGoerTabs;
+
   return (
     <Tabs>
       <TabSlot style={styles.tabSlot} />
 
       <TabList asChild>
         <CustomTabList>
-          <TabTrigger name="index" href="/" asChild>
-            <TabButton>Home</TabButton>
-          </TabTrigger>
-
-          <TabTrigger name="explore" href="/explore" asChild>
-            <TabButton>Explore</TabButton>
-          </TabTrigger>
+          {tabs.map((tab) => (
+            <TabTrigger
+              key={tab.name}
+              name={tab.name}
+              href={tab.href}
+              asChild
+            >
+              <TabButton>{tab.label}</TabButton>
+            </TabTrigger>
+          ))}
         </CustomTabList>
       </TabList>
     </Tabs>
   );
 }
 
-export function TabButton({ children, isFocused, ...props }: TabTriggerSlotProps) {
+export function TabButton({
+  children,
+  isFocused,
+  ...props
+}: TabTriggerSlotProps) {
   return (
     <Pressable
       {...props}
       accessibilityRole="tab"
       accessibilityState={{ selected: isFocused }}
-      style={({ pressed }) => [styles.tabButton, pressed && styles.pressed]}
+      style={({ pressed }) => [
+        styles.tabButton,
+        pressed && styles.pressed,
+      ]}
     >
       <ThemedView
         type={isFocused ? 'backgroundSelected' : 'backgroundElement'}
         style={styles.tabButtonView}
       >
-        <ThemedText type="small" themeColor={isFocused ? 'text' : 'textSecondary'}>
+        <ThemedText
+          type="small"
+          themeColor={isFocused ? 'text' : 'textSecondary'}
+        >
           {children}
         </ThemedText>
       </ThemedView>
@@ -61,7 +147,10 @@ export function CustomTabList(props: TabListProps) {
     <View {...props} style={styles.tabListContainer}>
       <ThemedView
         type="backgroundElement"
-        style={[styles.innerContainer, { borderColor: colors.backgroundElement }]}
+        style={[
+          styles.innerContainer,
+          { borderColor: colors.backgroundElement },
+        ]}
       >
         <ThemedText type="smallBold" style={styles.brandText}>
           TRAINR
