@@ -82,6 +82,7 @@ export default function SignInScreen() {
     return Object.keys(nextErrors).length === 0;
   }
 
+
   async function handleSignIn() {
     setStatusMessage('');
 
@@ -93,28 +94,44 @@ export default function SignInScreen() {
     setErrors({});
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email.trim().toLowerCase(),
         password,
       });
 
       if (error) {
+        console.error('[TRAINR AUTH] Sign-in failed:', {
+          message: error.message,
+          status: error.status,
+          name: error.name,
+        });
+
         setErrors({
           general:
             'Unable to sign in with those details. Check your email and password and try again.',
         });
+
         return;
       }
 
+      console.log('[TRAINR AUTH] Sign-in successful:', {
+        userId: data.user.id,
+        email: data.user.email,
+      });
+
       router.replace('/(tabs)');
-    } catch {
+    } catch (error: unknown) {
+      console.error('[TRAINR AUTH] Unexpected error:', error);
+
       setErrors({
-        general: 'Something went wrong. Please check your connection and try again.',
+        general:
+          'Something went wrong. Please check your connection and try again.',
       });
     } finally {
       setIsSubmitting(false);
     }
   }
+
 
   async function handleForgotPassword() {
     setStatusMessage('');
