@@ -1,3 +1,5 @@
+
+import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -7,6 +9,7 @@ import { useAuth } from '@/providers/AuthProvider';
 import { useTrainrTheme } from '@/theme';
 
 export default function PersonalTrainerProfileScreen() {
+  const router = useRouter();
   const { colors, spacing } = useTrainrTheme();
   const { user, signOut } = useAuth();
 
@@ -79,16 +82,32 @@ export default function PersonalTrainerProfileScreen() {
         }}
         showsVerticalScrollIndicator={false}
       >
-        <View style={{ gap: spacing.sm }}>
-          <AppText variant="caption" color={colors.brand.red}>
-            TRAINER WORKSPACE
-          </AppText>
-          <AppText variant="displayLarge" color={colors.text.primary}>
-            PROFILE.
-          </AppText>
-          <AppText variant="body" color={colors.text.secondary}>
-            Your expertise. Your professional identity.
-          </AppText>
+        {/* Header */}
+        <View style={{ gap: spacing.md }}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
+            onPress={() => router.back()}
+            style={{ alignSelf: 'flex-start' }}
+          >
+            <AppText variant="h3" color={colors.text.secondary}>
+              ← Back
+            </AppText>
+          </Pressable>
+
+          <View style={{ gap: spacing.sm }}>
+            <AppText variant="caption" color={colors.brand.red}>
+              TRAINER WORKSPACE
+            </AppText>
+
+            <AppText variant="displayLarge" color={colors.text.primary}>
+              PROFILE.
+            </AppText>
+
+            <AppText variant="body" color={colors.text.secondary}>
+              Your expertise. Your professional identity.
+            </AppText>
+          </View>
         </View>
 
         <View
