@@ -8,6 +8,7 @@ import {
   Pressable,
   RefreshControl,
   ScrollView,
+  Share,
   TextInput,
   View,
 } from 'react-native';
@@ -20,7 +21,7 @@ import { useAuth } from '@/providers/AuthProvider';
 import { submitTrainerReview } from '@/services/trainer-reviews';
 import { useTrainrTheme } from '@/theme';
 
-type SessionTab = 'Upcoming' | 'History';
+type SessionTab = 'Upcoming' | 'History' | 'Payments';
 
 type Booking = {
   id: string;
@@ -40,8 +41,14 @@ type Booking = {
 type BookingPayment = {
   id: string;
   booking_id: string;
+  amount: number;
+  currency: string;
+  provider: string;
+  provider_reference: string | null;
   status: 'pending' | 'successful' | 'failed' | 'cancelled';
   initialization_status: string;
+  paid_at: string | null;
+  created_at: string;
 };
 
 type PaymentFunctionResponse = {
@@ -99,6 +106,8 @@ export default function SessionsScreen() {
   const [paymentStatuses, setPaymentStatuses] = useState<Map<string, BookingPayment>>(
     new Map(),
   );
+  const [payments, setPayments] = useState<BookingPayment[]>([]);
+  const [expandedPaymentId, setExpandedPaymentId] = useState<string | null>(null);
   const [processingPaymentBookingId, setProcessingPaymentBookingId] = useState<
     string | null
   >(null);
@@ -120,6 +129,7 @@ export default function SessionsScreen() {
       if (!user) {
         setBookings([]);
         setPaymentStatuses(new Map());
+        setPayments([]);
         setReviewedBookingIds(new Set());
         setIsLoading(false);
         setIsRefreshing(false);
@@ -179,19 +189,25 @@ export default function SessionsScreen() {
 
         const { data: paymentRows, error: paymentsError } = await supabase
           .from('booking_payments')
-          .select('id, booking_id, status, initialization_status, created_at')
+          .select(
+            'id, booking_id, amount, currency, provider, provider_reference, status, initialization_status, paid_at, created_at',
+          )
           .eq('gym_goer_id', user.id)
           .order('created_at', { ascending: false });
 
         if (paymentsError) {
-          console.error('[Sessions] Unable to load payment statuses:', paymentsError);
-          // Preserve the last known statuses when a refresh fails.
+          console.error('[Sessions] Unable to load payment history:', paymentsError);
+          // Preserve the last known payment records when a refresh fails.
         } else {
+          const allPayments = (paymentRows ?? []) as BookingPayment[];
+
+          setPayments(allPayments);
+
           const latestPaymentsByBooking = new Map<string, BookingPayment>();
 
-          for (const payment of paymentRows ?? []) {
+          for (const payment of allPayments) {
             if (!latestPaymentsByBooking.has(payment.booking_id)) {
-              latestPaymentsByBooking.set(payment.booking_id, payment as BookingPayment);
+              latestPaymentsByBooking.set(payment.booking_id, payment);
             }
           }
 
@@ -390,7 +406,7 @@ export default function SessionsScreen() {
           Alert.alert(
             'Payment needs review',
             recovery?.message ??
-            'We could not safely recover this checkout. No new transaction was created.',
+              'We could not safely recover this checkout. No new transaction was created.',
           );
           return;
         }
@@ -479,10 +495,7 @@ export default function SessionsScreen() {
     }
   };
 
-  const handleRetryPayment = async (
-    booking: Booking,
-    payment: BookingPayment,
-  ) => {
+  const handleRetryPayment = async (booking: Booking, payment: BookingPayment) => {
     if (
       !user ||
       booking.status !== 'confirmed' ||
@@ -490,10 +503,7 @@ export default function SessionsScreen() {
       !payment.id ||
       new Date(booking.scheduled_start).getTime() <= Date.now()
     ) {
-      Alert.alert(
-        'Payment retry unavailable',
-        'This payment is not eligible for retry.',
-      );
+      Alert.alert('Payment retry unavailable', 'This payment is not eligible for retry.');
       return;
     }
 
@@ -506,15 +516,12 @@ export default function SessionsScreen() {
 
     try {
       const { data: retry, error: retryError } =
-        await supabase.functions.invoke<PaymentFunctionResponse>(
-          'retry-payment',
-          {
-            body: {
-              paymentId: payment.id,
-              idempotencyKey,
-            },
+        await supabase.functions.invoke<PaymentFunctionResponse>('retry-payment', {
+          body: {
+            paymentId: payment.id,
+            idempotencyKey,
           },
-        );
+        });
 
       if (retryError) {
         console.error('[Sessions] Payment retry request failed:', retryError);
@@ -549,22 +556,18 @@ export default function SessionsScreen() {
         await loadBookings(true);
         Alert.alert(
           'Payment needs review',
-          retry.message ??
-          'The replacement payment is not ready for checkout.',
+          retry.message ?? 'The replacement payment is not ready for checkout.',
         );
         return;
       }
 
       const { data: initialization, error: initializationError } =
-        await supabase.functions.invoke<PaymentFunctionResponse>(
-          'initiate-payment',
-          {
-            body: {
-              bookingId: booking.id,
-              idempotencyKey,
-            },
+        await supabase.functions.invoke<PaymentFunctionResponse>('initiate-payment', {
+          body: {
+            bookingId: booking.id,
+            idempotencyKey,
           },
-        );
+        });
 
       if (initializationError) {
         console.error(
@@ -609,12 +612,9 @@ export default function SessionsScreen() {
       await WebBrowser.openBrowserAsync(initialization.authorizationUrl);
 
       const { data: verification, error: verificationError } =
-        await supabase.functions.invoke<PaymentFunctionResponse>(
-          'verify-payment',
-          {
-            body: { paymentId: retry.paymentId },
-          },
-        );
+        await supabase.functions.invoke<PaymentFunctionResponse>('verify-payment', {
+          body: { paymentId: retry.paymentId },
+        });
 
       await loadBookings(true);
 
@@ -651,7 +651,6 @@ export default function SessionsScreen() {
       setProcessingPaymentBookingId(null);
     }
   };
-
 
   useFocusEffect(
     useCallback(() => {
@@ -743,6 +742,49 @@ export default function SessionsScreen() {
     return !HISTORY_STATUSES.includes(booking.status);
   });
 
+  const handleShareReceipt = async (payment: BookingPayment) => {
+    if (payment.status !== 'successful' || !payment.paid_at) {
+      Alert.alert(
+        'Receipt unavailable',
+        'A receipt is only available for verified successful payments.',
+      );
+      return;
+    }
+
+    const booking = bookings.find((item) => item.id === payment.booking_id);
+
+    const trainerName = [booking?.trainer?.first_name, booking?.trainer?.last_name]
+      .filter(Boolean)
+      .join(' ')
+      .trim();
+
+    const receipt = [
+      'TRAINR — PAYMENT RECEIPT',
+      '',
+      `Amount: ${formatCurrency(payment.amount, payment.currency)}`,
+      `Status: ${payment.status.toUpperCase()}`,
+      `Payment date: ${formatDate(payment.paid_at)}`,
+      `Provider: ${payment.provider.toUpperCase()}`,
+      `Transaction reference: ${payment.provider_reference ?? 'Unavailable'}`,
+      `Booking reference: ${payment.booking_id}`,
+      trainerName ? `Trainer: ${trainerName}` : null,
+      '',
+      'Thank you for choosing TRAINR.',
+    ]
+      .filter(Boolean)
+      .join('\n');
+
+    try {
+      await Share.share({
+        title: 'TRAINR Payment Receipt',
+        message: receipt,
+      });
+    } catch (error) {
+      console.error('[Sessions] Unable to share receipt:', error);
+      Alert.alert('Unable to share receipt', 'Please try again.');
+    }
+  };
+
   return (
     <SafeAreaView
       edges={['top']}
@@ -751,7 +793,7 @@ export default function SessionsScreen() {
       <ScrollView
         contentContainerStyle={{
           padding: spacing.lg,
-          paddingBottom: spacing.xxxl,
+          paddingBottom: spacing.huge + spacing.xxxl,
           gap: spacing.lg,
         }}
         refreshControl={
@@ -787,7 +829,7 @@ export default function SessionsScreen() {
             borderColor: colors.border.default,
           }}
         >
-          {(['Upcoming', 'History'] as const).map((tab) => {
+          {(['Upcoming', 'History', 'Payments'] as const).map((tab) => {
             const selected = activeTab === tab;
 
             return (
@@ -869,6 +911,206 @@ export default function SessionsScreen() {
             <Button variant="primary" fullWidth onPress={() => void loadBookings()}>
               Try again
             </Button>
+          </View>
+        ) : activeTab === 'Payments' ? (
+          <View style={{ gap: spacing.md }}>
+            <View style={{ gap: spacing.xs }}>
+              <AppText variant="h2" color={colors.text.primary}>
+                TRANSACTION HISTORY
+              </AppText>
+              <AppText variant="body" color={colors.text.secondary}>
+                View your payments, transaction references and receipts.
+              </AppText>
+            </View>
+
+            {payments.length === 0 ? (
+              <View
+                style={{
+                  padding: spacing.xl,
+                  alignItems: 'center',
+                  borderRadius: 20,
+                  borderWidth: 1,
+                  borderColor: colors.border.default,
+                  backgroundColor: colors.background.secondary,
+                  gap: spacing.md,
+                }}
+              >
+                <AppText variant="h3" color={colors.text.primary}>
+                  NO TRANSACTIONS YET
+                </AppText>
+                <AppText variant="body" color={colors.text.secondary} align="center">
+                  Your training session payments will appear here once you make a booking
+                  payment.
+                </AppText>
+              </View>
+            ) : (
+              <>
+                <AppText variant="caption" color={colors.text.secondary}>
+                  {payments.length} TRANSACTION{payments.length === 1 ? '' : 'S'}
+                </AppText>
+
+                {payments.map((payment) => {
+                  const expanded = expandedPaymentId === payment.id;
+                  const booking = bookings.find((item) => item.id === payment.booking_id);
+
+                  const trainerName = [
+                    booking?.trainer?.first_name,
+                    booking?.trainer?.last_name,
+                  ]
+                    .filter(Boolean)
+                    .join(' ')
+                    .trim();
+
+                  const statusColor =
+                    payment.status === 'successful'
+                      ? '#16A34A'
+                      : payment.status === 'failed'
+                        ? colors.brand.red
+                        : colors.text.secondary;
+
+                  return (
+                    <View
+                      key={payment.id}
+                      style={{
+                        padding: spacing.md,
+                        borderRadius: 16,
+                        borderWidth: 1,
+                        borderColor: colors.border.default,
+                        backgroundColor: colors.background.secondary,
+                        gap: spacing.md,
+                      }}
+                    >
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityState={{ expanded }}
+                        accessibilityLabel={`Payment ${formatCurrency(payment.amount, payment.currency)}, ${payment.status}. ${expanded ? 'Hide' : 'View'} details`}
+                        onPress={() => setExpandedPaymentId(expanded ? null : payment.id)}
+                        style={{ gap: spacing.md }}
+                      >
+                        <View
+                          style={{
+                            flexDirection: 'row',
+                            alignItems: 'flex-start',
+                            justifyContent: 'space-between',
+                            gap: spacing.sm,
+                          }}
+                        >
+                          <View style={{ flex: 1, gap: spacing.xs }}>
+                            <AppText variant="caption" color={colors.text.secondary}>
+                              PAYMENT AMOUNT
+                            </AppText>
+                            <AppText variant="h2" color={colors.text.primary}>
+                              {formatCurrency(payment.amount, payment.currency)}
+                            </AppText>
+                          </View>
+
+                          <View
+                            style={{
+                              paddingHorizontal: spacing.sm,
+                              paddingVertical: spacing.xs,
+                              borderRadius: 20,
+                              backgroundColor: colors.background.primary,
+                            }}
+                          >
+                            <AppText variant="caption" color={statusColor} weight="600">
+                              {payment.status.toUpperCase()}
+                            </AppText>
+                          </View>
+                        </View>
+
+                        <View style={{ gap: spacing.xs }}>
+                          <AppText variant="body" color={colors.text.secondary}>
+                            {formatDate(payment.paid_at ?? payment.created_at)}
+                          </AppText>
+
+                          <AppText variant="caption" color={colors.text.secondary}>
+                            Reference: {payment.provider_reference ?? 'Pending'}
+                          </AppText>
+                        </View>
+
+                        <AppText variant="caption" color={colors.brand.red}>
+                          {expanded ? 'HIDE DETAILS −' : 'VIEW DETAILS +'}
+                        </AppText>
+                      </Pressable>
+
+                      {expanded ? (
+                        <View
+                          style={{
+                            paddingTop: spacing.md,
+                            borderTopWidth: 1,
+                            borderTopColor: colors.border.default,
+                            gap: spacing.sm,
+                          }}
+                        >
+                          <AppText variant="h3" color={colors.text.primary}>
+                            TRANSACTION DETAILS
+                          </AppText>
+
+                          <View style={{ gap: spacing.xs }}>
+                            <AppText variant="caption" color={colors.text.secondary}>
+                              TRANSACTION ID
+                            </AppText>
+                            <AppText variant="body" color={colors.text.primary}>
+                              {payment.id}
+                            </AppText>
+                          </View>
+
+                          <View style={{ gap: spacing.xs }}>
+                            <AppText variant="caption" color={colors.text.secondary}>
+                              BOOKING REFERENCE
+                            </AppText>
+                            <AppText variant="body" color={colors.text.primary}>
+                              {payment.booking_id}
+                            </AppText>
+                          </View>
+
+                          <View style={{ gap: spacing.xs }}>
+                            <AppText variant="caption" color={colors.text.secondary}>
+                              PAYMENT PROVIDER
+                            </AppText>
+                            <AppText variant="body" color={colors.text.primary}>
+                              {payment.provider.toUpperCase()}
+                            </AppText>
+                          </View>
+
+                          {trainerName ? (
+                            <View style={{ gap: spacing.xs }}>
+                              <AppText variant="caption" color={colors.text.secondary}>
+                                TRAINER
+                              </AppText>
+                              <AppText variant="body" color={colors.text.primary}>
+                                {trainerName}
+                              </AppText>
+                            </View>
+                          ) : null}
+
+                          {payment.paid_at ? (
+                            <View style={{ gap: spacing.xs }}>
+                              <AppText variant="caption" color={colors.text.secondary}>
+                                VERIFIED PAYMENT DATE
+                              </AppText>
+                              <AppText variant="body" color={colors.text.primary}>
+                                {formatDate(payment.paid_at)}
+                              </AppText>
+                            </View>
+                          ) : null}
+
+                          {payment.status === 'successful' && payment.paid_at ? (
+                            <Button
+                              variant="primary"
+                              fullWidth
+                              onPress={() => void handleShareReceipt(payment)}
+                            >
+                              Share payment receipt
+                            </Button>
+                          ) : null}
+                        </View>
+                      ) : null}
+                    </View>
+                  );
+                })}
+              </>
+            )}
           </View>
         ) : visibleBookings.length === 0 ? (
           <View
@@ -1033,7 +1275,7 @@ export default function SessionsScreen() {
                   ) : null}
 
                   {(booking.status === 'pending' || booking.status === 'confirmed') &&
-                    new Date(booking.scheduled_start).getTime() > currentTime ? (
+                  new Date(booking.scheduled_start).getTime() > currentTime ? (
                     <>
                       <Button
                         variant="outline"
@@ -1127,8 +1369,9 @@ export default function SessionsScreen() {
                                   <Pressable
                                     key={star}
                                     accessibilityRole="radio"
-                                    accessibilityLabel={`${star} ${star === 1 ? 'star' : 'stars'
-                                      }`}
+                                    accessibilityLabel={`${star} ${
+                                      star === 1 ? 'star' : 'stars'
+                                    }`}
                                     accessibilityState={{
                                       selected: reviewRating === star,
                                     }}
