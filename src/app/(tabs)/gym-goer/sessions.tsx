@@ -38,7 +38,7 @@ type Booking = {
 };
 
 type BookingPayment = {
-  id?: string;
+  id: string;
   booking_id: string;
   status: 'pending' | 'successful' | 'failed' | 'cancelled';
   initialization_status: string;
@@ -46,12 +46,14 @@ type BookingPayment = {
 
 type PaymentFunctionResponse = {
   paymentId?: string;
+  bookingId?: string;
   reference?: string;
   authorizationUrl?: string;
   status?: 'pending' | 'successful' | 'failed' | 'cancelled';
   providerStatus?: string;
   initializationStatus?: string;
   recovery?: string;
+  wasCreated?: boolean;
   error?: string;
   message?: string;
 };
@@ -388,7 +390,7 @@ export default function SessionsScreen() {
           Alert.alert(
             'Payment needs review',
             recovery?.message ??
-              'We could not safely recover this checkout. No new transaction was created.',
+            'We could not safely recover this checkout. No new transaction was created.',
           );
           return;
         }
@@ -476,6 +478,180 @@ export default function SessionsScreen() {
       setProcessingPaymentBookingId(null);
     }
   };
+
+  const handleRetryPayment = async (
+    booking: Booking,
+    payment: BookingPayment,
+  ) => {
+    if (
+      !user ||
+      booking.status !== 'confirmed' ||
+      payment.status !== 'failed' ||
+      !payment.id ||
+      new Date(booking.scheduled_start).getTime() <= Date.now()
+    ) {
+      Alert.alert(
+        'Payment retry unavailable',
+        'This payment is not eligible for retry.',
+      );
+      return;
+    }
+
+    if (processingPaymentBookingId) return;
+
+    setProcessingPaymentBookingId(booking.id);
+
+    // Reuse this key for both retry-payment and initiate-payment.
+    const idempotencyKey = createIdempotencyKey();
+
+    try {
+      const { data: retry, error: retryError } =
+        await supabase.functions.invoke<PaymentFunctionResponse>(
+          'retry-payment',
+          {
+            body: {
+              paymentId: payment.id,
+              idempotencyKey,
+            },
+          },
+        );
+
+      if (retryError) {
+        console.error('[Sessions] Payment retry request failed:', retryError);
+
+        Alert.alert(
+          'Unable to retry payment',
+          'TRAINR could not verify the failed transaction. No replacement checkout was started. Refresh Sessions and try again.',
+        );
+        return;
+      }
+
+      if (retry?.error) {
+        Alert.alert('Payment retry unavailable', retry.error);
+        return;
+      }
+
+      if (!retry?.paymentId || retry.bookingId !== booking.id) {
+        Alert.alert(
+          'Payment needs review',
+          'TRAINR could not validate the replacement payment. Please contact support.',
+        );
+        return;
+      }
+
+      if (retry.status === 'successful') {
+        await loadBookings(true);
+        Alert.alert('Already paid', 'This booking has already been paid for.');
+        return;
+      }
+
+      if (retry.status !== 'pending') {
+        await loadBookings(true);
+        Alert.alert(
+          'Payment needs review',
+          retry.message ??
+          'The replacement payment is not ready for checkout.',
+        );
+        return;
+      }
+
+      const { data: initialization, error: initializationError } =
+        await supabase.functions.invoke<PaymentFunctionResponse>(
+          'initiate-payment',
+          {
+            body: {
+              bookingId: booking.id,
+              idempotencyKey,
+            },
+          },
+        );
+
+      if (initializationError) {
+        console.error(
+          '[Sessions] Replacement checkout initialization failed:',
+          initializationError,
+        );
+
+        await loadBookings(true);
+
+        Alert.alert(
+          'Checkout unavailable',
+          'The replacement payment was created, but checkout could not be initialized. Refresh Sessions before trying again.',
+        );
+        return;
+      }
+
+      if (initialization?.error) {
+        await loadBookings(true);
+        Alert.alert('Checkout unavailable', initialization.error);
+        return;
+      }
+
+      if (initialization?.status === 'successful') {
+        await loadBookings(true);
+        Alert.alert('Payment successful', 'This booking has already been paid for.');
+        return;
+      }
+
+      if (
+        initialization?.paymentId !== retry.paymentId ||
+        !initialization.authorizationUrl?.startsWith('https://')
+      ) {
+        await loadBookings(true);
+
+        Alert.alert(
+          'Checkout needs review',
+          'TRAINR could not validate the replacement checkout. No further payment attempt was created.',
+        );
+        return;
+      }
+
+      await WebBrowser.openBrowserAsync(initialization.authorizationUrl);
+
+      const { data: verification, error: verificationError } =
+        await supabase.functions.invoke<PaymentFunctionResponse>(
+          'verify-payment',
+          {
+            body: { paymentId: retry.paymentId },
+          },
+        );
+
+      await loadBookings(true);
+
+      if (verificationError) {
+        Alert.alert(
+          'Payment status pending',
+          'We could not confirm your payment yet. Refresh Sessions to check again.',
+        );
+      } else if (verification?.status === 'successful') {
+        Alert.alert('Payment successful', 'Your payment has been verified.');
+      } else if (verification?.status === 'failed') {
+        Alert.alert(
+          'Payment failed',
+          'Paystack reports that the replacement transaction failed.',
+        );
+      } else {
+        Alert.alert(
+          'Payment not confirmed',
+          'Your payment is still pending. Refresh Sessions to check its status.',
+        );
+      }
+    } catch (error) {
+      console.error('[Sessions] Payment retry failed:', error);
+
+      await loadBookings(true);
+
+      Alert.alert(
+        'Unable to retry payment',
+        error instanceof Error
+          ? error.message
+          : 'Please refresh Sessions and check your payment status.',
+      );
+    } finally {
+      setProcessingPaymentBookingId(null);
+    }
+  };
+
 
   useFocusEffect(
     useCallback(() => {
@@ -739,14 +915,18 @@ export default function SessionsScreen() {
               const isReviewFormOpen = reviewBookingId === booking.id;
               const payment = paymentStatuses.get(booking.id);
               const isPaid = payment?.status === 'successful';
-              const paymentNeedsReview =
-                payment?.status === 'failed' || payment?.status === 'cancelled';
+
+              const canRetryPayment =
+                booking.status === 'confirmed' &&
+                new Date(booking.scheduled_start).getTime() > currentTime &&
+                payment?.status === 'failed' &&
+                Boolean(payment.id);
 
               const canPay =
                 booking.status === 'confirmed' &&
                 new Date(booking.scheduled_start).getTime() > currentTime &&
                 !isPaid &&
-                !paymentNeedsReview;
+                (!payment || payment.status === 'pending');
 
               return (
                 <View
@@ -833,8 +1013,27 @@ export default function SessionsScreen() {
                     </Button>
                   ) : null}
 
+                  {canRetryPayment && payment ? (
+                    <Button
+                      variant="primary"
+                      fullWidth
+                      loading={processingPaymentBookingId === booking.id}
+                      disabled={
+                        processingPaymentBookingId !== null ||
+                        cancellingBookingId !== null
+                      }
+                      accessibilityLabel={`Retry payment for ${formatCurrency(
+                        Number(booking.session_rate),
+                        booking.currency,
+                      )}`}
+                      onPress={() => void handleRetryPayment(booking, payment)}
+                    >
+                      Retry payment
+                    </Button>
+                  ) : null}
+
                   {(booking.status === 'pending' || booking.status === 'confirmed') &&
-                  new Date(booking.scheduled_start).getTime() > currentTime ? (
+                    new Date(booking.scheduled_start).getTime() > currentTime ? (
                     <>
                       <Button
                         variant="outline"
@@ -928,9 +1127,8 @@ export default function SessionsScreen() {
                                   <Pressable
                                     key={star}
                                     accessibilityRole="radio"
-                                    accessibilityLabel={`${star} ${
-                                      star === 1 ? 'star' : 'stars'
-                                    }`}
+                                    accessibilityLabel={`${star} ${star === 1 ? 'star' : 'stars'
+                                      }`}
                                     accessibilityState={{
                                       selected: reviewRating === star,
                                     }}

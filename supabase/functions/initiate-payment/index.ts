@@ -1,5 +1,6 @@
 import "@supabase/functions-js/edge-runtime.d.ts";
 import { withSupabase } from "@supabase/server";
+import { getExistingPaymentInitializationAction } from "../_shared/payment-initialization.ts";
 import { isUuid, toKobo } from "../_shared/payment-validation.ts";
 
 const jsonResponse = (
@@ -228,13 +229,18 @@ export default {
         );
       }
 
-      if (
-        existingPayment.initialization_status === "initialized" &&
-        existingPayment.authorization_url &&
-        paymentAttempt.authorization_url ===
-          existingPayment.authorization_url &&
-        reference
-      ) {
+      const initializationAction =
+        getExistingPaymentInitializationAction(
+          existingPayment.initialization_status,
+          Boolean(
+            existingPayment.authorization_url &&
+            paymentAttempt.authorization_url ===
+              existingPayment.authorization_url &&
+            reference
+          ),
+        );
+
+      if (initializationAction === "reuse") {
         return jsonResponse({
           paymentId,
           reference,
@@ -243,17 +249,22 @@ export default {
         });
       }
 
-      return jsonResponse(
-        {
-          error:
-            "The existing payment requires reconciliation before checkout can be reused.",
-          paymentId,
-          reference,
-          status: "pending",
-          initializationStatus: existingPayment.initialization_status,
-        },
-        409,
-      );
+      if (initializationAction === "reject") {
+        return jsonResponse(
+          {
+            error:
+              "The existing payment requires reconciliation before checkout can be reused.",
+            paymentId,
+            reference,
+            status: "pending",
+            initializationStatus: existingPayment.initialization_status,
+          },
+          409,
+        );
+      }
+
+      // A not_started payment continues to amount validation
+      // and the atomic initialization claim below.
     }
 
     if (!reference) {

@@ -1,3 +1,4 @@
+
 import { assertEquals } from "jsr:@std/assert@^1";
 import { handleRetryPayment } from "./handler.ts";
 
@@ -276,16 +277,40 @@ Deno.test("returns 500 when the payment lookup fails", async () => {
   assertEquals(calls.rpc, 0);
 });
 
-Deno.test("rejects superseded payments before contacting Paystack", async () => {
-  const { response, calls } = await submitRetry({
-    ...basePayment,
-    superseded_by: replacementId,
-  });
+Deno.test(
+  "allows the atomic retry RPC to resolve an idempotent replay for a superseded payment",
+  async () => {
+    const { response, calls } = await submitRetry(
+      {
+        ...basePayment,
+        superseded_by: replacementId,
+      },
+      "failed",
+      {
+        rpcResult: [
+          {
+            payment_id: replacementId,
+            booking_id: bookingId,
+            provider_reference: "trainr-replacement-reference",
+            payment_status: "pending",
+            was_created: false,
+          },
+        ],
+      },
+    );
 
-  assertEquals(response.status, 409);
-  assertEquals(calls.paystack, 0);
-  assertEquals(calls.rpc, 0);
-});
+    assertEquals(response.status, 200);
+    assertEquals(calls.paystack, 1);
+    assertEquals(calls.rpc, 1);
+    assertEquals(calls.rpcArgs?.p_old_payment_id, paymentId);
+    assertEquals(calls.rpcArgs?.p_new_idempotency_key, idempotencyKey);
+
+    const body = await response.json();
+    assertEquals(body.paymentId, replacementId);
+    assertEquals(body.wasCreated, false);
+    assertEquals(body.status, "pending");
+  },
+);
 
 for (
   const providerStatus of [

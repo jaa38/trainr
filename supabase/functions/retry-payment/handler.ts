@@ -101,19 +101,6 @@ export async function handleRetryPayment(
     );
   }
 
-  // A superseded attempt must never initiate another retry.
-  // The replacement attempt must be handled separately.
-  if (payment.superseded_by) {
-    return jsonResponse(
-      {
-        error: "This payment attempt has already been superseded.",
-        paymentId: payment.id,
-        supersededBy: payment.superseded_by,
-      },
-      409,
-    );
-  }
-
   if (
     payment.provider !== "paystack" ||
     !payment.provider_reference ||
