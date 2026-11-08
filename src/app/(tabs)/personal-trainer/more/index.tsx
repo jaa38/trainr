@@ -71,47 +71,8 @@ export default function TrainerMoreScreen() {
                     </AppText>
                 </View>
 
-                {/* Workspace introduction */}
-                <View
-                    style={{
-                        padding: spacing.xl,
-                        borderRadius: 20,
-                        borderWidth: 1,
-                        borderColor: colors.border.default,
-                        backgroundColor: colors.background.secondary,
-                        gap: spacing.md,
-                    }}
-                >
-                    <AppText
-                        variant="caption"
-                        color={colors.brand.red}
-                    >
-                        YOUR WORKSPACE
-                    </AppText>
-
-                    <AppText
-                        variant="h2"
-                        color={colors.text.primary}
-                    >
-                        Everything you need to train smarter.
-                    </AppText>
-
-                    <AppText
-                        variant="body"
-                        color={colors.text.secondary}
-                    >
-                        Access your exercise collection, build training programmes and manage your professional identity.
-                    </AppText>
-                </View>
-
                 {/* Navigation sections */}
-                <View style={{ gap: spacing.md }}>
-                    <AppText
-                        variant="h3"
-                        color={colors.text.primary}
-                    >
-                        WORKSPACE TOOLS
-                    </AppText>
+                <View style={{ gap: spacing.lg }}>
 
                     {sections.map((section) => (
                         <Pressable
@@ -163,23 +124,7 @@ export default function TrainerMoreScreen() {
                                 </AppText>
                             </View>
 
-                            {/* Section label */}
-                            <View
-                                style={{
-                                    alignSelf: 'flex-start',
-                                    paddingHorizontal: spacing.md,
-                                    paddingVertical: spacing.sm,
-                                    borderRadius: 999,
-                                    backgroundColor: colors.brand.redLight,
-                                }}
-                            >
-                                <AppText
-                                    variant="caption"
-                                    color={colors.brand.red}
-                                >
-                                    {section.label}
-                                </AppText>
-                            </View>
+
                         </Pressable>
                     ))}
                 </View>

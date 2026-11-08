@@ -322,65 +322,57 @@ export default function ExerciseLibraryScreen() {
                 showsVerticalScrollIndicator={false}
             >
                 {/* Header */}
-                <View
-                    style={{
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        gap: spacing.md,
-                    }}
-                >
+                <View style={{ gap: spacing.md }}>
                     <Pressable
                         accessibilityRole="button"
-                        accessibilityLabel="Go back to More"
+                        accessibilityLabel="Go back"
                         onPress={() => router.back()}
-                        hitSlop={10}
-                        style={{
-                            width: 44,
-                            height: 44,
-                            borderRadius: 14,
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            backgroundColor: colors.background.secondary,
-                            borderWidth: 1,
-                            borderColor: colors.border.default,
-                        }}
+                        style={{ alignSelf: 'flex-start' }}
                     >
-                        <AppText variant="h2" color={colors.text.primary}>
-                            ‹
+                        <AppText variant="h3" color={colors.text.secondary}>
+                            ← Back
                         </AppText>
                     </Pressable>
 
-                    <View style={{ flex: 1, gap: spacing.xs }}>
-                        <AppText
-                            variant="caption"
-                            color={colors.brand.red}
-                            style={{ letterSpacing: 1.5 }}
-                        >
-                            TRAINER WORKSPACE
-                        </AppText>
-
-                        <AppText variant="displayLarge" color={colors.text.primary}>
-                            EXERCISE LIBRARY.
-                        </AppText>
-
-                        <AppText variant="body" color={colors.text.secondary}>
-                            Your movements. Your training knowledge.
-                        </AppText>
-                    </View>
-
                     <View
                         style={{
-                            width: 48,
-                            height: 48,
-                            borderRadius: 14,
+                            flexDirection: 'row',
                             alignItems: 'center',
-                            justifyContent: 'center',
-                            backgroundColor: colors.brand.red,
+                            gap: spacing.md,
                         }}
                     >
-                        <AppText variant="h3" color="#FFFFFF">
-                            {exercises.length}
-                        </AppText>
+                        <View style={{ flex: 1, gap: spacing.xs }}>
+                            <AppText
+                                variant="caption"
+                                color={colors.brand.red}
+                                style={{ letterSpacing: 1.5 }}
+                            >
+                                TRAINER WORKSPACE
+                            </AppText>
+
+                            <AppText variant="displayLarge" color={colors.text.primary}>
+                                EXERCISE LIBRARY.
+                            </AppText>
+
+                            <AppText variant="body" color={colors.text.secondary}>
+                                Your movements. Your training knowledge.
+                            </AppText>
+                        </View>
+
+                        <View
+                            style={{
+                                width: 48,
+                                height: 48,
+                                borderRadius: 14,
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                backgroundColor: colors.brand.red,
+                            }}
+                        >
+                            <AppText variant="h3" color="#FFFFFF">
+                                {exercises.length}
+                            </AppText>
+                        </View>
                     </View>
                 </View>
 

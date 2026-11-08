@@ -241,7 +241,20 @@ export default function WorkoutPlansScreen() {
                             </AppText>
                         </View>
 
-                        <Badge tone="primary">{plans.length}</Badge>
+                        <View
+                            style={{
+                                width: 48,
+                                height: 48,
+                                borderRadius: 14,
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                backgroundColor: colors.brand.red,
+                            }}
+                        >
+                            <AppText variant="h3" color="#FFFFFF">
+                                {plans.length}
+                            </AppText>
+                        </View>
                     </View>
 
                     <AppText variant="body" color={colors.text.secondary}>
@@ -297,7 +310,6 @@ export default function WorkoutPlansScreen() {
                                 <AppText
                                     variant="h2"
                                     color={colors.text.primary}
-                                    tabularNums
                                 >
                                     {item.value}
                                 </AppText>
