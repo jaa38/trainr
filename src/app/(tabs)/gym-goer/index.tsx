@@ -1,38 +1,229 @@
-import { useState } from 'react';
-import { Image, ScrollView, View } from 'react-native';
+
+import { router, useFocusEffect } from 'expo-router';
+import {
+  ArrowRight,
+  Minus,
+  Scale,
+  TrendingDown,
+  TrendingUp,
+} from 'lucide-react-native';
+import { useCallback, useMemo, useState } from 'react';
+import {
+  Image,
+  Pressable,
+  ScrollView,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Svg, {
+  Circle,
+  Line,
+  Path,
+} from 'react-native-svg';
 
 import { AppText } from '@/components/AppText';
+import { Card } from '@/components/Card';
 import { useAuth } from '@/providers/AuthProvider';
+import {
+  getBodyWeightHistory,
+  type FitnessProgress,
+} from '@/services/fitness-progress';
 import { useTrainrTheme } from '@/theme';
+
+function formatWeightDate(date: string) {
+  return new Date(date).toLocaleDateString('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
+function DashboardWeightChart({
+  records,
+  unit,
+  colors,
+}: {
+  records: FitnessProgress[];
+  unit: 'kg' | 'lb';
+  colors: ReturnType<typeof useTrainrTheme>['colors'];
+}) {
+  const [chartWidth, setChartWidth] = useState(0);
+
+  const chartHeight = 125;
+  const horizontalPadding = 12;
+  const verticalPadding = 16;
+
+  const chartRecords = useMemo(
+    () =>
+      [...records]
+        .filter((record) => record.unit === unit)
+        .reverse()
+        .slice(-7),
+    [records, unit],
+  );
+
+  if (chartRecords.length < 2) {
+    return (
+      <View
+        style={{
+          minHeight: 90,
+          justifyContent: 'center',
+          alignItems: 'center',
+          gap: 8,
+        }}
+      >
+        <TrendingUp
+          size={24}
+          color={colors.text.tertiary}
+        />
+
+        <AppText
+          variant="caption"
+          color={colors.text.secondary}
+        >
+          Record another measurement to see your weight trend.
+        </AppText>
+      </View>
+    );
+  }
+
+  const values = chartRecords.map((record) => record.value);
+  const minValue = Math.min(...values);
+  const maxValue = Math.max(...values);
+  const valueRange = maxValue - minValue || 1;
+
+  const points = chartRecords.map((record, index) => {
+    const x =
+      horizontalPadding +
+      (index / (chartRecords.length - 1)) *
+      Math.max(chartWidth - horizontalPadding * 2, 1);
+
+    const y =
+      chartHeight -
+      verticalPadding -
+      ((record.value - minValue) / valueRange) *
+      (chartHeight - verticalPadding * 2);
+
+    return { x, y };
+  });
+
+  const linePath = points
+    .map(
+      (point, index) =>
+        `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`,
+    )
+    .join(' ');
+
+  return (
+    <View
+      onLayout={(event) =>
+        setChartWidth(event.nativeEvent.layout.width)
+      }
+      style={{ width: '100%' }}
+    >
+      {chartWidth > 0 ? (
+        <Svg
+          width={chartWidth}
+          height={chartHeight}
+        >
+          {[0, 0.5, 1].map((position) => {
+            const y =
+              verticalPadding +
+              position * (chartHeight - verticalPadding * 2);
+
+            return (
+              <Line
+                key={position}
+                x1={horizontalPadding}
+                y1={y}
+                x2={chartWidth - horizontalPadding}
+                y2={y}
+                stroke={colors.border.default}
+                strokeWidth={1}
+                strokeDasharray="4 5"
+              />
+            );
+          })}
+
+          <Path
+            d={linePath}
+            fill="none"
+            stroke={colors.brand.red}
+            strokeWidth={3}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+
+          {points.map((point, index) => (
+            <Circle
+              key={chartRecords[index].id}
+              cx={point.x}
+              cy={point.y}
+              r={4}
+              fill={colors.brand.red}
+              stroke={colors.background.secondary}
+              strokeWidth={2}
+            />
+          ))}
+        </Svg>
+      ) : null}
+    </View>
+  );
+}
 
 export default function HomeTabScreen() {
   const { colors, spacing, mode } = useTrainrTheme();
-  const { signOut } = useAuth();
+  const { user } = useAuth();
 
-  const [isSigningOut, setIsSigningOut] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [weightRecords, setWeightRecords] = useState<FitnessProgress[]>([]);
+  const [isLoadingWeight, setIsLoadingWeight] = useState(true);
+  const [weightError, setWeightError] = useState<string | null>(null);
 
-  const handleSignOut = async () => {
-    if (isSigningOut) {
+  const loadWeightProgress = useCallback(async () => {
+    if (!user?.id) {
+      setWeightRecords([]);
+      setIsLoadingWeight(false);
       return;
     }
 
-    setIsSigningOut(true);
-    setErrorMessage(null);
+    setIsLoadingWeight(true);
+    setWeightError(null);
 
     try {
-      await signOut();
+      const result = await getBodyWeightHistory();
+      setWeightRecords(result);
     } catch (error) {
-      console.error('[Home] Sign-out or navigation failed:', error);
+      console.error(
+        '[Home] Unable to load weight progress:',
+        error,
+      );
 
-      setErrorMessage(
-        error instanceof Error ? error.message : 'Unable to sign out. Please try again.',
+      setWeightError(
+        error instanceof Error
+          ? error.message
+          : 'Unable to load your weight progress.',
       );
     } finally {
-      setIsSigningOut(false);
+      setIsLoadingWeight(false);
     }
-  };
+  }, [user?.id]);
+
+  // Refresh progress whenever the Home screen regains focus.
+  useFocusEffect(
+    useCallback(() => {
+      void loadWeightProgress();
+    }, [loadWeightProgress]),
+  );
+
+  const currentWeight = weightRecords[0] ?? null;
+  const previousWeight = weightRecords[1] ?? null;
+
+  const weightDifference =
+    currentWeight &&
+      previousWeight &&
+      currentWeight.unit === previousWeight.unit
+      ? currentWeight.value - previousWeight.value
+      : null;
 
   const appIcon =
     mode === 'dark'
@@ -134,6 +325,216 @@ export default function HomeTabScreen() {
           </AppText>
         </View>
 
+        {/* Fitness Progress */}
+        <View style={{ gap: spacing.md, marginBottom: spacing.xl }}>
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+            }}
+          >
+            <View style={{ gap: spacing.xs }}>
+              <AppText
+                variant="caption"
+                color={colors.brand.red}
+              >
+                YOUR JOURNEY
+              </AppText>
+
+              <AppText
+                variant="h2"
+                color={colors.text.primary}
+              >
+                FITNESS PROGRESS
+              </AppText>
+            </View>
+
+            <Scale
+              size={23}
+              color={colors.brand.red}
+            />
+          </View>
+
+          <Card
+            variant="outlined"
+            style={{
+              padding: spacing.lg,
+              gap: spacing.md,
+            }}
+          >
+            {isLoadingWeight ? (
+              <AppText
+                variant="bodySmall"
+                color={colors.text.secondary}
+              >
+                Loading your fitness progress...
+              </AppText>
+            ) : weightError ? (
+              <View style={{ gap: spacing.md }}>
+                <AppText
+                  variant="bodySmall"
+                  color={colors.text.error}
+                >
+                  {weightError}
+                </AppText>
+
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => void loadWeightProgress()}
+                  style={{ alignSelf: 'flex-start' }}
+                >
+                  <AppText
+                    variant="button"
+                    color={colors.brand.red}
+                  >
+                    Try again
+                  </AppText>
+                </Pressable>
+              </View>
+            ) : currentWeight ? (
+              <>
+                {/* Current Weight */}
+                <View style={{ gap: spacing.xs }}>
+                  <AppText
+                    variant="caption"
+                    color={colors.text.secondary}
+                  >
+                    CURRENT WEIGHT
+                  </AppText>
+
+                  <View
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'baseline',
+                      gap: spacing.sm,
+                    }}
+                  >
+                    <AppText
+                      variant="displayLarge"
+                      color={colors.text.primary}
+                    >
+                      {currentWeight.value}
+                    </AppText>
+
+                    <AppText
+                      variant="h3"
+                      color={colors.text.secondary}
+                    >
+                      {currentWeight.unit}
+                    </AppText>
+                  </View>
+
+                  <AppText
+                    variant="caption"
+                    color={colors.text.tertiary}
+                  >
+                    Last recorded {formatWeightDate(currentWeight.recorded_at)}
+                  </AppText>
+                </View>
+
+                {/* Weight Difference */}
+                {weightDifference !== null ? (
+                  <View
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: spacing.xs,
+                    }}
+                  >
+                    {weightDifference > 0 ? (
+                      <TrendingUp size={17} color={colors.brand.red} />
+                    ) : weightDifference < 0 ? (
+                      <TrendingDown size={17} color={colors.text.secondary} />
+                    ) : (
+                      <Minus size={17} color={colors.text.tertiary} />
+                    )}
+
+                    <AppText
+                      variant="bodySmall"
+                      color={colors.text.secondary}
+                    >
+                      {weightDifference > 0 ? '+' : ''}
+                      {weightDifference.toFixed(1)} {currentWeight.unit} since previous measurement
+                    </AppText>
+                  </View>
+                ) : null}
+
+                {/* Weight Trend */}
+                <View
+                  style={{
+                    borderTopWidth: 1,
+                    borderTopColor: colors.border.default,
+                    paddingTop: spacing.md,
+                    gap: spacing.sm,
+                  }}
+                >
+                  <AppText
+                    variant="caption"
+                    color={colors.text.secondary}
+                  >
+                    WEIGHT TREND
+                  </AppText>
+
+                  <DashboardWeightChart
+                    records={weightRecords}
+                    unit={currentWeight.unit as 'kg' | 'lb'}
+                    colors={colors}
+                  />
+                </View>
+              </>
+            ) : (
+              /* Empty State */
+              <View style={{ gap: spacing.sm }}>
+                <AppText
+                  variant="h3"
+                  color={colors.text.primary}
+                >
+                  START TRACKING YOUR PROGRESS
+                </AppText>
+
+                <AppText
+                  variant="bodySmall"
+                  color={colors.text.secondary}
+                >
+                  Record your first weight measurement to see your fitness progress here.
+                </AppText>
+              </View>
+            )}
+
+            {/* Weight History Navigation */}
+            {!isLoadingWeight && !weightError ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="View weight history"
+                onPress={() =>
+                  router.push('/(tabs)/gym-goer-weight/history')
+                }
+                style={{
+                  borderTopWidth: 1,
+                  borderTopColor: colors.border.default,
+                  paddingTop: spacing.md,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                }}
+              >
+                <AppText
+                  variant="button"
+                  color={colors.brand.red}
+                >
+                  {currentWeight ? 'View Weight History' : 'Record Your Weight'}
+                </AppText>
+
+                <ArrowRight
+                  size={19}
+                  color={colors.brand.red}
+                />
+              </Pressable>
+            ) : null}
+          </Card>
+        </View>
+
         {/* Fitness Feature Card */}
         <View
           style={{
@@ -190,23 +591,6 @@ export default function HomeTabScreen() {
             gap: spacing.md,
           }}
         >
-          {errorMessage ? (
-            <View
-              accessibilityRole="alert"
-              style={{
-                padding: spacing.md,
-                borderRadius: 12,
-                borderWidth: 1,
-                borderColor: colors.brand.red,
-                backgroundColor: colors.background.secondary,
-              }}
-            >
-              <AppText variant="bodySmall" color={colors.text.error}>
-                {errorMessage}
-              </AppText>
-            </View>
-          ) : null}
-
           <AppText
             variant="caption"
             color={colors.text.tertiary}

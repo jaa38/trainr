@@ -1,3 +1,4 @@
+import { startWorkoutLog } from '@/services/workout-logs';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import {
@@ -8,7 +9,6 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { startWorkoutLog } from '@/services/workout-logs';
 
 import { AppText } from '@/components/AppText';
 import { Card } from '@/components/Card';
@@ -246,7 +246,7 @@ export default function WorkoutsScreen() {
     }, [loadAssignments, loadExploreWorkouts]),
   );
 
-    const handleStartWorkout = async (
+  const handleStartWorkout = async (
     assignment: WorkoutAssignment,
     day: TrainingDay,
   ) => {
@@ -598,7 +598,7 @@ export default function WorkoutsScreen() {
                     onMomentumScrollEnd={(event) => {
                       const index = Math.round(
                         event.nativeEvent.contentOffset.x /
-                          (dayCardWidth + spacing.md),
+                        (dayCardWidth + spacing.md),
                       );
 
                       const nextSelectedDay = trainingDays[index];
@@ -917,7 +917,7 @@ export default function WorkoutsScreen() {
                         color="#FFFFFF"
                       >
                         {startingWorkoutKey ===
-                        `${assignment.id}-${selectedDay.dayNumber}`
+                          `${assignment.id}-${selectedDay.dayNumber}`
                           ? 'Starting workout...'
                           : 'Start Workout'}
                       </AppText>

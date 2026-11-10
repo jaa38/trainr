@@ -345,3 +345,25 @@ export async function getWorkoutLogById(
 
   return data as unknown as WorkoutLog;
 }
+
+/**
+ * Clears all workout history belonging to the authenticated gym-goer.
+ */
+export async function clearWorkoutHistory(
+  gymGoerId: string
+): Promise<number> {
+  validateId(gymGoerId, 'Gym-goer ID');
+
+  const { data, error } = await supabase
+    .from('workout_logs')
+    .delete()
+    .eq('gym_goer_id', gymGoerId)
+    .select('id');
+
+  if (error) {
+    console.error('[Workout Logs] Failed to clear workout history:', error);
+    throw new Error('Unable to clear workout history. Please try again.');
+  }
+
+  return data?.length ?? 0;
+}
