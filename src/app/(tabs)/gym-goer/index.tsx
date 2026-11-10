@@ -52,7 +52,7 @@ export default function HomeTabScreen() {
           flexGrow: 1,
           paddingHorizontal: spacing.lg,
           paddingTop: spacing.lg,
-          paddingBottom: spacing.xxxl,
+          paddingBottom: spacing.xxl,
         }}
         showsVerticalScrollIndicator={false}
       >

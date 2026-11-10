@@ -1,13 +1,14 @@
-
-import { useFocusEffect } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import {
+  Alert,
   Pressable,
   ScrollView,
   View,
   useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { startWorkoutLog } from '@/services/workout-logs';
 
 import { AppText } from '@/components/AppText';
 import { Card } from '@/components/Card';
@@ -22,6 +23,7 @@ import {
   getExploreWorkoutPlans,
   type ExploreWorkoutPlan,
 } from '@/services/explore-workouts';
+
 
 type WorkoutCategory = 'All' | 'Strength' | 'Cardio' | 'Mobility';
 
@@ -138,6 +140,9 @@ export default function WorkoutsScreen() {
   const [assignments, setAssignments] =
     useState<WorkoutAssignment[]>([]);
 
+  const [startingWorkoutKey, setStartingWorkoutKey] =
+    useState<string | null>(null);
+
   const [isLoadingAssignments, setIsLoadingAssignments] =
     useState(true);
 
@@ -169,6 +174,9 @@ export default function WorkoutsScreen() {
 
   const [expandedExercises, setExpandedExercises] =
     useState<string[]>([]);
+
+  const [selectedTrainingDays, setSelectedTrainingDays] =
+    useState<Record<string, number>>({});
 
   const loadAssignments = useCallback(async () => {
     if (!user?.id || profile?.role !== 'gym_goer') {
@@ -238,6 +246,56 @@ export default function WorkoutsScreen() {
     }, [loadAssignments, loadExploreWorkouts]),
   );
 
+    const handleStartWorkout = async (
+    assignment: WorkoutAssignment,
+    day: TrainingDay,
+  ) => {
+    if (!user?.id) {
+      Alert.alert(
+        'Authentication required',
+        'Please sign in to start your workout.',
+      );
+      return;
+    }
+
+    const workoutKey = `${assignment.id}-${day.dayNumber}`;
+
+    if (startingWorkoutKey !== null) {
+      return;
+    }
+
+    setStartingWorkoutKey(workoutKey);
+
+    try {
+      const log = await startWorkoutLog({
+        assignmentId: assignment.id,
+        gymGoerId: user.id,
+        dayNumber: day.dayNumber,
+        dayName: day.dayName,
+        exercises: day.exercises,
+      });
+
+      router.push({
+        pathname:
+          '/(tabs)/gym-goer-workout/session/[assignmentId]',
+        params: {
+          assignmentId: log.id,
+        },
+      });
+    } catch (error) {
+      console.error('[Workouts] Unable to start workout:', error);
+
+      Alert.alert(
+        'Unable to start workout',
+        error instanceof Error
+          ? error.message
+          : 'Something went wrong. Please try again.',
+      );
+    } finally {
+      setStartingWorkoutKey(null);
+    }
+  };
+
   const toggleExercise = (exerciseId: string) => {
     setExpandedExercises((current) =>
       current.includes(exerciseId)
@@ -260,7 +318,7 @@ export default function WorkoutsScreen() {
         contentContainerStyle={{
           paddingHorizontal: spacing.lg,
           paddingTop: spacing.md,
-          paddingBottom: 150,
+          paddingBottom: spacing.xxl,
           gap: spacing.xl,
         }}
         showsVerticalScrollIndicator={false}
@@ -365,6 +423,15 @@ export default function WorkoutsScreen() {
               }
 
               const trainingDays = groupExercisesByDay(plan.exercises);
+
+              const selectedDayNumber =
+                selectedTrainingDays[assignment.id] ??
+                trainingDays[0]?.dayNumber;
+
+              const selectedDay =
+                trainingDays.find(
+                  (day) => day.dayNumber === selectedDayNumber,
+                ) ?? trainingDays[0];
 
               return (
                 <View
@@ -528,6 +595,21 @@ export default function WorkoutsScreen() {
                     pagingEnabled
                     snapToInterval={dayCardWidth + spacing.md}
                     decelerationRate="fast"
+                    onMomentumScrollEnd={(event) => {
+                      const index = Math.round(
+                        event.nativeEvent.contentOffset.x /
+                          (dayCardWidth + spacing.md),
+                      );
+
+                      const nextSelectedDay = trainingDays[index];
+
+                      if (nextSelectedDay) {
+                        setSelectedTrainingDays((current) => ({
+                          ...current,
+                          [assignment.id]: nextSelectedDay.dayNumber,
+                        }));
+                      }
+                    }}
                     showsHorizontalScrollIndicator={false}
                     contentContainerStyle={{
                       gap: spacing.md,
@@ -797,9 +879,50 @@ export default function WorkoutsScreen() {
                         >
                           DAY {day.dayNumber} OF {trainingDays.length}
                         </AppText>
+
+
                       </Card>
                     ))}
                   </ScrollView>
+
+                  {/* Start Selected Workout */}
+                  {selectedDay ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Start workout for ${selectedDay.dayName}`}
+                      accessibilityState={{
+                        disabled: startingWorkoutKey !== null,
+                        busy:
+                          startingWorkoutKey ===
+                          `${assignment.id}-${selectedDay.dayNumber}`,
+                      }}
+                      disabled={startingWorkoutKey !== null}
+                      onPress={() =>
+                        void handleStartWorkout(assignment, selectedDay)
+                      }
+                      style={{
+                        minHeight: 56,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        paddingHorizontal: spacing.md,
+                        paddingVertical: spacing.md,
+                        borderRadius: 12,
+                        backgroundColor: colors.brand.red,
+                        opacity:
+                          startingWorkoutKey !== null ? 0.6 : 1,
+                      }}
+                    >
+                      <AppText
+                        variant="button"
+                        color="#FFFFFF"
+                      >
+                        {startingWorkoutKey ===
+                        `${assignment.id}-${selectedDay.dayNumber}`
+                          ? 'Starting workout...'
+                          : 'Start Workout'}
+                      </AppText>
+                    </Pressable>
+                  ) : null}
 
                   {/* Swipe Guidance */}
                   {trainingDays.length > 1 ? (

@@ -793,7 +793,7 @@ export default function SessionsScreen() {
       <ScrollView
         contentContainerStyle={{
           padding: spacing.lg,
-          paddingBottom: spacing.huge + spacing.xxxl,
+          paddingBottom: spacing.xxl,
           gap: spacing.lg,
         }}
         refreshControl={

@@ -68,7 +68,7 @@ export default function GymGoerProfileScreen() {
       <ScrollView
         contentContainerStyle={{
           padding: spacing.lg,
-          paddingBottom: spacing.xxxl,
+          paddingBottom: spacing.xxl,
           gap: spacing.lg,
         }}
         showsVerticalScrollIndicator={false}
