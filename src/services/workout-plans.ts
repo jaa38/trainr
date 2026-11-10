@@ -179,6 +179,20 @@ export async function getWorkoutPlans(): Promise<WorkoutPlan[]> {
 }
 
 /**
+ * Retrieves published workout programmes available for assignment.
+ */
+export async function getPublishedWorkoutPlans(): Promise<WorkoutPlan[]> {
+  const plans = await getWorkoutPlans();
+
+  return plans.filter(
+    (plan) =>
+      plan.status === 'published' &&
+      plan.version > 0 &&
+      plan.published_snapshot !== null,
+  );
+}
+
+/**
  * Retrieves one workout plan and its exercises.
  */
 export async function getWorkoutPlan(

@@ -469,7 +469,15 @@ export default function WorkoutPlansScreen() {
                         return (
                             <Card
                                 key={plan.id}
-                                variant="outlined"
+                                variant="interactive"
+                                onPress={() =>
+                                    router.push({
+                                        pathname:
+                                            '/(tabs)/personal-trainer/more/workout-plan-builder',
+                                        params: { planId: plan.id },
+                                    })
+                                }
+                                accessibilityLabel={`Open workout plan ${plan.name}`}
                                 style={{ gap: spacing.md }}
                             >
                                 <View

@@ -76,6 +76,7 @@ export default function TrainerMoreScreen() {
 
                     {sections.map((section) => (
                         <Pressable
+                            key={section.route}
                             accessibilityRole="button"
                             accessibilityLabel={`Open ${section.title}`}
                             onPress={() => router.push(section.route)}
