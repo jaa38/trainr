@@ -23,7 +23,6 @@ import {
   type ExploreWorkoutPlan,
 } from '@/services/explore-workouts';
 
-
 type WorkoutCategory = 'All' | 'Strength' | 'Cardio' | 'Mobility';
 
 type PublishedExercise = {
@@ -73,8 +72,6 @@ const categories: WorkoutCategory[] = [
   'Cardio',
   'Mobility',
 ];
-
-
 
 function getPublishedSnapshot(
   assignment: WorkoutAssignment,
@@ -241,8 +238,6 @@ export default function WorkoutsScreen() {
     }, [loadAssignments, loadExploreWorkouts]),
   );
 
-
-
   const toggleExercise = (exerciseId: string) => {
     setExpandedExercises((current) =>
       current.includes(exerciseId)
@@ -270,6 +265,7 @@ export default function WorkoutsScreen() {
         }}
         showsVerticalScrollIndicator={false}
       >
+
         {/* Page Header */}
         <View style={{ gap: spacing.xs }}>
           <AppText variant="caption" color={colors.brand.red}>
@@ -590,40 +586,39 @@ export default function WorkoutsScreen() {
                                 style={{
                                   backgroundColor:
                                     colors.background.primary,
-                                  gap: spacing.sm,
+                                  gap: spacing.md,
                                 }}
                               >
-                                {/* Exercise Name */}
+                                {/* Exercise Header */}
                                 <View
                                   style={{
                                     flexDirection: 'row',
-                                    alignItems: 'flex-start',
-                                    gap: spacing.sm,
+                                    alignItems: 'center',
+                                    gap: spacing.md,
                                   }}
                                 >
                                   <View
                                     style={{
-                                      width: 28,
-                                      height: 28,
-                                      borderRadius: 8,
-                                      backgroundColor:
-                                        colors.background.secondary,
+                                      width: 40,
+                                      height: 40,
+                                      borderRadius: 12,
+                                      backgroundColor: colors.brand.redLight,
                                       alignItems: 'center',
                                       justifyContent: 'center',
                                     }}
                                   >
                                     <AppText
-                                      variant="caption"
-                                      color={colors.text.tertiary}
+                                      variant="button"
+                                      color={colors.brand.red}
                                     >
-                                      {index + 1}
+                                      {String(index + 1).padStart(2, '0')}
                                     </AppText>
                                   </View>
 
                                   <View
                                     style={{
                                       flex: 1,
-                                      gap: 4,
+                                      gap: spacing.xs,
                                     }}
                                   >
                                     <AppText
@@ -644,7 +639,7 @@ export default function WorkoutsScreen() {
                                   </View>
                                 </View>
 
-                                {/* Sets, Reps and Rest */}
+                                {/* Exercise Prescription */}
                                 <View
                                   style={{
                                     flexDirection: 'row',
@@ -662,11 +657,13 @@ export default function WorkoutsScreen() {
                                     <View
                                       key={detail}
                                       style={{
-                                        paddingHorizontal: spacing.sm,
-                                        paddingVertical: 6,
-                                        borderRadius: 8,
+                                        paddingHorizontal: spacing.md,
+                                        paddingVertical: spacing.sm,
+                                        borderRadius: 10,
                                         backgroundColor:
                                           colors.background.secondary,
+                                        borderWidth: 1,
+                                        borderColor,
                                       }}
                                     >
                                       <AppText
@@ -762,10 +759,12 @@ export default function WorkoutsScreen() {
                                     toggleExercise(exerciseKey)
                                   }
                                   style={{
+                                    minHeight: 48,
                                     alignItems: 'center',
                                     justifyContent: 'center',
-                                    paddingVertical: spacing.sm,
-                                    borderRadius: 10,
+                                    paddingHorizontal: spacing.md,
+                                    paddingVertical: spacing.md,
+                                    borderRadius: 12,
                                     backgroundColor: expanded
                                       ? colors.background.secondary
                                       : colors.brand.red,
@@ -837,7 +836,6 @@ export default function WorkoutsScreen() {
             })
           )}
         </View>
-
 
         {/* Explore Workouts */}
         <View style={{ gap: spacing.md }}>
@@ -1116,7 +1114,6 @@ export default function WorkoutsScreen() {
             })
           )}
         </View>
-
       </ScrollView>
     </SafeAreaView>
   );
