@@ -11,6 +11,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/AppText';
+import { BottomSheet } from '@/components/BottomSheet';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/providers/AuthProvider';
 
@@ -25,7 +26,27 @@ import {
     type WorkoutPlan,
 } from '@/services/workout-plans';
 
+import {
+    getClientFitnessProgress,
+    type FitnessProgress,
+} from '@/services/fitness-progress';
+
+import {
+    createTrainerFeedback,
+    getTrainerFeedback,
+    updateTrainerFeedback,
+    type TrainerFeedback,
+} from '@/services/trainer-feedback';
+
+import {
+    getTrainerSessionNotes,
+    type TrainerSessionNote,
+} from '@/services/trainer-session-notes';
+
 import { useTrainrTheme } from '@/theme';
+
+import { Button } from '@/components/Button';
+import { Input } from '@/components/Input';
 
 type BookingStatus =
     | 'pending'
@@ -69,7 +90,13 @@ type ClientPayment = {
     created_at: string;
 };
 
-type ClientDetailTab = 'overview' | 'sessions' | 'payments' | 'programmes';
+type ClientDetailTab =
+    | 'overview'
+    | 'sessions'
+    | 'payments'
+    | 'programmes'
+    | 'fitness'
+    | 'feedback';
 
 type ClientDetails = {
     profile: ClientProfile;
@@ -77,6 +104,9 @@ type ClientDetails = {
     bookings: ClientBooking[];
     payments: ClientPayment[];
     assignments: WorkoutAssignment[];
+    fitnessProgress: FitnessProgress[];
+    feedback: TrainerFeedback[];
+    sessionNotes: TrainerSessionNote[];
 };
 
 const DEFAULT_TIMEZONE = 'Africa/Lagos';
@@ -220,8 +250,19 @@ export default function ClientDetailScreen() {
     const [isLoading, setIsLoading] = useState(true);
     const [isRefreshing, setIsRefreshing] = useState(false);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
+    const [selectedSessionNote, setSelectedSessionNote] =
+        useState<TrainerSessionNote | null>(null);
+    const [isFeedbackSheetVisible, setIsFeedbackSheetVisible] = useState(false);
+    const [editingFeedback, setEditingFeedback] =
+        useState<TrainerFeedback | null>(null);
+    const [selectedFeedbackAssignmentId, setSelectedFeedbackAssignmentId] =
+        useState('');
+    const [feedbackText, setFeedbackText] = useState('');
+    const [feedbackRecommendations, setFeedbackRecommendations] = useState('');
+    const [feedbackError, setFeedbackError] = useState<string | null>(null);
+    const [isSavingFeedback, setIsSavingFeedback] = useState(false);
 
-        const [publishedPlans, setPublishedPlans] = useState<WorkoutPlan[]>([]);
+    const [publishedPlans, setPublishedPlans] = useState<WorkoutPlan[]>([]);
     const [selectedPlanId, setSelectedPlanId] = useState('');
     const [selectedBookingId, setSelectedBookingId] = useState('');
     const [isLoadingPlans, setIsLoadingPlans] = useState(false);
@@ -254,6 +295,9 @@ export default function ClientDetailScreen() {
                     { data: bookingRows, error: bookingsError },
                     { data: paymentRows, error: paymentsError },
                     assignments,
+                    fitnessProgress,
+                    feedback,
+                    sessionNotes,
                 ] = await Promise.all([
                     supabase
                         .from('profiles')
@@ -280,6 +324,9 @@ export default function ClientDetailScreen() {
                     }),
 
                     getClientWorkoutAssignments(clientId),
+                    getClientFitnessProgress(clientId),
+                    getTrainerFeedback(clientId),
+                    getTrainerSessionNotes(clientId),
                 ]);
 
                 if (profileError) throw profileError;
@@ -309,6 +356,9 @@ export default function ClientDetailScreen() {
                     bookings,
                     payments: clientPayments,
                     assignments,
+                    fitnessProgress,
+                    feedback,
+                    sessionNotes,
                 });
             } catch (error) {
                 console.error('[Client Details] Unable to load client:', error);
@@ -444,6 +494,91 @@ export default function ClientDetailScreen() {
             );
         } finally {
             setIsAssigning(false);
+        }
+    }
+
+    function openCreateFeedback() {
+        setEditingFeedback(null);
+        setSelectedFeedbackAssignmentId('');
+        setFeedbackText('');
+        setFeedbackRecommendations('');
+        setFeedbackError(null);
+        setIsFeedbackSheetVisible(true);
+    }
+
+    function openEditFeedback(item: TrainerFeedback) {
+        setEditingFeedback(item);
+        setSelectedFeedbackAssignmentId(
+            item.assigned_workout_plan_id ?? '',
+        );
+        setFeedbackText(item.feedback);
+        setFeedbackRecommendations(item.recommendations ?? '');
+        setFeedbackError(null);
+        setIsFeedbackSheetVisible(true);
+    }
+
+    function closeFeedbackSheet() {
+        if (isSavingFeedback) return;
+
+        setIsFeedbackSheetVisible(false);
+        setEditingFeedback(null);
+        setSelectedFeedbackAssignmentId('');
+        setFeedbackText('');
+        setFeedbackRecommendations('');
+        setFeedbackError(null);
+    }
+
+    async function handleSaveFeedback() {
+        if (!clientId || !details) {
+            setFeedbackError('Client information could not be found.');
+            return;
+        }
+
+        if (!feedbackText.trim()) {
+            setFeedbackError('Please enter your feedback.');
+            return;
+        }
+
+        if (!editingFeedback && !selectedFeedbackAssignmentId) {
+            setFeedbackError('Please select an assigned programme.');
+            return;
+        }
+
+        setIsSavingFeedback(true);
+        setFeedbackError(null);
+
+        try {
+            if (editingFeedback) {
+                await updateTrainerFeedback(editingFeedback.id, {
+                    feedback: feedbackText.trim(),
+                    recommendations: feedbackRecommendations.trim() || null,
+                });
+            } else {
+                await createTrainerFeedback({
+                    gymGoerId: clientId,
+                    assignedWorkoutPlanId: selectedFeedbackAssignmentId,
+                    feedback: feedbackText.trim(),
+                    recommendations: feedbackRecommendations.trim() || null,
+                });
+            }
+
+            setIsFeedbackSheetVisible(false);
+            setEditingFeedback(null);
+            setSelectedFeedbackAssignmentId('');
+            setFeedbackText('');
+            setFeedbackRecommendations('');
+
+            await loadClientDetails(true);
+        } catch (error) {
+            console.error('[Client Details] Unable to save feedback:', error);
+
+            setFeedbackError(
+                error instanceof Error
+                    ? error.message
+                    : 'Unable to save feedback. Please try again.',
+            );
+        } finally {
+            setIsSavingFeedback(false);
         }
     }
 
@@ -657,6 +792,8 @@ export default function ClientDetailScreen() {
                                     { key: 'sessions', label: 'Sessions' },
                                     { key: 'payments', label: 'Payments' },
                                     { key: 'programmes', label: 'Programmes' },
+                                    { key: 'fitness', label: 'Fitness Progress' },
+                                    { key: 'feedback', label: 'Feedback' },
                                 ] as const).map((tab) => {
                                     const selected = activeTab === tab.key;
 
@@ -697,43 +834,43 @@ export default function ClientDetailScreen() {
                             <>
                                 {/* Fitness goals */}
                                 <View
-                            style={{
-                                padding: spacing.md,
-                                borderRadius: 18,
-                                borderWidth: 1,
-                                borderColor: colors.border.default,
-                                backgroundColor: colors.background.secondary,
-                                gap: spacing.sm,
-                            }}
-                        >
-                            <AppText variant="h3" color={colors.text.primary}>
-                                FITNESS GOALS
-                            </AppText>
+                                    style={{
+                                        padding: spacing.md,
+                                        borderRadius: 18,
+                                        borderWidth: 1,
+                                        borderColor: colors.border.default,
+                                        backgroundColor: colors.background.secondary,
+                                        gap: spacing.sm,
+                                    }}
+                                >
+                                    <AppText variant="h3" color={colors.text.primary}>
+                                        FITNESS GOALS
+                                    </AppText>
 
-                            {details.goals.length === 0 ? (
-                                <AppText variant="body" color={colors.text.secondary}>
-                                    This client hasn't added any fitness goals yet.
-                                </AppText>
-                            ) : (
-                                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
-                                    {details.goals.map((item, index) => (
-                                        <View
-                                            key={`${item.goal}-${index}`}
-                                            style={{
-                                                paddingHorizontal: spacing.md,
-                                                paddingVertical: spacing.sm,
-                                                borderRadius: 999,
-                                                backgroundColor: colors.brand.redLight,
-                                            }}
-                                        >
-                                            <AppText variant="bodySmall" color={colors.brand.red}>
-                                                {getGoalLabel(item.goal)}
-                                            </AppText>
+                                    {details.goals.length === 0 ? (
+                                        <AppText variant="body" color={colors.text.secondary}>
+                                            This client hasn't added any fitness goals yet.
+                                        </AppText>
+                                    ) : (
+                                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
+                                            {details.goals.map((item, index) => (
+                                                <View
+                                                    key={`${item.goal}-${index}`}
+                                                    style={{
+                                                        paddingHorizontal: spacing.md,
+                                                        paddingVertical: spacing.sm,
+                                                        borderRadius: 999,
+                                                        backgroundColor: colors.brand.redLight,
+                                                    }}
+                                                >
+                                                    <AppText variant="bodySmall" color={colors.brand.red}>
+                                                        {getGoalLabel(item.goal)}
+                                                    </AppText>
+                                                </View>
+                                            ))}
                                         </View>
-                                    ))}
+                                    )}
                                 </View>
-                            )}
-                        </View>
 
                             </>
                         )}
@@ -741,31 +878,190 @@ export default function ClientDetailScreen() {
                         {/* Sessions tab */}
                         {activeTab === 'sessions' && (
                             <View style={{ gap: spacing.md }}>
-                            <AppText variant="h3" color={colors.text.primary}>
-                                SESSION HISTORY
-                            </AppText>
+                                <AppText variant="h3" color={colors.text.primary}>
+                                    SESSION HISTORY
+                                </AppText>
 
-                            {details.bookings.length === 0 ? (
-                                <View
-                                    style={{
-                                        padding: spacing.lg,
-                                        borderRadius: 16,
-                                        borderWidth: 1,
-                                        borderColor: colors.border.default,
-                                        backgroundColor: colors.background.secondary,
-                                    }}
-                                >
+                                {details.bookings.length === 0 ? (
+                                    <View
+                                        style={{
+                                            padding: spacing.lg,
+                                            borderRadius: 16,
+                                            borderWidth: 1,
+                                            borderColor: colors.border.default,
+                                            backgroundColor: colors.background.secondary,
+                                        }}
+                                    >
+                                        <AppText variant="body" color={colors.text.secondary}>
+                                            No sessions have been booked with this client yet.
+                                        </AppText>
+                                    </View>
+                                ) : (
+                                    details.bookings.map((booking) => {
+                                        const payment = getBookingPayment(booking.id);
+                                        const sessionNote = details.sessionNotes.find(
+                                            (note) => note.booking_id === booking.id,
+                                        );
+
+                                        return (
+                                            <View
+                                                key={booking.id}
+                                                style={{
+                                                    padding: spacing.md,
+                                                    borderRadius: 16,
+                                                    borderWidth: 1,
+                                                    borderColor: colors.border.default,
+                                                    backgroundColor: colors.background.secondary,
+                                                    gap: spacing.sm,
+                                                }}
+                                            >
+                                                <View
+                                                    style={{
+                                                        flexDirection: 'row',
+                                                        justifyContent: 'space-between',
+                                                        alignItems: 'center',
+                                                        gap: spacing.sm,
+                                                    }}
+                                                >
+                                                    <AppText variant="h3" color={colors.text.primary}>
+                                                        {formatDate(booking.scheduled_start)}
+                                                    </AppText>
+
+                                                    <AppText
+                                                        variant="caption"
+                                                        color={getStatusColour(booking.status, colors)}
+                                                    >
+                                                        {BOOKING_STATUS_LABELS[booking.status] ?? booking.status}
+                                                    </AppText>
+                                                </View>
+
+                                                <AppText variant="bodySmall" color={colors.text.secondary}>
+                                                    {formatDateTime(booking.scheduled_start)}
+                                                </AppText>
+
+                                                <AppText variant="bodySmall" color={colors.text.secondary}>
+                                                    Session rate: {formatCurrency(booking.session_rate, booking.currency)}
+                                                </AppText>
+
+                                                <View
+                                                    style={{
+                                                        height: 1,
+                                                        backgroundColor: colors.border.default,
+                                                    }}
+                                                />
+
+                                                <AppText variant="caption" color={colors.text.secondary}>
+                                                    PAYMENT
+                                                </AppText>
+
+                                                <AppText
+                                                    variant="bodySmall"
+                                                    color={
+                                                        payment
+                                                            ? colors.semantic.success
+                                                            : colors.text.secondary
+                                                    }
+                                                >
+                                                    {payment
+                                                        ? `Paid · ${formatCurrency(payment.amount, payment.currency)}`
+                                                        : 'No successful payment recorded'}
+                                                </AppText>
+
+                                                {sessionNote ? (
+                                                    <Pressable
+                                                        onPress={() => setSelectedSessionNote(sessionNote)}
+                                                        accessibilityRole="button"
+                                                        accessibilityLabel="View private session notes"
+                                                        style={{
+                                                            padding: spacing.md,
+                                                            borderRadius: 12,
+                                                            borderWidth: 1,
+                                                            borderColor: colors.border.default,
+                                                            backgroundColor: colors.background.secondary,
+                                                            gap: spacing.md,
+                                                        }}
+                                                    >
+                                                        <View
+                                                            style={{
+                                                                flexDirection: 'row',
+                                                                alignItems: 'center',
+                                                                justifyContent: 'space-between',
+                                                                gap: spacing.sm,
+                                                            }}
+                                                        >
+                                                            <AppText variant="body" color={colors.text.primary}>
+                                                                Session notes
+                                                            </AppText>
+
+                                                            <AppText
+                                                                variant="caption"
+                                                                color={colors.semantic.success}
+                                                            >
+                                                                SAVED
+                                                            </AppText>
+                                                        </View>
+
+                                                        <View
+                                                            style={{
+                                                                flexDirection: 'row',
+                                                                alignItems: 'center',
+                                                                justifyContent: 'space-between',
+                                                                gap: spacing.sm,
+                                                            }}
+                                                        >
+                                                            <AppText
+                                                                variant="caption"
+                                                                color={colors.text.secondary}
+                                                            >
+                                                                Summary and recommendations
+                                                            </AppText>
+
+                                                            <AppText
+                                                                variant="bodySmall"
+                                                                color={colors.text.primary}
+                                                            >
+                                                                View →
+                                                            </AppText>
+                                                        </View>
+                                                    </Pressable>
+                                                ) : null}
+
+                                                {booking.notes ? (
+                                                    <AppText variant="bodySmall" color={colors.text.tertiary}>
+                                                        {booking.notes}
+                                                    </AppText>
+                                                ) : null}
+
+                                                {booking.status !== 'confirmed' &&
+                                                    booking.status !== 'completed' ? null : (
+                                                    <AppText variant="caption" color={colors.text.tertiary}>
+                                                        {payment
+                                                            ? 'Eligible booking and payment combination'
+                                                            : 'A successful payment is required for programme assignment'}
+                                                    </AppText>
+                                                )}
+                                            </View>
+                                        );
+                                    })
+                                )}
+                            </View>
+                        )}
+
+                        {/* Payments tab */}
+                        {activeTab === 'payments' && (
+                            <View style={{ gap: spacing.md }}>
+                                <AppText variant="h3" color={colors.text.primary}>
+                                    PAYMENT HISTORY
+                                </AppText>
+
+                                {details.payments.length === 0 ? (
                                     <AppText variant="body" color={colors.text.secondary}>
-                                        No sessions have been booked with this client yet.
+                                        No payment records are available for this client's sessions.
                                     </AppText>
-                                </View>
-                            ) : (
-                                details.bookings.map((booking) => {
-                                    const payment = getBookingPayment(booking.id);
-
-                                    return (
+                                ) : (
+                                    details.payments.map((payment) => (
                                         <View
-                                            key={booking.id}
+                                            key={payment.id}
                                             style={{
                                                 padding: spacing.md,
                                                 borderRadius: 16,
@@ -784,133 +1080,36 @@ export default function ClientDetailScreen() {
                                                 }}
                                             >
                                                 <AppText variant="h3" color={colors.text.primary}>
-                                                    {formatDate(booking.scheduled_start)}
+                                                    {formatCurrency(payment.amount, payment.currency)}
                                                 </AppText>
 
                                                 <AppText
                                                     variant="caption"
-                                                    color={getStatusColour(booking.status, colors)}
+                                                    color={getStatusColour(payment.status, colors)}
                                                 >
-                                                    {BOOKING_STATUS_LABELS[booking.status] ?? booking.status}
+                                                    {payment.status.toUpperCase()}
                                                 </AppText>
                                             </View>
 
                                             <AppText variant="bodySmall" color={colors.text.secondary}>
-                                                {formatDateTime(booking.scheduled_start)}
+                                                {payment.provider} · {formatDateTime(payment.created_at)}
                                             </AppText>
 
-                                            <AppText variant="bodySmall" color={colors.text.secondary}>
-                                                Session rate: {formatCurrency(booking.session_rate, booking.currency)}
-                                            </AppText>
-
-                                            <View
-                                                style={{
-                                                    height: 1,
-                                                    backgroundColor: colors.border.default,
-                                                }}
-                                            />
-
-                                            <AppText variant="caption" color={colors.text.secondary}>
-                                                PAYMENT
-                                            </AppText>
-
-                                            <AppText
-                                                variant="bodySmall"
-                                                color={
-                                                    payment
-                                                        ? colors.semantic.success
-                                                        : colors.text.secondary
-                                                }
-                                            >
-                                                {payment
-                                                    ? `Paid · ${formatCurrency(payment.amount, payment.currency)}`
-                                                    : 'No successful payment recorded'}
-                                            </AppText>
-
-                                            {booking.notes ? (
-                                                <AppText variant="bodySmall" color={colors.text.tertiary}>
-                                                    {booking.notes}
+                                            {payment.paid_at ? (
+                                                <AppText variant="caption" color={colors.text.tertiary}>
+                                                    Paid {formatDateTime(payment.paid_at)}
                                                 </AppText>
                                             ) : null}
 
-                                            {booking.status !== 'confirmed' &&
-                                                booking.status !== 'completed' ? null : (
+                                            {payment.provider_reference ? (
                                                 <AppText variant="caption" color={colors.text.tertiary}>
-                                                    {payment
-                                                        ? 'Eligible booking and payment combination'
-                                                        : 'A successful payment is required for programme assignment'}
+                                                    Reference: {payment.provider_reference}
                                                 </AppText>
-                                            )}
+                                            ) : null}
                                         </View>
-                                    );
-                                })
-                            )}
-                        </View>
-                        )}
-
-                        {/* Payments tab */}
-                        {activeTab === 'payments' && (
-                            <View style={{ gap: spacing.md }}>
-                            <AppText variant="h3" color={colors.text.primary}>
-                                PAYMENT HISTORY
-                            </AppText>
-
-                            {details.payments.length === 0 ? (
-                                <AppText variant="body" color={colors.text.secondary}>
-                                    No payment records are available for this client's sessions.
-                                </AppText>
-                            ) : (
-                                details.payments.map((payment) => (
-                                    <View
-                                        key={payment.id}
-                                        style={{
-                                            padding: spacing.md,
-                                            borderRadius: 16,
-                                            borderWidth: 1,
-                                            borderColor: colors.border.default,
-                                            backgroundColor: colors.background.secondary,
-                                            gap: spacing.sm,
-                                        }}
-                                    >
-                                        <View
-                                            style={{
-                                                flexDirection: 'row',
-                                                justifyContent: 'space-between',
-                                                alignItems: 'center',
-                                                gap: spacing.sm,
-                                            }}
-                                        >
-                                            <AppText variant="h3" color={colors.text.primary}>
-                                                {formatCurrency(payment.amount, payment.currency)}
-                                            </AppText>
-
-                                            <AppText
-                                                variant="caption"
-                                                color={getStatusColour(payment.status, colors)}
-                                            >
-                                                {payment.status.toUpperCase()}
-                                            </AppText>
-                                        </View>
-
-                                        <AppText variant="bodySmall" color={colors.text.secondary}>
-                                            {payment.provider} · {formatDateTime(payment.created_at)}
-                                        </AppText>
-
-                                        {payment.paid_at ? (
-                                            <AppText variant="caption" color={colors.text.tertiary}>
-                                                Paid {formatDateTime(payment.paid_at)}
-                                            </AppText>
-                                        ) : null}
-
-                                        {payment.provider_reference ? (
-                                            <AppText variant="caption" color={colors.text.tertiary}>
-                                                Reference: {payment.provider_reference}
-                                            </AppText>
-                                        ) : null}
-                                    </View>
-                                ))
-                            )}
-                        </View>
+                                    ))
+                                )}
+                            </View>
                         )}
 
                         {/* Programmes tab */}
@@ -1161,10 +1360,10 @@ export default function ClientDetailScreen() {
                                         backgroundColor: colors.brand.red,
                                         opacity:
                                             isAssigning ||
-                                            isLoadingPlans ||
-                                            !selectedPlan ||
-                                            !selectedBooking ||
-                                            !selectedPayment
+                                                isLoadingPlans ||
+                                                !selectedPlan ||
+                                                !selectedBooking ||
+                                                !selectedPayment
                                                 ? 0.5
                                                 : 1,
                                     }}
@@ -1254,36 +1453,613 @@ export default function ClientDetailScreen() {
                             </View>
                         )}
 
+                        {/* Fitness Progress tab */}
+                        {activeTab === 'fitness' && (
+                            <View style={{ gap: spacing.md }}>
+                                <AppText variant="h3" color={colors.text.primary}>
+                                    FITNESS PROGRESS
+                                </AppText>
+
+                                {(() => {
+                                    const measurements = [...details.fitnessProgress].sort(
+                                        (a, b) =>
+                                            new Date(b.recorded_at).getTime() -
+                                            new Date(a.recorded_at).getTime(),
+                                    );
+
+                                    const weightRecords = measurements.filter(
+                                        (item) => item.metric_type === 'body_weight',
+                                    );
+
+                                    const latestWeight = weightRecords[0];
+                                    const previousWeight = weightRecords[1];
+
+                                    const metricLabels: Record<string, string> = {
+                                        body_weight: 'Body weight',
+                                        body_fat: 'Body fat',
+                                        waist: 'Waist',
+                                        chest: 'Chest',
+                                        hips: 'Hips',
+                                        arm: 'Arm',
+                                        thigh: 'Thigh',
+                                    };
+
+                                    return (
+                                        <>
+                                            <View
+                                                style={{
+                                                    padding: spacing.md,
+                                                    borderRadius: 16,
+                                                    borderWidth: 1,
+                                                    borderColor: colors.border.default,
+                                                    backgroundColor: colors.background.secondary,
+                                                    gap: spacing.sm,
+                                                }}
+                                            >
+                                                <AppText variant="caption" color={colors.text.secondary}>
+                                                    CURRENT BODY WEIGHT
+                                                </AppText>
+
+                                                {latestWeight ? (
+                                                    <>
+                                                        <AppText variant="h2" color={colors.text.primary}>
+                                                            {latestWeight.value.toLocaleString('en-GB', {
+                                                                maximumFractionDigits: 2,
+                                                            })} {latestWeight.unit}
+                                                        </AppText>
+
+                                                        <AppText variant="caption" color={colors.text.tertiary}>
+                                                            Recorded {formatDate(latestWeight.recorded_at)}
+                                                        </AppText>
+
+                                                        {previousWeight &&
+                                                            previousWeight.unit === latestWeight.unit ? (
+                                                            <AppText
+                                                                variant="bodySmall"
+                                                                color={colors.text.secondary}
+                                                            >
+                                                                {`${latestWeight.value - previousWeight.value > 0 ? '+' : ''}${(latestWeight.value - previousWeight.value).toFixed(2)} ${latestWeight.unit} since the previous measurement`}
+                                                            </AppText>
+                                                        ) : null}
+                                                    </>
+                                                ) : (
+                                                    <AppText variant="body" color={colors.text.secondary}>
+                                                        No body weight measurements have been recorded.
+                                                    </AppText>
+                                                )}
+                                            </View>
+
+                                            <AppText variant="h3" color={colors.text.primary}>
+                                                MEASUREMENT HISTORY
+                                            </AppText>
+
+                                            {measurements.length === 0 ? (
+                                                <View
+                                                    style={{
+                                                        padding: spacing.lg,
+                                                        borderRadius: 16,
+                                                        borderWidth: 1,
+                                                        borderColor: colors.border.default,
+                                                        backgroundColor: colors.background.secondary,
+                                                    }}
+                                                >
+                                                    <AppText variant="body" color={colors.text.secondary}>
+                                                        This client hasn't recorded any fitness measurements yet.
+                                                    </AppText>
+                                                </View>
+                                            ) : (
+                                                measurements.map((item) => (
+                                                    <View
+                                                        key={item.id}
+                                                        style={{
+                                                            padding: spacing.md,
+                                                            borderRadius: 16,
+                                                            borderWidth: 1,
+                                                            borderColor: colors.border.default,
+                                                            backgroundColor: colors.background.secondary,
+                                                            gap: spacing.xs,
+                                                        }}
+                                                    >
+                                                        <View
+                                                            style={{
+                                                                flexDirection: 'row',
+                                                                justifyContent: 'space-between',
+                                                                alignItems: 'center',
+                                                                gap: spacing.sm,
+                                                            }}
+                                                        >
+                                                            <AppText variant="body" color={colors.text.primary}>
+                                                                {metricLabels[item.metric_type] ?? item.metric_type}
+                                                            </AppText>
+
+                                                            <AppText variant="body" color={colors.text.primary}>
+                                                                {item.value.toLocaleString('en-GB', {
+                                                                    maximumFractionDigits: 2,
+                                                                })} {item.unit}
+                                                            </AppText>
+                                                        </View>
+
+                                                        <AppText variant="caption" color={colors.text.tertiary}>
+                                                            {formatDate(item.recorded_at)}
+                                                        </AppText>
+
+                                                        {item.notes ? (
+                                                            <AppText variant="bodySmall" color={colors.text.secondary}>
+                                                                {item.notes}
+                                                            </AppText>
+                                                        ) : null}
+                                                    </View>
+                                                ))
+                                            )}
+                                        </>
+                                    );
+                                })()}
+                            </View>
+                        )}
+
+                        {/* Feedback tab */}
+                        {activeTab === 'feedback' && (
+                            <View style={{ gap: spacing.md }}>
+                                <View
+                                    style={{
+                                        flexDirection: 'row',
+                                        alignItems: 'center',
+                                        justifyContent: 'space-between',
+                                        gap: spacing.md,
+                                    }}
+                                >
+                                    <View style={{ flex: 1, gap: spacing.xs }}>
+                                        <AppText variant="h3" color={colors.text.primary}>
+                                            TRAINER FEEDBACK
+                                        </AppText>
+                                        <AppText variant="caption" color={colors.text.secondary}>
+                                            Coaching observations and recommendations for this client.
+                                        </AppText>
+                                    </View>
+
+                                    <Button
+                                        size="small"
+                                        onPress={openCreateFeedback}
+                                        accessibilityLabel="Add feedback"
+                                    >
+                                        Add feedback
+                                    </Button>
+                                </View>
+
+                                {details.feedback.length === 0 ? (
+                                    <View
+                                        style={{
+                                            padding: spacing.lg,
+                                            borderRadius: 16,
+                                            borderWidth: 1,
+                                            borderColor: colors.border.default,
+                                            backgroundColor: colors.background.secondary,
+                                            gap: spacing.sm,
+                                        }}
+                                    >
+                                        <AppText variant="body" color={colors.text.secondary}>
+                                            No feedback has been recorded for this client yet.
+                                        </AppText>
+                                        <AppText variant="caption" color={colors.text.tertiary}>
+                                            Add feedback after reviewing an assigned programme or workout.
+                                        </AppText>
+                                        <Button
+                                            variant="outline"
+                                            fullWidth
+                                            onPress={openCreateFeedback}
+                                        >
+                                            Create first feedback
+                                        </Button>
+                                    </View>
+                                ) : (
+                                    details.feedback.map((item) => {
+                                        const assignment = item.assigned_workout_plan_id
+                                            ? details.assignments.find(
+                                                (entry) => entry.id === item.assigned_workout_plan_id,
+                                            )
+                                            : null;
+
+                                        return (
+                                            <View
+                                                key={item.id}
+                                                style={{
+                                                    padding: spacing.md,
+                                                    borderRadius: 16,
+                                                    borderWidth: 1,
+                                                    borderColor: colors.border.default,
+                                                    backgroundColor: colors.background.secondary,
+                                                    gap: spacing.sm,
+                                                }}
+                                            >
+                                                <View
+                                                    style={{
+                                                        flexDirection: 'row',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'space-between',
+                                                        gap: spacing.sm,
+                                                    }}
+                                                >
+                                                    <AppText variant="caption" color={colors.text.tertiary}>
+                                                        {formatDateTime(item.created_at)}
+                                                    </AppText>
+                                                    <Button
+                                                        size="small"
+                                                        variant="outline"
+                                                        onPress={() => openEditFeedback(item)}
+                                                        accessibilityLabel="Edit feedback"
+                                                    >
+                                                        Edit
+                                                    </Button>
+                                                </View>
+
+                                                {assignment ? (
+                                                    <AppText variant="caption" color={colors.brand.red}>
+                                                        {getSnapshotPlanName(assignment.plan_snapshot)}
+                                                    </AppText>
+                                                ) : item.workout_log_id ? (
+                                                    <AppText variant="caption" color={colors.brand.red}>
+                                                        Workout session
+                                                    </AppText>
+                                                ) : null}
+
+                                                <AppText variant="body" color={colors.text.primary}>
+                                                    {item.feedback}
+                                                </AppText>
+
+                                                {item.recommendations ? (
+                                                    <View
+                                                        style={{
+                                                            borderTopWidth: 1,
+                                                            borderTopColor: colors.border.default,
+                                                            paddingTop: spacing.sm,
+                                                            gap: spacing.xs,
+                                                        }}
+                                                    >
+                                                        <AppText variant="caption" color={colors.text.secondary}>
+                                                            RECOMMENDATIONS
+                                                        </AppText>
+                                                        <AppText variant="bodySmall" color={colors.text.secondary}>
+                                                            {item.recommendations}
+                                                        </AppText>
+                                                    </View>
+                                                ) : null}
+                                            </View>
+                                        );
+                                    })
+                                )}
+                            </View>
+                        )}
+
                         {/* Assignment eligibility summary */}
                         {activeTab === 'overview' && (
                             <View
-                            style={{
-                                padding: spacing.md,
-                                borderRadius: 18,
-                                borderWidth: 1,
-                                borderColor: colors.border.default,
-                                backgroundColor: colors.background.secondary,
-                                gap: spacing.sm,
-                            }}
-                        >
-                            <AppText variant="h3" color={colors.text.primary}>
-                                PROGRAMME ASSIGNMENT
-                            </AppText>
+                                style={{
+                                    padding: spacing.md,
+                                    borderRadius: 18,
+                                    borderWidth: 1,
+                                    borderColor: colors.border.default,
+                                    backgroundColor: colors.background.secondary,
+                                    gap: spacing.sm,
+                                }}
+                            >
+                                <AppText variant="h3" color={colors.text.primary}>
+                                    PROGRAMME ASSIGNMENT
+                                </AppText>
 
-                            <AppText variant="body" color={colors.text.secondary}>
-                                {eligibleBookings.length > 0
-                                    ? `${eligibleBookings.length} booking${eligibleBookings.length === 1 ? '' : 's'} meet the initial booking and payment eligibility checks.`
-                                    : 'No bookings currently meet the initial booking and payment eligibility checks.'}
-                            </AppText>
+                                <AppText variant="body" color={colors.text.secondary}>
+                                    {eligibleBookings.length > 0
+                                        ? `${eligibleBookings.length} booking${eligibleBookings.length === 1 ? '' : 's'} meet the initial booking and payment eligibility checks.`
+                                        : 'No bookings currently meet the initial booking and payment eligibility checks.'}
+                                </AppText>
 
-                            <AppText variant="caption" color={colors.text.tertiary}>
-                                The Programmes tab lets you assign published plans using an eligible booking and successful payment. The server rechecks trainer, client, booking and payment eligibility before creating an assignment.
-                            </AppText>
+                                <AppText variant="caption" color={colors.text.tertiary}>
+                                    The Programmes tab lets you assign published plans using an eligible booking and successful payment. The server rechecks trainer, client, booking and payment eligibility before creating an assignment.
+                                </AppText>
                             </View>
                         )}
                     </>
                 )}
             </ScrollView>
+
+            <BottomSheet
+                visible={Boolean(selectedSessionNote)}
+                onClose={() => setSelectedSessionNote(null)}
+                title="Private session notes"
+                subtitle={
+                    selectedSessionNote && details
+                        ? (() => {
+                            const booking = details.bookings.find(
+                                (item) => item.id === selectedSessionNote.booking_id,
+                            );
+
+                            return booking
+                                ? formatDateTime(booking.scheduled_start)
+                                : 'Historical coaching record';
+                        })()
+                        : undefined
+                }
+                maxHeight="85%"
+            >
+                {selectedSessionNote ? (
+                    <View style={{ gap: spacing.lg }}>
+                        <View
+                            style={{
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                padding: spacing.md,
+                                borderRadius: 12,
+                                backgroundColor: colors.background.secondary,
+                                borderWidth: 1,
+                                borderColor: colors.border.default,
+                            }}
+                        >
+                            <View style={{ flex: 1, gap: spacing.xs }}>
+                                <AppText variant="bodySmall" color={colors.text.primary}>
+                                    PRIVATE TRAINER RECORD
+                                </AppText>
+                                <AppText variant="caption" color={colors.text.secondary}>
+                                    Only authorised trainers can access these notes.
+                                </AppText>
+                            </View>
+                            <AppText variant="caption" color={colors.semantic.success}>
+                                SAVED
+                            </AppText>
+                        </View>
+
+                        <View style={{ gap: spacing.sm }}>
+                            <AppText variant="caption" color={colors.text.secondary}>
+                                SESSION SUMMARY
+                            </AppText>
+                            <AppText variant="body" color={colors.text.primary}>
+                                {selectedSessionNote.session_summary}
+                            </AppText>
+                        </View>
+
+                        {selectedSessionNote.observations ? (
+                            <View style={{ gap: spacing.sm }}>
+                                <View
+                                    style={{
+                                        height: 1,
+                                        backgroundColor: colors.border.default,
+                                    }}
+                                />
+                                <AppText variant="caption" color={colors.text.secondary}>
+                                    OBSERVATIONS
+                                </AppText>
+                                <AppText variant="body" color={colors.text.primary}>
+                                    {selectedSessionNote.observations}
+                                </AppText>
+                            </View>
+                        ) : null}
+
+                        {selectedSessionNote.recommendations ? (
+                            <View style={{ gap: spacing.sm }}>
+                                <View
+                                    style={{
+                                        height: 1,
+                                        backgroundColor: colors.border.default,
+                                    }}
+                                />
+                                <AppText variant="caption" color={colors.text.secondary}>
+                                    RECOMMENDATIONS
+                                </AppText>
+                                <AppText variant="body" color={colors.text.primary}>
+                                    {selectedSessionNote.recommendations}
+                                </AppText>
+                            </View>
+                        ) : null}
+                    </View>
+                ) : null}
+            </BottomSheet>
+
+            <BottomSheet
+                visible={isFeedbackSheetVisible}
+                onClose={closeFeedbackSheet}
+                title={editingFeedback ? 'Edit feedback' : 'Add feedback'}
+                subtitle={
+                    editingFeedback
+                        ? 'Update your coaching feedback for this client.'
+                        : 'Record coaching feedback for an assigned programme.'
+                }
+                maxHeight="90%"
+                footer={
+                    <View style={{ gap: spacing.sm }}>
+                        {feedbackError ? (
+                            <AppText
+                                variant="caption"
+                                color={colors.semantic.error}
+                            >
+                                {feedbackError}
+                            </AppText>
+                        ) : null}
+
+                        <Button
+                            fullWidth
+                            loading={isSavingFeedback}
+                            disabled={isSavingFeedback}
+                            onPress={() => void handleSaveFeedback()}
+                        >
+                            {editingFeedback ? 'Save changes' : 'Save feedback'}
+                        </Button>
+
+                        <Button
+                            fullWidth
+                            variant="outline"
+                            disabled={isSavingFeedback}
+                            onPress={closeFeedbackSheet}
+                        >
+                            Cancel
+                        </Button>
+                    </View>
+                }
+            >
+                <View style={{ gap: spacing.lg }}>
+                    {!editingFeedback ? (
+                        <View style={{ gap: spacing.sm }}>
+                            <AppText
+                                variant="label"
+                                color={colors.text.primary}
+                            >
+                                Assigned programme
+                            </AppText>
+
+                            {details?.assignments.some(
+                                (assignment) =>
+                                    assignment.status === 'active' ||
+                                    assignment.status === 'completed',
+                            ) ? (
+                                details.assignments
+                                    .filter(
+                                        (assignment) =>
+                                            assignment.status === 'active' ||
+                                            assignment.status === 'completed',
+                                    )
+                                    .map((assignment) => {
+                                        const isSelected =
+                                            selectedFeedbackAssignmentId === assignment.id;
+
+                                        return (
+                                            <Pressable
+                                                key={assignment.id}
+                                                accessibilityRole="button"
+                                                accessibilityState={{ selected: isSelected }}
+                                                onPress={() => {
+                                                    setSelectedFeedbackAssignmentId(assignment.id);
+                                                    setFeedbackError(null);
+                                                }}
+                                                style={{
+                                                    padding: spacing.md,
+                                                    borderRadius: 12,
+                                                    borderWidth: isSelected ? 2 : 1,
+                                                    borderColor: isSelected
+                                                        ? colors.brand.red
+                                                        : colors.border.default,
+                                                    backgroundColor: colors.background.secondary,
+                                                    gap: spacing.xs,
+                                                }}
+                                            >
+                                                <AppText
+                                                    variant="body"
+                                                    color={colors.text.primary}
+                                                >
+                                                    {getSnapshotPlanName(assignment.plan_snapshot)}
+                                                </AppText>
+
+                                                <AppText
+                                                    variant="caption"
+                                                    color={isSelected
+                                                        ? colors.brand.red
+                                                        : colors.text.secondary}
+                                                >
+                                                    {isSelected
+                                                        ? 'Selected'
+                                                        : `${ASSIGNMENT_STATUS_LABELS[assignment.status] ?? assignment.status} · Select programme`}
+                                                </AppText>
+                                            </Pressable>
+                                        );
+                                    })
+                            ) : (
+                                <View
+                                    style={{
+                                        padding: spacing.md,
+                                        borderRadius: 12,
+                                        borderWidth: 1,
+                                        borderColor: colors.border.default,
+                                        backgroundColor: colors.background.secondary,
+                                        gap: spacing.xs,
+                                    }}
+                                >
+                                    <AppText
+                                        variant="bodySmall"
+                                        color={colors.text.secondary}
+                                    >
+                                        No active or completed assigned programmes are available.
+                                    </AppText>
+                                    <AppText
+                                        variant="caption"
+                                        color={colors.text.tertiary}
+                                    >
+                                        Assign a programme before creating programme feedback.
+                                    </AppText>
+                                </View>
+                            )}
+                        </View>
+                    ) : (
+                        <View
+                            style={{
+                                padding: spacing.md,
+                                borderRadius: 12,
+                                backgroundColor: colors.background.secondary,
+                                gap: spacing.xs,
+                            }}
+                        >
+                            <AppText
+                                variant="caption"
+                                color={colors.text.secondary}
+                            >
+                                LINKED PROGRAMME
+                            </AppText>
+                            <AppText
+                                variant="body"
+                                color={colors.text.primary}
+                            >
+                                {editingFeedback.assigned_workout_plan_id
+                                    ? (() => {
+                                        const assignment = details?.assignments.find(
+                                            (item) =>
+                                                item.id === editingFeedback.assigned_workout_plan_id,
+                                        );
+
+                                        return assignment
+                                            ? getSnapshotPlanName(assignment.plan_snapshot)
+                                            : 'Previously assigned programme';
+                                    })()
+                                    : editingFeedback.workout_log_id
+                                        ? 'Workout session'
+                                        : 'Existing feedback record'}
+                            </AppText>
+                            <AppText
+                                variant="caption"
+                                color={colors.text.tertiary}
+                            >
+                                The original workout or programme association will be preserved.
+                            </AppText>
+                        </View>
+                    )}
+
+                    <Input
+                        label="Feedback"
+                        placeholder="Write your feedback for this client..."
+                        value={feedbackText}
+                        onChangeText={(value) => {
+                            setFeedbackText(value);
+                            setFeedbackError(null);
+                        }}
+                        multiline
+                        numberOfLines={5}
+                        textAlignVertical="top"
+                        style={{
+                            minHeight: 120,
+                            paddingTop: spacing.md,
+                        }}
+                    />
+
+                    <Input
+                        label="Recommendations (optional)"
+                        placeholder="Add recommendations or next steps..."
+                        value={feedbackRecommendations}
+                        onChangeText={setFeedbackRecommendations}
+                        multiline
+                        numberOfLines={4}
+                        textAlignVertical="top"
+                        style={{
+                            minHeight: 100,
+                            paddingTop: spacing.md,
+                        }}
+                    />
+                </View>
+            </BottomSheet>
         </SafeAreaView>
     );
 }

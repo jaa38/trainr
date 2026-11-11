@@ -1,12 +1,19 @@
 
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import {
   ActivityIndicator,
   Alert,
   Pressable,
   ScrollView,
   TextInput,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -59,6 +66,12 @@ export default function WorkoutPlanBuilderScreen() {
   const router = useRouter();
   const { planId } = useLocalSearchParams<{ planId: string }>();
   const { colors, spacing } = useTrainrTheme();
+
+  const { width: windowWidth } = useWindowDimensions();
+  const trainingDayPageWidth = windowWidth - spacing.lg * 2;
+
+  const [activeDayIndex, setActiveDayIndex] = useState(0);
+  const trainingDaysRef = useRef<ScrollView>(null);
 
   const [plan, setPlan] = useState<WorkoutPlan | null>(null);
   const [exercises, setExercises] = useState<Exercise[]>([]);
@@ -149,6 +162,24 @@ export default function WorkoutPlanBuilderScreen() {
         ),
       }));
   }, [planExercises]);
+
+  useEffect(() => {
+    const lastIndex = Math.max(0, groupedExercises.length - 1);
+    const safeIndex = Math.min(activeDayIndex, lastIndex);
+
+    if (safeIndex !== activeDayIndex) {
+      setActiveDayIndex(safeIndex);
+    }
+
+    trainingDaysRef.current?.scrollTo({
+      x: safeIndex * trainingDayPageWidth,
+      animated: false,
+    });
+  }, [
+    groupedExercises.length,
+    activeDayIndex,
+    trainingDayPageWidth,
+  ]);
 
   const filteredExercises = exercises.filter((exercise) => {
     const query = exerciseSearch.trim().toLowerCase();
@@ -640,12 +671,15 @@ export default function WorkoutPlanBuilderScreen() {
             {isEditable ? (
               <Button
                 size="small"
-                onPress={() =>
-                  openAddExercise(
-                    Math.max(0, ...groupedExercises.map((item) => item.day)) + 1,
-                    `Day ${Math.max(0, ...groupedExercises.map((item) => item.day)) + 1}`,
-                  )
-                }
+                onPress={() => {
+                  const nextDay =
+                    Math.max(
+                      0,
+                      ...groupedExercises.map((item) => item.day),
+                    ) + 1;
+
+                  openAddExercise(nextDay, `Day ${nextDay}`);
+                }}
               >
                 + Add day
               </Button>
@@ -681,102 +715,209 @@ export default function WorkoutPlanBuilderScreen() {
                 ) : null}
               </View>
             </Card>
-          ) : null}
+          ) : (
+            <>
+              <ScrollView
+                ref={trainingDaysRef}
+                horizontal
+                pagingEnabled
+                nestedScrollEnabled
+                showsHorizontalScrollIndicator={false}
+                decelerationRate="fast"
+                style={{ width: trainingDayPageWidth }}
+                onMomentumScrollEnd={(event) => {
+                  const index = Math.round(
+                    event.nativeEvent.contentOffset.x /
+                    trainingDayPageWidth,
+                  );
 
-          {groupedExercises.map((group) => (
-            <Card
-              key={group.day}
-              variant="outlined"
-              style={{ gap: spacing.md }}
-            >
+                  setActiveDayIndex(
+                    Math.max(
+                      0,
+                      Math.min(index, groupedExercises.length - 1),
+                    ),
+                  );
+                }}
+              >
+                {groupedExercises.map((group) => (
+                  <View
+                    key={group.day}
+                    style={{ width: trainingDayPageWidth }}
+                  >
+                    <Card
+                      variant="outlined"
+                      style={{ gap: spacing.md }}
+                    >
+                      <View
+                        style={{
+                          flexDirection: 'row',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                        }}
+                      >
+                        <View style={{ gap: spacing.xs, flex: 1 }}>
+                          <AppText
+                            variant="h3"
+                            color={colors.text.primary}
+                          >
+                            {group.name}
+                          </AppText>
+
+                          <AppText
+                            variant="caption"
+                            color={colors.text.secondary}
+                          >
+                            {group.exercises.length} exercises
+                          </AppText>
+                        </View>
+
+                        {isEditable ? (
+                          <Button
+                            size="small"
+                            variant="outline"
+                            onPress={() =>
+                              openAddExercise(group.day, group.name)
+                            }
+                          >
+                            + Exercise
+                          </Button>
+                        ) : null}
+                      </View>
+
+                      {group.exercises.map((item, index) => (
+                        <View
+                          key={item.id}
+                          style={{
+                            padding: spacing.md,
+                            borderRadius: 12,
+                            backgroundColor: colors.background.secondary,
+                            gap: spacing.sm,
+                          }}
+                        >
+                          <View
+                            style={{
+                              flexDirection: 'row',
+                              justifyContent: 'space-between',
+                              gap: spacing.sm,
+                            }}
+                          >
+                            <View style={{ flex: 1, gap: spacing.xs }}>
+                              <AppText
+                                variant="body"
+                                color={colors.text.primary}
+                              >
+                                {index + 1}. {item.exercise?.name ?? 'Exercise'}
+                              </AppText>
+
+                              <AppText
+                                variant="caption"
+                                color={colors.text.secondary}
+                              >
+                                {item.sets} sets × {item.repetitions}
+                                {item.rest_seconds !== null
+                                  ? ` · ${item.rest_seconds}s rest`
+                                  : ''}
+                              </AppText>
+                            </View>
+
+                            {isEditable ? (
+                              <View
+                                style={{
+                                  flexDirection: 'row',
+                                  gap: spacing.sm,
+                                }}
+                              >
+                                <Pressable
+                                  accessibilityRole="button"
+                                  accessibilityLabel="Edit exercise"
+                                  onPress={() => openEditExercise(item)}
+                                >
+                                  <AppText color={colors.brand.red}>
+                                    Edit
+                                  </AppText>
+                                </Pressable>
+
+                                <Pressable
+                                  accessibilityRole="button"
+                                  accessibilityLabel="Remove exercise"
+                                  onPress={() => void deleteExercise(item)}
+                                >
+                                  <AppText color={colors.error}>
+                                    ×
+                                  </AppText>
+                                </Pressable>
+                              </View>
+                            ) : null}
+                          </View>
+
+                          {item.notes ? (
+                            <AppText
+                              variant="caption"
+                              color={colors.text.secondary}
+                            >
+                              {item.notes}
+                            </AppText>
+                          ) : null}
+                        </View>
+                      ))}
+                    </Card>
+                  </View>
+                ))}
+              </ScrollView>
+
+              {/* Training day pagination */}
               <View
                 style={{
                   flexDirection: 'row',
-                  justifyContent: 'space-between',
                   alignItems: 'center',
+                  justifyContent: 'space-between',
                 }}
               >
-                <View style={{ gap: spacing.xs }}>
-                  <AppText variant="h3" color={colors.text.primary}>
-                    {group.name}
-                  </AppText>
+                <AppText
+                  variant="caption"
+                  color={colors.text.secondary}
+                >
+                  Day {activeDayIndex + 1} of {groupedExercises.length}
+                </AppText>
 
-                  <AppText variant="caption" color={colors.text.secondary}>
-                    {group.exercises.length} exercises
-                  </AppText>
-                </View>
-
-                {isEditable ? (
-                  <Button
-                    size="small"
-                    variant="outline"
-                    onPress={() => openAddExercise(group.day, group.name)}
-                  >
-                    + Exercise
-                  </Button>
-                ) : null}
-              </View>
-
-              {group.exercises.map((item, index) => (
                 <View
-                  key={item.id}
                   style={{
-                    padding: spacing.md,
-                    borderRadius: 12,
-                    backgroundColor: colors.background.secondary,
+                    flexDirection: 'row',
+                    alignItems: 'center',
                     gap: spacing.sm,
                   }}
                 >
-                  <View
-                    style={{
-                      flexDirection: 'row',
-                      justifyContent: 'space-between',
-                      gap: spacing.sm,
-                    }}
-                  >
-                    <View style={{ flex: 1, gap: spacing.xs }}>
-                      <AppText variant="body" color={colors.text.primary}>
-                        {index + 1}. {item.exercise?.name ?? 'Exercise'}
-                      </AppText>
+                  {groupedExercises.map((group, index) => (
+                    <Pressable
+                      key={group.day}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Go to ${group.name}`}
+                      accessibilityState={{
+                        selected: activeDayIndex === index,
+                      }}
+                      onPress={() => {
+                        trainingDaysRef.current?.scrollTo({
+                          x: index * trainingDayPageWidth,
+                          animated: true,
+                        });
 
-                      <AppText variant="caption" color={colors.text.secondary}>
-                        {item.sets} sets × {item.repetitions}
-                        {item.rest_seconds !== null
-                          ? ` · ${item.rest_seconds}s rest`
-                          : ''}
-                      </AppText>
-                    </View>
-
-                    {isEditable ? (
-                      <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-                        <Pressable
-                          accessibilityRole="button"
-                          accessibilityLabel="Edit exercise"
-                          onPress={() => openEditExercise(item)}
-                        >
-                          <AppText color={colors.brand.red}>Edit</AppText>
-                        </Pressable>
-
-                        <Pressable
-                          accessibilityRole="button"
-                          accessibilityLabel="Remove exercise"
-                          onPress={() => void deleteExercise(item)}
-                        >
-                          <AppText color={colors.error}>×</AppText>
-                        </Pressable>
-                      </View>
-                    ) : null}
-                  </View>
-
-                  {item.notes ? (
-                    <AppText variant="caption" color={colors.text.secondary}>
-                      {item.notes}
-                    </AppText>
-                  ) : null}
+                        setActiveDayIndex(index);
+                      }}
+                      style={{
+                        width: activeDayIndex === index ? 22 : 8,
+                        height: 8,
+                        borderRadius: 4,
+                        backgroundColor:
+                          activeDayIndex === index
+                            ? colors.brand.red
+                            : colors.border.default,
+                      }}
+                    />
+                  ))}
                 </View>
-              ))}
-            </Card>
-          ))}
+              </View>
+            </>
+          )}
         </View>
 
         {/* Revision for published plans */}

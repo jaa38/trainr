@@ -299,47 +299,6 @@ export default function ClientsScreen() {
           </View>
         </View>
 
-        {/* Overview */}
-        <View style={{ flexDirection: 'row', gap: spacing.md }}>
-          <View
-            style={{
-              flex: 1,
-              padding: spacing.md,
-              borderRadius: 16,
-              borderWidth: 1,
-              borderColor: colors.border.default,
-              backgroundColor: colors.background.secondary,
-              gap: spacing.xs,
-            }}
-          >
-            <AppText variant="caption" color={colors.text.secondary}>
-              ACTIVE CLIENTS
-            </AppText>
-            <AppText variant="displayLarge" color={colors.text.primary}>
-              {activeCount}
-            </AppText>
-          </View>
-
-          <View
-            style={{
-              flex: 1,
-              padding: spacing.md,
-              borderRadius: 16,
-              borderWidth: 1,
-              borderColor: colors.border.default,
-              backgroundColor: colors.background.secondary,
-              gap: spacing.xs,
-            }}
-          >
-            <AppText variant="caption" color={colors.text.secondary}>
-              PENDING
-            </AppText>
-            <AppText variant="displayLarge" color={colors.brand.red}>
-              {pendingCount}
-            </AppText>
-          </View>
-        </View>
-
         {/* Search */}
         <View
           style={{

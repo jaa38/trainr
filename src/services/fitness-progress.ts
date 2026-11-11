@@ -282,3 +282,38 @@ export async function updateBodyWeight(
 
   return data as unknown as FitnessProgress;
 }
+
+/**
+ * Retrieves a client's fitness measurements for the authenticated trainer.
+ * Trainer access is enforced by database RLS and requires a confirmed
+ * trainer-client booking relationship.
+ * Results are ordered from newest to oldest.
+ */
+export async function getClientFitnessProgress(
+  gymGoerId: string,
+): Promise<FitnessProgress[]> {
+  if (!gymGoerId.trim()) {
+    throw new Error('A valid client is required.');
+  }
+
+  await getAuthenticatedUser();
+
+  const { data, error } = await supabase
+    .from('fitness_progress')
+    .select(FITNESS_PROGRESS_COLUMNS)
+    .eq('user_id', gymGoerId)
+    .order('recorded_at', { ascending: false })
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error(
+      '[Fitness Progress] Unable to load client measurements:',
+      error,
+    );
+    throw new Error(
+      'Unable to load this client’s fitness progress. Please try again.',
+    );
+  }
+
+  return (data ?? []) as unknown as FitnessProgress[];
+}

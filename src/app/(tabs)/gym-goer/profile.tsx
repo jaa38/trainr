@@ -137,7 +137,7 @@ export default function GymGoerProfileScreen() {
         showsVerticalScrollIndicator={false}
       >
         {/* Profile Header */}
-        <View style={{ gap: spacing.sm }}>
+        {/* <View style={{ gap: spacing.sm }}>
           <AppText variant="caption" color={colors.brand.red}>
             YOUR ACCOUNT
           </AppText>
@@ -149,7 +149,7 @@ export default function GymGoerProfileScreen() {
           <AppText variant="body" color={colors.text.secondary}>
             Make your fitness journey your own.
           </AppText>
-        </View>
+        </View> */}
 
         {/* User Profile Card */}
         <View
@@ -201,7 +201,7 @@ export default function GymGoerProfileScreen() {
         </View>
 
         {/* Current Weight Card */}
-        <Pressable
+        {/* <Pressable
           accessibilityRole="button"
           accessibilityLabel="View current weight and weight history"
           onPress={() =>
@@ -308,7 +308,7 @@ export default function GymGoerProfileScreen() {
 
             <ArrowRight size={20} color={colors.brand.red} />
           </View>
-        </Pressable>
+        </Pressable> */}
 
         {/* Profile Sections */}
         {sections.map((section) => (

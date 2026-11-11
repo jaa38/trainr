@@ -1,20 +1,29 @@
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useFocusEffect } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   Pressable,
   RefreshControl,
   ScrollView,
+  TextInput,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/AppText';
+import { BottomSheet } from '@/components/BottomSheet';
+import { Button } from '@/components/Button';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/providers/AuthProvider';
 import { useTrainrTheme } from '@/theme';
+import {
+  createTrainerSessionNote,
+  getTrainerSessionNote,
+  updateTrainerSessionNote,
+  type TrainerSessionNote,
+} from '@/services/trainer-session-notes';
 
 type ScheduleView = 'Upcoming' | 'Availability' | 'History';
 
@@ -156,6 +165,18 @@ export default function ScheduleScreen() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [availabilityError, setAvailabilityError] = useState<string | null>(null);
   const [updatingBookingId, setUpdatingBookingId] = useState<string | null>(null);
+
+  const [expandedSessionNoteBookingId, setExpandedSessionNoteBookingId] =
+    useState<string | null>(null);
+  const [sessionNote, setSessionNote] = useState<TrainerSessionNote | null>(null);
+  const [sessionSummary, setSessionSummary] = useState('');
+  const [sessionObservations, setSessionObservations] = useState('');
+  const [sessionRecommendations, setSessionRecommendations] = useState('');
+  const [isLoadingSessionNote, setIsLoadingSessionNote] = useState(false);
+  const [hasLoadedSessionNote, setHasLoadedSessionNote] = useState(false);
+  const [isSavingSessionNote, setIsSavingSessionNote] = useState(false);
+  const [sessionNoteError, setSessionNoteError] = useState<string | null>(null);
+  const sessionNoteRequestId = useRef(0);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -533,6 +554,123 @@ export default function ScheduleScreen() {
     }
   }
 
+  function closeSessionNoteSheet() {
+    if (isSavingSessionNote) return;
+
+    sessionNoteRequestId.current += 1;
+    setExpandedSessionNoteBookingId(null);
+    setIsLoadingSessionNote(false);
+    setHasLoadedSessionNote(false);
+    setSessionNoteError(null);
+  }
+
+  async function loadSessionNote(booking: Booking) {
+    const requestId = ++sessionNoteRequestId.current;
+
+    setIsLoadingSessionNote(true);
+    setHasLoadedSessionNote(false);
+    setSessionNoteError(null);
+
+    try {
+      const note = await getTrainerSessionNote(booking.id);
+
+      if (sessionNoteRequestId.current !== requestId) return;
+
+      setSessionNote(note);
+      setSessionSummary(note?.session_summary ?? '');
+      setSessionObservations(note?.observations ?? '');
+      setSessionRecommendations(note?.recommendations ?? '');
+      setHasLoadedSessionNote(true);
+    } catch (error) {
+      if (sessionNoteRequestId.current !== requestId) return;
+
+      console.error('[Trainer Schedule] Unable to load session note:', error);
+      setSessionNoteError(
+        error instanceof Error
+          ? error.message
+          : 'Unable to load session notes. Please try again.',
+      );
+    } finally {
+      if (sessionNoteRequestId.current === requestId) {
+        setIsLoadingSessionNote(false);
+      }
+    }
+  }
+
+  async function toggleSessionNoteEditor(booking: Booking) {
+    if (booking.status !== 'completed' || isSavingSessionNote) return;
+
+    if (expandedSessionNoteBookingId === booking.id) {
+      closeSessionNoteSheet();
+      return;
+    }
+
+    setExpandedSessionNoteBookingId(booking.id);
+    setSessionNote(null);
+    setSessionSummary('');
+    setSessionObservations('');
+    setSessionRecommendations('');
+
+    await loadSessionNote(booking);
+  }
+
+  async function saveSessionNote(booking: Booking) {
+    if (
+      booking.status !== 'completed' ||
+      isSavingSessionNote ||
+      !hasLoadedSessionNote
+    ) return;
+
+    if (!sessionSummary.trim()) {
+      setSessionNoteError('Please enter a session summary before saving.');
+      return;
+    }
+
+    setIsSavingSessionNote(true);
+    setSessionNoteError(null);
+
+    try {
+      const input = {
+        sessionSummary: sessionSummary.trim(),
+        observations: sessionObservations,
+        recommendations: sessionRecommendations,
+      };
+
+      const savedNote = sessionNote
+        ? await updateTrainerSessionNote(sessionNote.id, input)
+        : await createTrainerSessionNote({
+            ...input,
+            bookingId: booking.id,
+            gymGoerId: booking.gym_goer_id,
+          });
+
+      setSessionNote(savedNote);
+      setSessionSummary(savedNote.session_summary);
+      setSessionObservations(savedNote.observations ?? '');
+      setSessionRecommendations(savedNote.recommendations ?? '');
+
+      Alert.alert(
+        'Session notes saved',
+        'Your private coaching notes have been saved successfully.',
+        [
+          {
+            text: 'OK',
+            onPress: () => closeSessionNoteSheet(),
+          },
+        ],
+      );
+    } catch (error) {
+      console.error('[Trainer Schedule] Unable to save session note:', error);
+      setSessionNoteError(
+        error instanceof Error
+          ? error.message
+          : 'Unable to save session notes. Please try again.',
+      );
+    } finally {
+      setIsSavingSessionNote(false);
+    }
+  }
+
   const visibleBookings = bookings.filter((booking) => {
     if (activeView === 'Availability') return false;
 
@@ -542,6 +680,13 @@ export default function ScheduleScreen() {
 
     return !HISTORY_STATUSES.includes(booking.status);
   });
+
+  const selectedSessionNoteBooking =
+    bookings.find((booking) => booking.id === expandedSessionNoteBookingId) ?? null;
+
+  const selectedSessionNoteClientName = selectedSessionNoteBooking?.client
+    ? `${selectedSessionNoteBooking.client.first_name ?? ''} ${selectedSessionNoteBooking.client.last_name ?? ''}`.trim()
+    : 'Client';
 
   return (
     <SafeAreaView
@@ -1059,6 +1204,34 @@ export default function ScheduleScreen() {
                     </AppText>
                   ) : null}
 
+                  {/* Private trainer session notes */}
+                  {booking.status === 'completed' && activeView === 'History' ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="Add or edit private session notes"
+                      onPress={() => void toggleSessionNoteEditor(booking)}
+                      style={({ pressed }) => ({
+                        minHeight: 48,
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        paddingHorizontal: spacing.md,
+                        borderRadius: 12,
+                        borderWidth: 1,
+                        borderColor: colors.border.default,
+                        backgroundColor: colors.background.primary,
+                        opacity: pressed ? 0.75 : 1,
+                      })}
+                    >
+                      <AppText variant="button" color={colors.brand.red}>
+                        Session notes
+                      </AppText>
+                      <AppText variant="caption" color={colors.text.secondary}>
+                        Add / Edit
+                      </AppText>
+                    </Pressable>
+                  ) : null}
+
                   {/* Pending booking actions */}
                   {isPending && activeView === 'Upcoming' ? (
                     <View
@@ -1187,6 +1360,187 @@ export default function ScheduleScreen() {
           </AppText>
         </View>
       </ScrollView>
+
+      {/* Private trainer session notes */}
+      <BottomSheet
+        visible={Boolean(expandedSessionNoteBookingId)}
+        onClose={closeSessionNoteSheet}
+        title={sessionNote ? 'Edit session notes' : 'Add session notes'}
+        subtitle={
+          selectedSessionNoteBooking
+            ? `${selectedSessionNoteClientName} · ${formatDate(selectedSessionNoteBooking.scheduled_start, trainerTimezone)}`
+            : 'Private coaching record'
+        }
+        scrollable
+        maxHeight="85%"
+        footer={
+          <View style={{ gap: spacing.sm }}>
+            <Button
+              fullWidth
+              loading={isSavingSessionNote}
+              disabled={
+                !hasLoadedSessionNote ||
+                !sessionSummary.trim() ||
+                isLoadingSessionNote
+              }
+              onPress={() => {
+                if (selectedSessionNoteBooking) {
+                  void saveSessionNote(selectedSessionNoteBooking);
+                }
+              }}
+            >
+              {sessionNote ? 'Update session notes' : 'Save session notes'}
+            </Button>
+
+            <Button
+              fullWidth
+              variant="ghost"
+              disabled={isSavingSessionNote}
+              onPress={closeSessionNoteSheet}
+            >
+              Cancel
+            </Button>
+          </View>
+        }
+      >
+        <View style={{ gap: spacing.lg }}>
+          <View
+            style={{
+              padding: spacing.md,
+              borderRadius: 12,
+              backgroundColor: colors.background.secondary,
+              gap: spacing.xs,
+            }}
+          >
+            <AppText variant="label" color={colors.text.primary}>
+              PRIVATE COACHING NOTES
+            </AppText>
+            <AppText variant="caption" color={colors.text.secondary}>
+              Only you can access these notes. They are not shared with the client.
+            </AppText>
+          </View>
+
+          {isLoadingSessionNote ? (
+            <View
+              style={{
+                minHeight: 120,
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: spacing.sm,
+              }}
+            >
+              <ActivityIndicator color={colors.brand.red} />
+              <AppText variant="caption" color={colors.text.secondary}>
+                Loading session notes...
+              </AppText>
+            </View>
+          ) : sessionNoteError && !hasLoadedSessionNote ? (
+            <View style={{ gap: spacing.md }}>
+              <AppText variant="body" color={colors.brand.red}>
+                {sessionNoteError}
+              </AppText>
+              {selectedSessionNoteBooking ? (
+                <Button
+                  fullWidth
+                  variant="outline"
+                  onPress={() => void loadSessionNote(selectedSessionNoteBooking)}
+                >
+                  Retry loading notes
+                </Button>
+              ) : null}
+            </View>
+          ) : hasLoadedSessionNote ? (
+            <>
+              <View style={{ gap: spacing.sm }}>
+                <AppText variant="label" color={colors.text.primary}>
+                  Session summary *
+                </AppText>
+                <TextInput
+                  value={sessionSummary}
+                  onChangeText={(value) => {
+                    setSessionSummary(value);
+                    setSessionNoteError(null);
+                  }}
+                  placeholder="Summarise the training session"
+                  placeholderTextColor={colors.text.tertiary}
+                  multiline
+                  textAlignVertical="top"
+                  accessibilityLabel="Session summary"
+                  style={{
+                    minHeight: 100,
+                    borderWidth: 1,
+                    borderColor: colors.border.default,
+                    borderRadius: 12,
+                    paddingHorizontal: spacing.md,
+                    paddingVertical: spacing.md,
+                    color: colors.text.primary,
+                    backgroundColor: colors.background.secondary,
+                    fontSize: 14,
+                  }}
+                />
+              </View>
+
+              <View style={{ gap: spacing.sm }}>
+                <AppText variant="label" color={colors.text.primary}>
+                  Observations
+                </AppText>
+                <TextInput
+                  value={sessionObservations}
+                  onChangeText={setSessionObservations}
+                  placeholder="Record the client's performance, form or progress"
+                  placeholderTextColor={colors.text.tertiary}
+                  multiline
+                  textAlignVertical="top"
+                  accessibilityLabel="Session observations"
+                  style={{
+                    minHeight: 100,
+                    borderWidth: 1,
+                    borderColor: colors.border.default,
+                    borderRadius: 12,
+                    paddingHorizontal: spacing.md,
+                    paddingVertical: spacing.md,
+                    color: colors.text.primary,
+                    backgroundColor: colors.background.secondary,
+                    fontSize: 14,
+                  }}
+                />
+              </View>
+
+              <View style={{ gap: spacing.sm }}>
+                <AppText variant="label" color={colors.text.primary}>
+                  Recommendations
+                </AppText>
+                <TextInput
+                  value={sessionRecommendations}
+                  onChangeText={setSessionRecommendations}
+                  placeholder="Add recommendations or next-session actions"
+                  placeholderTextColor={colors.text.tertiary}
+                  multiline
+                  textAlignVertical="top"
+                  accessibilityLabel="Session recommendations"
+                  style={{
+                    minHeight: 100,
+                    borderWidth: 1,
+                    borderColor: colors.border.default,
+                    borderRadius: 12,
+                    paddingHorizontal: spacing.md,
+                    paddingVertical: spacing.md,
+                    color: colors.text.primary,
+                    backgroundColor: colors.background.secondary,
+                    fontSize: 14,
+                  }}
+                />
+              </View>
+            </>
+          ) : null}
+
+          {sessionNoteError && hasLoadedSessionNote ? (
+            <AppText variant="caption" color={colors.brand.red}>
+              {sessionNoteError}
+            </AppText>
+          ) : null}
+        </View>
+      </BottomSheet>
     </SafeAreaView>
   );
 }
