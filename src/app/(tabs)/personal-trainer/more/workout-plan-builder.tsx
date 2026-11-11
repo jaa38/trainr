@@ -71,6 +71,9 @@ export default function WorkoutPlanBuilderScreen() {
   const trainingDayPageWidth = windowWidth - spacing.lg * 2;
 
   const [activeDayIndex, setActiveDayIndex] = useState(0);
+  const [trainingDayHeights, setTrainingDayHeights] = useState<
+    Record<number, number>
+  >({});
   const trainingDaysRef = useRef<ScrollView>(null);
 
   const [plan, setPlan] = useState<WorkoutPlan | null>(null);
@@ -162,6 +165,11 @@ export default function WorkoutPlanBuilderScreen() {
         ),
       }));
   }, [planExercises]);
+
+  const activeTrainingDay = groupedExercises[activeDayIndex];
+  const activeTrainingDayHeight = activeTrainingDay
+    ? trainingDayHeights[activeTrainingDay.day]
+    : undefined;
 
   useEffect(() => {
     const lastIndex = Math.max(0, groupedExercises.length - 1);
@@ -722,9 +730,13 @@ export default function WorkoutPlanBuilderScreen() {
                 horizontal
                 pagingEnabled
                 nestedScrollEnabled
+                contentContainerStyle={{ alignItems: 'flex-start' }}
                 showsHorizontalScrollIndicator={false}
                 decelerationRate="fast"
-                style={{ width: trainingDayPageWidth }}
+                style={{
+                  width: trainingDayPageWidth,
+                  height: activeTrainingDayHeight,
+                }}
                 onMomentumScrollEnd={(event) => {
                   const index = Math.round(
                     event.nativeEvent.contentOffset.x /
@@ -743,6 +755,24 @@ export default function WorkoutPlanBuilderScreen() {
                   <View
                     key={group.day}
                     style={{ width: trainingDayPageWidth }}
+                    onLayout={(event) => {
+                      const measuredHeight = Math.ceil(
+                        event.nativeEvent.layout.height,
+                      );
+
+                      setTrainingDayHeights((current) => {
+                        if (
+                          current[group.day] === measuredHeight
+                        ) {
+                          return current;
+                        }
+
+                        return {
+                          ...current,
+                          [group.day]: measuredHeight,
+                        };
+                      });
+                    }}
                   >
                     <Card
                       variant="outlined"
