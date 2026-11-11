@@ -1189,13 +1189,19 @@ export default function ClientDetailScreen() {
                                                 >
                                                     <View
                                                         style={{
-                                                            flexDirection: 'row',
-                                                            alignItems: 'center',
-                                                            justifyContent: 'space-between',
-                                                            gap: spacing.sm,
+                                                            alignItems: 'flex-start',
+                                                            width: '100%',
+                                                            gap: spacing.xs,
                                                         }}
                                                     >
-                                                        <AppText variant="h3" color={colors.text.primary}>
+                                                        <AppText
+                                                            variant="h3"
+                                                            color={colors.text.primary}
+                                                            style={{
+                                                                width: '100%',
+                                                                flexShrink: 1,
+                                                            }}
+                                                        >
                                                             {plan.name}
                                                         </AppText>
                                                         <AppText
