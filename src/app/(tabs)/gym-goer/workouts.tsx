@@ -127,9 +127,10 @@ function groupExercisesByDay(
 export default function WorkoutsScreen() {
   const { colors, spacing } = useTrainrTheme();
   const { user, profile } = useAuth();
-  const { width: screenWidth } = useWindowDimensions();
+  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
 
   const dayCardWidth = screenWidth - spacing.lg * 2;
+  const dayCardHeight = Math.max(420, Math.min(screenHeight * 0.58, 620));
 
   const [selectedCategory, setSelectedCategory] =
     useState<WorkoutCategory>('All');
@@ -139,6 +140,9 @@ export default function WorkoutsScreen() {
 
   const [assignments, setAssignments] =
     useState<WorkoutAssignment[]>([]);
+
+  const [selectedAssignmentId, setSelectedAssignmentId] =
+    useState<string | null>(null);
 
   const [startingWorkoutKey, setStartingWorkoutKey] =
     useState<string | null>(null);
@@ -181,6 +185,7 @@ export default function WorkoutsScreen() {
   const loadAssignments = useCallback(async () => {
     if (!user?.id || profile?.role !== 'gym_goer') {
       setAssignments([]);
+      setSelectedAssignmentId(null);
       setIsLoadingAssignments(false);
       return;
     }
@@ -191,8 +196,15 @@ export default function WorkoutsScreen() {
     try {
       const result = await getClientWorkoutAssignments(user.id);
 
-      setAssignments(
-        result.filter((assignment) => assignment.status === 'active'),
+      const activeAssignments = result.filter(
+        (assignment) => assignment.status === 'active',
+      );
+
+      setAssignments(activeAssignments);
+      setSelectedAssignmentId((current) =>
+        activeAssignments.some((assignment) => assignment.id === current)
+          ? current
+          : activeAssignments[0]?.id ?? null,
       );
     } catch (error) {
       console.error(
@@ -406,7 +418,126 @@ export default function WorkoutsScreen() {
               </AppText>
             </Card>
           ) : (
-            assignments.map((assignment) => {
+            <>
+              {/* Horizontal Training Plan Selector */}
+              <View style={{ gap: spacing.sm }}>
+                <AppText variant="caption" color={colors.text.tertiary}>
+                  SWIPE TO SELECT A TRAINING PLAN
+                </AppText>
+
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  decelerationRate="fast"
+                  contentContainerStyle={{ gap: spacing.md }}
+                >
+                  {assignments.map((assignment) => {
+                    const plan = getPublishedSnapshot(assignment);
+                    const selected = selectedAssignmentId === assignment.id;
+
+                    return (
+                      <Pressable
+                        key={assignment.id}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected }}
+                        accessibilityLabel={`Select ${plan?.name ?? 'workout programme'}`}
+                        onPress={() => {
+                          setSelectedAssignmentId(assignment.id);
+                          setSelectedTrainingDays((current) => ({
+                            ...current,
+                            [assignment.id]:
+                              current[assignment.id] ??
+                              groupExercisesByDay(plan?.exercises ?? [])[0]?.dayNumber,
+                          }));
+                        }}
+                        style={{
+                          width: dayCardWidth * 0.82,
+                          minHeight: 112,
+                          padding: spacing.md,
+                          borderRadius: 16,
+                          borderWidth: selected ? 2 : 1,
+                          borderColor: selected
+                            ? colors.brand.red
+                            : borderColor,
+                          backgroundColor: colors.background.secondary,
+                          justifyContent: 'space-between',
+                          gap: spacing.sm,
+                          opacity: selected ? 1 : 0.72,
+                        }}
+                      >
+                        <View style={{ gap: spacing.xs }}>
+                          <View
+                            style={{
+                              width: 32,
+                              height: 4,
+                              borderRadius: 2,
+                              backgroundColor: colors.brand.red,
+                            }}
+                          />
+                          <AppText
+                            variant="h4"
+                            color={colors.text.primary}
+                          >
+                            {plan?.name ?? 'Workout programme'}
+                          </AppText>
+                        </View>
+
+                        <View
+                          style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            gap: spacing.xs,
+                          }}
+                        >
+                          <AppText
+                            variant="caption"
+                            color={colors.text.tertiary}
+                          >
+                            VERSION {assignment.plan_version}
+                          </AppText>
+                          <AppText
+                            variant="caption"
+                            color={selected ? colors.brand.red : colors.text.secondary}
+                          >
+                            {selected ? 'SELECTED' : 'ACTIVE'}
+                          </AppText>
+                        </View>
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+
+                {assignments.length > 1 ? (
+                  <View
+                    style={{
+                      flexDirection: 'row',
+                      justifyContent: 'center',
+                      gap: spacing.xs,
+                    }}
+                  >
+                    {assignments.map((assignment) => (
+                      <View
+                        key={assignment.id}
+                        style={{
+                          width: selectedAssignmentId === assignment.id ? 20 : 6,
+                          height: 6,
+                          borderRadius: 3,
+                          backgroundColor:
+                            selectedAssignmentId === assignment.id
+                              ? colors.brand.red
+                              : colors.border.default,
+                        }}
+                      />
+                    ))}
+                  </View>
+                ) : null}
+              </View>
+
+              {/* Selected Training Plan and Its Corresponding Programme */}
+              {assignments
+                .filter((assignment) => assignment.id === selectedAssignmentId)
+                .map((assignment) => {
               const plan = getPublishedSnapshot(assignment);
 
               if (!plan) {
@@ -581,24 +712,32 @@ export default function WorkoutsScreen() {
                     ) : null}
                   </Card>
 
-                  {/* Your Programme Heading */}
-                  <AppText
-                    variant="h2"
-                    color={colors.text.primary}
-                  >
-                    YOUR PROGRAMME
-                  </AppText>
+                  {/* Programme linked to the selected training plan */}
+                  <View style={{ gap: spacing.xs }}>
+                    <AppText
+                      variant="h2"
+                      color={colors.text.primary}
+                    >
+                      YOUR PROGRAMME
+                    </AppText>
+                    <AppText
+                      variant="caption"
+                      color={colors.text.tertiary}
+                    >
+                      {plan.name}
+                    </AppText>
+                  </View>
 
                   {/* Swipeable Training Days */}
                   <ScrollView
                     horizontal
                     pagingEnabled
-                    snapToInterval={dayCardWidth + spacing.md}
+                    nestedScrollEnabled
                     decelerationRate="fast"
+                    style={{ width: dayCardWidth }}
                     onMomentumScrollEnd={(event) => {
                       const index = Math.round(
-                        event.nativeEvent.contentOffset.x /
-                        (dayCardWidth + spacing.md),
+                        event.nativeEvent.contentOffset.x / dayCardWidth,
                       );
 
                       const nextSelectedDay = trainingDays[index];
@@ -611,9 +750,6 @@ export default function WorkoutsScreen() {
                       }
                     }}
                     showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={{
-                      gap: spacing.md,
-                    }}
                   >
                     {trainingDays.map((day) => (
                       <Card
@@ -621,7 +757,8 @@ export default function WorkoutsScreen() {
                         variant="default"
                         style={{
                           width: dayCardWidth,
-                          gap: spacing.lg,
+                          height: dayCardHeight,
+                          gap: spacing.md,
                         }}
                       >
                         {/* Day Header */}
@@ -651,7 +788,15 @@ export default function WorkoutsScreen() {
                         </View>
 
                         {/* Day Exercises */}
-                        <View style={{ gap: spacing.md }}>
+                        <ScrollView
+                          style={{ flex: 1 }}
+                          nestedScrollEnabled
+                          showsVerticalScrollIndicator
+                          contentContainerStyle={{
+                            gap: spacing.md,
+                            paddingBottom: spacing.xs,
+                          }}
+                        >
                           {day.exercises.map((item, index) => {
                             const exerciseKey =
                               `${assignment.id}-${item.id}`;
@@ -870,7 +1015,7 @@ export default function WorkoutsScreen() {
                               </Card>
                             );
                           })}
-                        </View>
+                        </ScrollView>
 
                         {/* Day Footer */}
                         <AppText
@@ -956,7 +1101,8 @@ export default function WorkoutsScreen() {
                   ) : null}
                 </View>
               );
-            })
+                })}
+            </>
           )}
         </View>
 
