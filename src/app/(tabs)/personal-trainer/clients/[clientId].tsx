@@ -849,7 +849,7 @@ export default function ClientDetailScreen() {
 
                                     {details.goals.length === 0 ? (
                                         <AppText variant="body" color={colors.text.secondary}>
-                                            This client hasn't added any fitness goals yet.
+                                            This client hasn&apos;t added any fitness goals yet.
                                         </AppText>
                                     ) : (
                                         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
@@ -1056,7 +1056,7 @@ export default function ClientDetailScreen() {
 
                                 {details.payments.length === 0 ? (
                                     <AppText variant="body" color={colors.text.secondary}>
-                                        No payment records are available for this client's sessions.
+                                        No payment records are available for this client&apos;s sessions.
                                     </AppText>
                                 ) : (
                                     details.payments.map((payment) => (
@@ -1550,7 +1550,7 @@ export default function ClientDetailScreen() {
                                                     }}
                                                 >
                                                     <AppText variant="body" color={colors.text.secondary}>
-                                                        This client hasn't recorded any fitness measurements yet.
+                                                        This client hasn&apos;t recorded any fitness measurements yet.
                                                     </AppText>
                                                 </View>
                                             ) : (
@@ -1883,7 +1883,15 @@ export default function ClientDetailScreen() {
                         <Button
                             fullWidth
                             loading={isSavingFeedback}
-                            disabled={isSavingFeedback}
+                            disabled={
+                                isSavingFeedback ||
+                                (!editingFeedback &&
+                                    !details?.assignments.some(
+                                        (assignment) =>
+                                            assignment.status === 'active' ||
+                                            assignment.status === 'completed',
+                                    ))
+                            }
                             onPress={() => void handleSaveFeedback()}
                         >
                             {editingFeedback ? 'Save changes' : 'Save feedback'}

@@ -156,13 +156,22 @@ export async function updateTrainerFeedback(
 
   const trainer = await getAuthenticatedTrainer();
 
+  const updates: {
+    feedback: string;
+    recommendations?: string | null;
+    updated_at: string;
+  } = {
+    feedback: input.feedback.trim(),
+    updated_at: new Date().toISOString(),
+  };
+
+  if (input.recommendations !== undefined) {
+    updates.recommendations = input.recommendations?.trim() || null;
+  }
+
   const { data, error } = await supabase
     .from('trainer_feedback')
-    .update({
-      feedback: input.feedback.trim(),
-      recommendations: input.recommendations?.trim() || null,
-      updated_at: new Date().toISOString(),
-    })
+    .update(updates)
     .eq('id', feedbackId)
     .eq('trainer_id', trainer.id)
     .select(FEEDBACK_COLUMNS)

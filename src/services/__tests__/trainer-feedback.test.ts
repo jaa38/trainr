@@ -180,6 +180,69 @@ describe('Trainer feedback service', () => {
       });
     });
 
+    it('creates feedback with an assignment reference only', async () => {
+      const query = mockCreateFeedbackQuery({
+        data: {
+          ...mockFeedback,
+          workout_log_id: null,
+        },
+        error: null,
+      });
+
+      await createTrainerFeedback({
+        gymGoerId: 'client-123',
+        assignedWorkoutPlanId: 'assignment-123',
+        feedback: 'Good programme progress.',
+      });
+
+      expect(query.insert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          assigned_workout_plan_id: 'assignment-123',
+          workout_log_id: null,
+        }),
+      );
+    });
+
+    it('creates feedback with a workout reference only', async () => {
+      const query = mockCreateFeedbackQuery({
+        data: {
+          ...mockFeedback,
+          assigned_workout_plan_id: null,
+        },
+        error: null,
+      });
+
+      await createTrainerFeedback({
+        gymGoerId: 'client-123',
+        workoutLogId: 'workout-123',
+        feedback: 'Good workout progress.',
+      });
+
+      expect(query.insert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          assigned_workout_plan_id: null,
+          workout_log_id: 'workout-123',
+        }),
+      );
+    });
+
+    it('rejects creation when no user is authenticated', async () => {
+      mockedGetUser.mockResolvedValue({
+        data: { user: null },
+        error: null,
+      } as never);
+
+      await expect(
+        createTrainerFeedback({
+          gymGoerId: 'client-123',
+          assignedWorkoutPlanId: 'assignment-123',
+          feedback: 'Good progress.',
+        }),
+      ).rejects.toThrow('Please sign in to continue.');
+
+      expect(mockedFrom).not.toHaveBeenCalled();
+    });
+
     it('rejects empty feedback', async () => {
       await expect(
         createTrainerFeedback({
@@ -249,12 +312,11 @@ describe('Trainer feedback service', () => {
         }),
       ).resolves.toEqual(mockFeedback);
 
-      expect(query.update).toHaveBeenCalledWith(
-        expect.objectContaining({
-          feedback: 'Updated feedback.',
-          recommendations: 'Keep progressing.',
-        }),
-      );
+      expect(query.update).toHaveBeenCalledWith({
+        feedback: 'Updated feedback.',
+        recommendations: 'Keep progressing.',
+        updated_at: expect.any(String),
+      });
 
       expect(query.eq).toHaveBeenNthCalledWith(
         1,
@@ -267,6 +329,82 @@ describe('Trainer feedback service', () => {
         'trainer_id',
         'trainer-123',
       );
+    });
+
+    it('preserves recommendations when they are omitted', async () => {
+      const query = mockUpdateFeedbackQuery({
+        data: mockFeedback,
+        error: null,
+      });
+
+      await updateTrainerFeedback('feedback-123', {
+        feedback: 'Updated feedback.',
+      });
+
+      expect(query.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          feedback: 'Updated feedback.',
+        }),
+      );
+
+      expect(query.update.mock.calls[0][0]).not.toHaveProperty(
+        'recommendations',
+      );
+    });
+
+    it('clears recommendations when null is explicitly provided', async () => {
+      const query = mockUpdateFeedbackQuery({
+        data: {
+          ...mockFeedback,
+          recommendations: null,
+        },
+        error: null,
+      });
+
+      await updateTrainerFeedback('feedback-123', {
+        feedback: 'Updated feedback.',
+        recommendations: null,
+      });
+
+      expect(query.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          feedback: 'Updated feedback.',
+          recommendations: null,
+        }),
+      );
+    });
+
+    it('does not submit ownership or workout-reference fields during updates', async () => {
+      const query = mockUpdateFeedbackQuery({
+        data: mockFeedback,
+        error: null,
+      });
+
+      await updateTrainerFeedback('feedback-123', {
+        feedback: 'Updated feedback.',
+        recommendations: 'Keep progressing.',
+      });
+
+      expect(query.update).toHaveBeenCalledWith({
+        feedback: 'Updated feedback.',
+        recommendations: 'Keep progressing.',
+        updated_at: expect.any(String),
+      });
+    });
+
+    it('rejects updates when no user is authenticated', async () => {
+      mockedGetUser.mockResolvedValue({
+        data: { user: null },
+        error: null,
+      } as never);
+
+      await expect(
+        updateTrainerFeedback('feedback-123', {
+          feedback: 'Updated feedback.',
+        }),
+      ).rejects.toThrow('Please sign in to continue.');
+
+      expect(mockedFrom).not.toHaveBeenCalled();
     });
 
     it('rejects an empty feedback ID', async () => {
