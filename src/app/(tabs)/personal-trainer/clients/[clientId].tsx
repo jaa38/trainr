@@ -1,6 +1,7 @@
 
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
+import Markdown from 'react-native-markdown-display';
 import {
     ActivityIndicator,
     Pressable,
@@ -1724,9 +1725,37 @@ export default function ClientDetailScreen() {
                                                         <AppText variant="caption" color={colors.text.secondary}>
                                                             RECOMMENDATIONS
                                                         </AppText>
-                                                        <AppText variant="bodySmall" color={colors.text.secondary}>
+                                                        <Markdown
+                                                            style={{
+                                                                body: {
+                                                                    color: colors.text.secondary,
+                                                                    fontSize: 14,
+                                                                    lineHeight: 21,
+                                                                },
+                                                                paragraph: {
+                                                                    marginTop: 0,
+                                                                    marginBottom: spacing.xs,
+                                                                },
+                                                                strong: {
+                                                                    color: colors.text.primary,
+                                                                    fontWeight: '700',
+                                                                },
+                                                                em: {
+                                                                    fontStyle: 'italic',
+                                                                },
+                                                                bullet_list: {
+                                                                    marginVertical: spacing.xs,
+                                                                },
+                                                                ordered_list: {
+                                                                    marginVertical: spacing.xs,
+                                                                },
+                                                                list_item: {
+                                                                    marginVertical: 2,
+                                                                },
+                                                            }}
+                                                        >
                                                             {item.recommendations}
-                                                        </AppText>
+                                                        </Markdown>
                                                     </View>
                                                 ) : null}
                                             </View>

@@ -60,11 +60,26 @@
             "enableSceneSupport": true
           }
         }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/notification/trainr-notification-icon.png",
+          "color": "#D71920",
+          "defaultChannel": "trainr-default"
+        }
       ]
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "3135e087-6ca0-4476-99de-c591f8667bb9"
+      }
+    },
+    "owner": "jaa38"
   }
 }
