@@ -1,4 +1,3 @@
-
 import { NativeTabs } from 'expo-router/unstable-native-tabs';
 import { useColorScheme } from 'react-native';
 
@@ -29,7 +28,7 @@ const personalTrainerTabs = [
     sf: 'dollarsign.circle.fill',
     md: 'account_balance_wallet',
   },
-  { name: 'more', label: 'More', sf: 'ellipsis.circle.fill', md: 'more_horiz' },
+  { name: 'more', label: 'Profile', sf: 'person.crop.circle.fill', md: 'account_circle' },
 ] as const;
 
 export default function AppTabs({ role }: AppTabsProps) {
@@ -54,9 +53,7 @@ export default function AppTabs({ role }: AppTabsProps) {
     >
       {tabs.map((tab) => (
         <NativeTabs.Trigger key={tab.name} name={tab.name}>
-          <NativeTabs.Trigger.Label>
-            {tab.label}
-          </NativeTabs.Trigger.Label>
+          <NativeTabs.Trigger.Label>{tab.label}</NativeTabs.Trigger.Label>
 
           <NativeTabs.Trigger.Icon sf={tab.sf} md={tab.md} />
         </NativeTabs.Trigger>

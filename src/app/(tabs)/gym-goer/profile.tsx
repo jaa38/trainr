@@ -137,7 +137,7 @@ export default function GymGoerProfileScreen() {
         showsVerticalScrollIndicator={false}
       >
         {/* Profile Header */}
-        {/* <View style={{ gap: spacing.sm }}>
+        <View style={{ gap: spacing.sm }}>
           <AppText variant="caption" color={colors.brand.red}>
             YOUR ACCOUNT
           </AppText>
@@ -149,7 +149,7 @@ export default function GymGoerProfileScreen() {
           <AppText variant="body" color={colors.text.secondary}>
             Make your fitness journey your own.
           </AppText>
-        </View> */}
+        </View>
 
         {/* User Profile Card */}
         <View
