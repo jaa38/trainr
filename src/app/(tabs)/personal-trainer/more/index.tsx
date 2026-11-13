@@ -257,6 +257,54 @@ export default function TrainerProfileScreen() {
           ))}
         </View>
 
+        {/* App Preferences */}
+        <View style={{ gap: spacing.md }}>
+          <View style={{ gap: spacing.sm }}>
+            <AppText variant="h2" color={colors.text.primary}>
+              APP PREFERENCES.
+            </AppText>
+
+            <AppText variant="body" color={colors.text.secondary}>
+              Manage your app and notification preferences.
+            </AppText>
+          </View>
+
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Manage notification settings"
+            onPress={() =>
+              router.push('/(tabs)/notification-settings')
+            }
+            style={({ pressed }) => ({
+              minHeight: 76,
+              flexDirection: 'row',
+              alignItems: 'center',
+              padding: spacing.lg,
+              gap: spacing.md,
+              borderRadius: 16,
+              borderWidth: 1,
+              borderColor: colors.border.default,
+              backgroundColor: colors.background.secondary,
+              opacity: pressed ? 0.75 : 1,
+            })}
+          >
+            <View style={{ flex: 1, gap: spacing.xs }}>
+              <AppText variant="h3" color={colors.text.primary}>
+                Notification Settings
+              </AppText>
+
+              <AppText
+                variant="bodySmall"
+                color={colors.text.secondary}
+              >
+                Manage push notifications and device preferences.
+              </AppText>
+            </View>
+
+            <ArrowRight size={20} color={colors.text.secondary} />
+          </Pressable>
+        </View>
+
         {/* Sign Out Error */}
         {errorMessage && (
           <View

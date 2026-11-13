@@ -1,25 +1,13 @@
 
-import { router, useFocusEffect } from 'expo-router';
-import {
-  ArrowRight,
-  Scale,
-} from 'lucide-react-native';
-import { useCallback, useState } from 'react';
+import { router } from 'expo-router';
+import { ArrowRight } from 'lucide-react-native';
+import { useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/AppText';
 import { useAuth } from '@/providers/AuthProvider';
-import { getCurrentBodyWeight, type FitnessProgress } from '@/services/fitness-progress';
 import { useTrainrTheme } from '@/theme';
-
-function formatWeightDate(date: string) {
-  return new Date(date).toLocaleDateString('en-GB', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  });
-}
 
 export default function GymGoerProfileScreen() {
   const { colors, spacing } = useTrainrTheme();
@@ -27,9 +15,6 @@ export default function GymGoerProfileScreen() {
 
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [currentWeight, setCurrentWeight] =
-    useState<FitnessProgress | null>(null);
-  const [isLoadingWeight, setIsLoadingWeight] = useState(true);
 
   const fullName =
     typeof user?.user_metadata?.full_name === 'string'
@@ -45,46 +30,6 @@ export default function GymGoerProfileScreen() {
       .slice(0, 2)
       .map((part) => part[0].toUpperCase())
       .join('') || 'TM';
-
-  // Load the latest weight whenever Profile becomes active.
-  useFocusEffect(
-    useCallback(() => {
-      let isActive = true;
-
-      async function loadCurrentWeight() {
-        if (!user?.id) {
-          setCurrentWeight(null);
-          setIsLoadingWeight(false);
-          return;
-        }
-
-        setIsLoadingWeight(true);
-
-        try {
-          const result = await getCurrentBodyWeight();
-
-          if (isActive) {
-            setCurrentWeight(result);
-          }
-        } catch (error) {
-          console.error(
-            '[Profile] Unable to load current weight:',
-            error,
-          );
-        } finally {
-          if (isActive) {
-            setIsLoadingWeight(false);
-          }
-        }
-      }
-
-      void loadCurrentWeight();
-
-      return () => {
-        isActive = false;
-      };
-    }, [user?.id]),
-  );
 
   async function handleSignOut() {
     if (isSigningOut) return;
@@ -113,10 +58,6 @@ export default function GymGoerProfileScreen() {
     {
       title: 'FITNESS GOALS',
       description: 'Set your goals, training preferences and experience.',
-    },
-    {
-      title: 'APP PREFERENCES',
-      description: 'Manage notifications and your preferred settings.',
     },
   ];
 
@@ -336,6 +277,39 @@ export default function GymGoerProfileScreen() {
             </AppText>
           </View>
         ))}
+
+        {/* App Preferences */}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Manage notification settings"
+          onPress={() =>
+            router.push('/(tabs)/notification-settings')
+          }
+          style={({ pressed }) => ({
+            minHeight: 76,
+            flexDirection: 'row',
+            alignItems: 'center',
+            padding: spacing.lg,
+            gap: spacing.md,
+            borderRadius: 16,
+            borderWidth: 1,
+            borderColor: colors.border.default,
+            backgroundColor: colors.background.secondary,
+            opacity: pressed ? 0.75 : 1,
+          })}
+        >
+          <View style={{ flex: 1, gap: spacing.xs }}>
+            <AppText variant="h3" color={colors.text.primary}>
+              Notification Settings
+            </AppText>
+
+            <AppText variant="bodySmall" color={colors.text.secondary}>
+              Manage push notifications and device preferences.
+            </AppText>
+          </View>
+
+          <ArrowRight size={20} color={colors.text.secondary} />
+        </Pressable>
 
         {/* Workout History */}
         <Pressable

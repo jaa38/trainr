@@ -1,4 +1,3 @@
-
 import { useFonts } from 'expo-font';
 import {
   DarkTheme,
@@ -30,13 +29,13 @@ import {
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import { AuthProvider, useAuth } from '@/providers/AuthProvider';
+import { NotificationProvider } from '@/providers/notifications/NotificationProvider';
 import { TrainrThemeProvider } from '@/theme';
 
 SplashScreen.preventAutoHideAsync();
 
 function AuthenticatedNavigation() {
-  const { session, isLoading, profile, isProfileLoading, profileError } =
-    useAuth();
+  const { session, isLoading, profile, isProfileLoading, profileError } = useAuth();
 
   const router = useRouter();
   const segments = useSegments();
@@ -63,8 +62,7 @@ function AuthenticatedNavigation() {
     const firstSegment = segments[0];
     const secondSegment = segments[1];
 
-    const isAuthCallback =
-      firstSegment === 'auth' && secondSegment === 'callback';
+    const isAuthCallback = firstSegment === 'auth' && secondSegment === 'callback';
 
     const isPasswordReset =
       firstSegment === '(auth)' && secondSegment === 'reset-password';
@@ -93,17 +91,12 @@ function AuthenticatedNavigation() {
     }
 
     if (profileError) {
-      console.error(
-        '[Navigation] Profile could not be loaded:',
-        profileError,
-      );
+      console.error('[Navigation] Profile could not be loaded:', profileError);
       return;
     }
 
     if (!profile) {
-      console.error(
-        '[Navigation] No profile found after loading completed.',
-      );
+      console.error('[Navigation] No profile found after loading completed.');
       return;
     }
 
@@ -115,9 +108,7 @@ function AuthenticatedNavigation() {
     }
 
     const homeRoute =
-      profile.role === 'trainer'
-        ? '/(tabs)/personal-trainer'
-        : '/(tabs)/gym-goer';
+      profile.role === 'trainer' ? '/(tabs)/personal-trainer' : '/(tabs)/gym-goer';
 
     const onboardingRoute =
       profile.role === 'trainer'
@@ -158,12 +149,7 @@ function AuthenticatedNavigation() {
       return;
     }
 
-    if (
-      isWelcomeScreen ||
-      isAuthScreen ||
-      isOnboardingScreen ||
-      !isTabsScreen
-    ) {
+    if (isWelcomeScreen || isAuthScreen || isOnboardingScreen || !isTabsScreen) {
       router.replace(homeRoute);
       return;
     }
@@ -182,11 +168,7 @@ function AuthenticatedNavigation() {
     session,
   ]);
 
-  if (
-    isLoading ||
-    !navigationState?.key ||
-    (Boolean(session) && isProfileLoading)
-  ) {
+  if (isLoading || !navigationState?.key || (Boolean(session) && isProfileLoading)) {
     return null;
   }
 
@@ -231,11 +213,11 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <TrainrThemeProvider mode="system">
-        <ExpoThemeProvider
-          value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}
-        >
+        <ExpoThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
           <AuthProvider>
-            <AuthenticatedNavigation />
+            <NotificationProvider>
+              <AuthenticatedNavigation />
+            </NotificationProvider>
           </AuthProvider>
         </ExpoThemeProvider>
       </TrainrThemeProvider>
