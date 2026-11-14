@@ -11,6 +11,7 @@
     "@hookform/resolvers": "^5.9.1",
     "@react-native-community/datetimepicker": "9.1.0",
     "@supabase/supabase-js": "^2.117.3",
+    "@tanstack/react-query": "^5.107.1",
     "@testing-library/react-native": "^14.1.0",
     "expo": "~57.0.33",
     "expo-build-properties": "~57.0.23",
@@ -51,13 +52,16 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/jest": "29.5.14",
     "@types/react": "~19.2.2",
-    "eslint": "^9.0.0",
+    "eslint": "^9.39.5",
     "eslint-config-expo": "~57.0.2",
+    "globals": "^17.14.0",
     "prettier": "^3.9.10",
     "supabase": "^2.121.0",
-    "typescript": "~6.0.3"
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.72.2"
   },
   "scripts": {
     "start": "expo start",

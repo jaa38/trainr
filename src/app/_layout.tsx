@@ -32,6 +32,8 @@ import { AuthProvider, useAuth } from '@/providers/AuthProvider';
 import { NotificationProvider } from '@/providers/notifications/NotificationProvider';
 import { TrainrThemeProvider } from '@/theme';
 
+import { QueryProvider } from '@/providers/QueryProvider';
+
 SplashScreen.preventAutoHideAsync();
 
 function AuthenticatedNavigation() {
@@ -212,15 +214,17 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <TrainrThemeProvider mode="system">
-        <ExpoThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-          <AuthProvider>
-            <NotificationProvider>
-              <AuthenticatedNavigation />
-            </NotificationProvider>
-          </AuthProvider>
-        </ExpoThemeProvider>
-      </TrainrThemeProvider>
+      <QueryProvider>
+        <TrainrThemeProvider mode="system">
+          <ExpoThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+            <AuthProvider>
+              <NotificationProvider>
+                <AuthenticatedNavigation />
+              </NotificationProvider>
+            </AuthProvider>
+          </ExpoThemeProvider>
+        </TrainrThemeProvider>
+      </QueryProvider>
     </GestureHandlerRootView>
   );
 }

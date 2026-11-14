@@ -1,33 +1,14 @@
-
 import { router, useFocusEffect } from 'expo-router';
-import {
-  ArrowRight,
-  Minus,
-  Scale,
-  TrendingDown,
-  TrendingUp,
-} from 'lucide-react-native';
+import { ArrowRight, Minus, Scale, TrendingDown, TrendingUp } from 'lucide-react-native';
 import { useCallback, useMemo, useState } from 'react';
-import {
-  Image,
-  Pressable,
-  ScrollView,
-  View,
-} from 'react-native';
+import { Image, Pressable, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Svg, {
-  Circle,
-  Line,
-  Path,
-} from 'react-native-svg';
+import Svg, { Circle, Line, Path } from 'react-native-svg';
 
 import { AppText } from '@/components/AppText';
 import { Card } from '@/components/Card';
 import { useAuth } from '@/providers/AuthProvider';
-import {
-  getBodyWeightHistory,
-  type FitnessProgress,
-} from '@/services/fitness-progress';
+import { getBodyWeightHistory, type FitnessProgress } from '@/services/fitness-progress';
 import { useTrainrTheme } from '@/theme';
 
 function formatWeightDate(date: string) {
@@ -72,15 +53,9 @@ function DashboardWeightChart({
           gap: 8,
         }}
       >
-        <TrendingUp
-          size={24}
-          color={colors.text.tertiary}
-        />
+        <TrendingUp size={24} color={colors.text.tertiary} />
 
-        <AppText
-          variant="caption"
-          color={colors.text.secondary}
-        >
+        <AppText variant="caption" color={colors.text.secondary}>
           Record another measurement to see your weight trend.
         </AppText>
       </View>
@@ -96,40 +71,29 @@ function DashboardWeightChart({
     const x =
       horizontalPadding +
       (index / (chartRecords.length - 1)) *
-      Math.max(chartWidth - horizontalPadding * 2, 1);
+        Math.max(chartWidth - horizontalPadding * 2, 1);
 
     const y =
       chartHeight -
       verticalPadding -
-      ((record.value - minValue) / valueRange) *
-      (chartHeight - verticalPadding * 2);
+      ((record.value - minValue) / valueRange) * (chartHeight - verticalPadding * 2);
 
     return { x, y };
   });
 
   const linePath = points
-    .map(
-      (point, index) =>
-        `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`,
-    )
+    .map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`)
     .join(' ');
 
   return (
     <View
-      onLayout={(event) =>
-        setChartWidth(event.nativeEvent.layout.width)
-      }
+      onLayout={(event) => setChartWidth(event.nativeEvent.layout.width)}
       style={{ width: '100%' }}
     >
       {chartWidth > 0 ? (
-        <Svg
-          width={chartWidth}
-          height={chartHeight}
-        >
+        <Svg width={chartWidth} height={chartHeight}>
           {[0, 0.5, 1].map((position) => {
-            const y =
-              verticalPadding +
-              position * (chartHeight - verticalPadding * 2);
+            const y = verticalPadding + position * (chartHeight - verticalPadding * 2);
 
             return (
               <Line
@@ -193,15 +157,10 @@ export default function HomeTabScreen() {
       const result = await getBodyWeightHistory();
       setWeightRecords(result);
     } catch (error) {
-      console.error(
-        '[Home] Unable to load weight progress:',
-        error,
-      );
+      console.error('[Home] Unable to load weight progress:', error);
 
       setWeightError(
-        error instanceof Error
-          ? error.message
-          : 'Unable to load your weight progress.',
+        error instanceof Error ? error.message : 'Unable to load your weight progress.',
       );
     } finally {
       setIsLoadingWeight(false);
@@ -219,9 +178,7 @@ export default function HomeTabScreen() {
   const previousWeight = weightRecords[1] ?? null;
 
   const weightDifference =
-    currentWeight &&
-      previousWeight &&
-      currentWeight.unit === previousWeight.unit
+    currentWeight && previousWeight && currentWeight.unit === previousWeight.unit
       ? currentWeight.value - previousWeight.value
       : null;
 
@@ -335,25 +292,16 @@ export default function HomeTabScreen() {
             }}
           >
             <View style={{ gap: spacing.xs }}>
-              <AppText
-                variant="caption"
-                color={colors.brand.red}
-              >
+              <AppText variant="caption" color={colors.brand.red}>
                 YOUR JOURNEY
               </AppText>
 
-              <AppText
-                variant="h2"
-                color={colors.text.primary}
-              >
+              <AppText variant="h2" color={colors.text.primary}>
                 FITNESS PROGRESS
               </AppText>
             </View>
 
-            <Scale
-              size={23}
-              color={colors.brand.red}
-            />
+            <Scale size={23} color={colors.brand.red} />
           </View>
 
           <Card
@@ -364,18 +312,12 @@ export default function HomeTabScreen() {
             }}
           >
             {isLoadingWeight ? (
-              <AppText
-                variant="bodySmall"
-                color={colors.text.secondary}
-              >
+              <AppText variant="bodySmall" color={colors.text.secondary}>
                 Loading your fitness progress...
               </AppText>
             ) : weightError ? (
               <View style={{ gap: spacing.md }}>
-                <AppText
-                  variant="bodySmall"
-                  color={colors.text.error}
-                >
+                <AppText variant="bodySmall" color={colors.text.error}>
                   {weightError}
                 </AppText>
 
@@ -384,10 +326,7 @@ export default function HomeTabScreen() {
                   onPress={() => void loadWeightProgress()}
                   style={{ alignSelf: 'flex-start' }}
                 >
-                  <AppText
-                    variant="button"
-                    color={colors.brand.red}
-                  >
+                  <AppText variant="button" color={colors.brand.red}>
                     Try again
                   </AppText>
                 </Pressable>
@@ -396,10 +335,7 @@ export default function HomeTabScreen() {
               <>
                 {/* Current Weight */}
                 <View style={{ gap: spacing.xs }}>
-                  <AppText
-                    variant="caption"
-                    color={colors.text.secondary}
-                  >
+                  <AppText variant="caption" color={colors.text.secondary}>
                     CURRENT WEIGHT
                   </AppText>
 
@@ -410,25 +346,16 @@ export default function HomeTabScreen() {
                       gap: spacing.sm,
                     }}
                   >
-                    <AppText
-                      variant="displayLarge"
-                      color={colors.text.primary}
-                    >
+                    <AppText variant="displayLarge" color={colors.text.primary}>
                       {currentWeight.value}
                     </AppText>
 
-                    <AppText
-                      variant="h3"
-                      color={colors.text.secondary}
-                    >
+                    <AppText variant="h3" color={colors.text.secondary}>
                       {currentWeight.unit}
                     </AppText>
                   </View>
 
-                  <AppText
-                    variant="caption"
-                    color={colors.text.tertiary}
-                  >
+                  <AppText variant="caption" color={colors.text.tertiary}>
                     Last recorded {formatWeightDate(currentWeight.recorded_at)}
                   </AppText>
                 </View>
@@ -450,12 +377,10 @@ export default function HomeTabScreen() {
                       <Minus size={17} color={colors.text.tertiary} />
                     )}
 
-                    <AppText
-                      variant="bodySmall"
-                      color={colors.text.secondary}
-                    >
+                    <AppText variant="bodySmall" color={colors.text.secondary}>
                       {weightDifference > 0 ? '+' : ''}
-                      {weightDifference.toFixed(1)} {currentWeight.unit} since previous measurement
+                      {weightDifference.toFixed(1)} {currentWeight.unit} since previous
+                      measurement
                     </AppText>
                   </View>
                 ) : null}
@@ -469,10 +394,7 @@ export default function HomeTabScreen() {
                     gap: spacing.sm,
                   }}
                 >
-                  <AppText
-                    variant="caption"
-                    color={colors.text.secondary}
-                  >
+                  <AppText variant="caption" color={colors.text.secondary}>
                     WEIGHT TREND
                   </AppText>
 
@@ -486,17 +408,11 @@ export default function HomeTabScreen() {
             ) : (
               /* Empty State */
               <View style={{ gap: spacing.sm }}>
-                <AppText
-                  variant="h3"
-                  color={colors.text.primary}
-                >
+                <AppText variant="h3" color={colors.text.primary}>
                   START TRACKING YOUR PROGRESS
                 </AppText>
 
-                <AppText
-                  variant="bodySmall"
-                  color={colors.text.secondary}
-                >
+                <AppText variant="bodySmall" color={colors.text.secondary}>
                   Record your first weight measurement to see your fitness progress here.
                 </AppText>
               </View>
@@ -507,9 +423,7 @@ export default function HomeTabScreen() {
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="View weight history"
-                onPress={() =>
-                  router.push('/(tabs)/gym-goer-weight/history')
-                }
+                onPress={() => router.push('/(tabs)/gym-goer-weight/history')}
                 style={{
                   borderTopWidth: 1,
                   borderTopColor: colors.border.default,
@@ -519,17 +433,11 @@ export default function HomeTabScreen() {
                   justifyContent: 'space-between',
                 }}
               >
-                <AppText
-                  variant="button"
-                  color={colors.brand.red}
-                >
+                <AppText variant="button" color={colors.brand.red}>
                   {currentWeight ? 'View Weight History' : 'Record Your Weight'}
                 </AppText>
 
-                <ArrowRight
-                  size={19}
-                  color={colors.brand.red}
-                />
+                <ArrowRight size={19} color={colors.brand.red} />
               </Pressable>
             ) : null}
           </Card>
