@@ -59,52 +59,25 @@ function SectionLabel({ children, color }: { children: string; color: string }) 
  * transaction type while avoiding floating-point conversion when
  * the API supplies an amount as a string.
  */
+
 function formatTransactionAmount(amount: number | string, currency: string): string {
   const amountString = String(amount);
 
-  if (!/^(?:0|[1-9]\d*)(?:\.\d+)?$/.test(amountString)) {
+  if (!/^(?:0|[1-9]\d*)(?:\.\d+)?$/.test(amountString) || !currency?.trim()) {
     return '—';
   }
 
-  if (!/[1-9]/.test(amountString)) {
+  const numericAmount = Number(amountString);
+
+  if (!Number.isFinite(numericAmount)) {
     return '—';
   }
 
-  try {
-    const [wholePart, fractionalPart] = amountString.split('.');
-    const wholeAmount = BigInt(wholePart);
-
-    const formatter = new Intl.NumberFormat(undefined, {
-      style: 'currency',
-      currency,
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    });
-
-    const parts = formatter.formatToParts(wholeAmount);
-
-    const decimalSeparator =
-      new Intl.NumberFormat(undefined)
-        .formatToParts(1.1)
-        .find((part) => part.type === 'decimal')?.value ?? '.';
-
-    const lastIntegerIndex = parts.reduce(
-      (lastIndex, part, index) => (part.type === 'integer' ? index : lastIndex),
-      -1,
-    );
-
-    return parts
-      .map((part, index) => {
-        if (index !== lastIntegerIndex || !fractionalPart) {
-          return part.value;
-        }
-
-        return `${part.value}${decimalSeparator}${fractionalPart}`;
-      })
-      .join('');
-  } catch {
-    return `${currency} ${amountString}`;
-  }
+  return formatCurrency(numericAmount, {
+    currency,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 }
 
 function formatTransactionDate(value: string): string {
