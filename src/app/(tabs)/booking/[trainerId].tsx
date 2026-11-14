@@ -14,6 +14,8 @@ import {
 } from '@/services/trainer-discovery';
 import { useTrainrTheme } from '@/theme';
 
+import { formatCurrency } from '../../../utils/formatCurrency';
+
 type DailySchedule = {
   start: string;
   end: string;
@@ -163,11 +165,9 @@ function formatSelectedDate(date: string): string {
 }
 
 function formatRate(rate: number, currency: string | null): string {
-  const amount = new Intl.NumberFormat(undefined, {
-    maximumFractionDigits: 2,
-  }).format(rate);
-
-  return `${currency ?? 'NGN'} ${amount}`;
+  return formatCurrency(rate, {
+    currency: currency ?? 'NGN',
+  });
 }
 
 function overlaps(

@@ -1,4 +1,6 @@
 
+import { formatCurrency } from '../formatCurrency';
+
 export function formatEarningsAmount(
   amount: number | null,
   currencyCode: string | null,
@@ -7,16 +9,11 @@ export function formatEarningsAmount(
     return '—';
   }
 
-  try {
-    return new Intl.NumberFormat('en', {
-      style: 'currency',
-      currency: currencyCode,
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    }).format(amount);
-  } catch {
-    return '—';
-  }
+  return formatCurrency(amount, {
+    currency: currencyCode,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 }
 
 export function formatPayoutDate(

@@ -452,3 +452,9 @@ enabled = true
 verify_jwt = false
 import_map = "./functions/paystack-webhook/deno.json"
 entrypoint = "./functions/paystack-webhook/index.ts"
+
+# Trainer earnings dashboard
+[functions.trainer-earnings-dashboard]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/trainer-earnings-dashboard/index.ts"
