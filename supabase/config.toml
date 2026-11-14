@@ -458,3 +458,10 @@ entrypoint = "./functions/paystack-webhook/index.ts"
 enabled = true
 verify_jwt = true
 entrypoint = "./functions/trainer-earnings-dashboard/index.ts"
+
+# Trainer transaction history
+[functions.trainer-transaction-history]
+enabled = true
+verify_jwt = true
+import_map = "./functions/trainer-transaction-history/deno.json"
+entrypoint = "./functions/trainer-transaction-history/index.ts"
