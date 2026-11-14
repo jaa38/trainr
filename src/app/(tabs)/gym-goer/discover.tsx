@@ -27,6 +27,7 @@ import {
   type PublishedTrainer,
 } from '@/services/trainer-discovery';
 import { useTrainrTheme } from '@/theme';
+import { formatCurrency } from '@/utils/formatCurrency';
 import { ArrowRight, Heart } from 'lucide-react-native';
 
 export default function DiscoverScreen() {
@@ -455,13 +456,20 @@ export default function DiscoverScreen() {
       return 'Rate not set';
     }
 
-    const amount = new Intl.NumberFormat(undefined, {
-      maximumFractionDigits: 2,
-    }).format(trainer.session_rate);
+    const currency = trainer.currency?.trim();
 
-    return `${trainer.currency ?? ''} ${amount}${
+    const amount = currency
+      ? formatCurrency(trainer.session_rate, {
+          currency,
+          maximumFractionDigits: 2,
+        })
+      : new Intl.NumberFormat(undefined, {
+          maximumFractionDigits: 2,
+        }).format(trainer.session_rate);
+
+    return `${amount}${
       trainer.session_duration_minutes ? ` / ${trainer.session_duration_minutes} min` : ''
-    }`.trim();
+    }`;
   };
 
   const toggleFavourite = useCallback(

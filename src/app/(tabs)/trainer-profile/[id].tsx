@@ -37,6 +37,8 @@ import {
 } from '@/services/trainer-reviews';
 import { useTrainrTheme } from '@/theme';
 
+import { formatCurrency } from '../../../utils/formatCurrency';
+
 export default function TrainerProfileScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const theme = useTrainrTheme();
@@ -140,19 +142,21 @@ export default function TrainerProfileScreen() {
     }, [id]),
   );
 
-  const formatRate = (item: PublishedTrainer) => {
-    if (item.session_rate == null) return 'Rate not set';
+const formatRate = (item: PublishedTrainer) => {
+  if (item.session_rate == null) {
+    return 'Rate not set';
+  }
 
-    const amount = new Intl.NumberFormat(undefined, {
-      maximumFractionDigits: 2,
-    }).format(item.session_rate);
+  const amount = formatCurrency(item.session_rate, {
+    currency: item.currency ?? 'NGN',
+  });
 
-    return `${item.currency ?? ''} ${amount}${
-      item.session_duration_minutes
-        ? ` / ${item.session_duration_minutes} min`
-        : ''
-    }`.trim();
-  };
+  return `${amount}${
+    item.session_duration_minutes
+      ? ` / ${item.session_duration_minutes} min`
+      : ''
+  }`;
+};
 
   const fullName = trainer
     ? [trainer.first_name, trainer.last_name].filter(Boolean).join(' ').trim()

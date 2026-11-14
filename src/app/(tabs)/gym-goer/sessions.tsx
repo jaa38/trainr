@@ -20,6 +20,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/providers/AuthProvider';
 import { submitTrainerReview } from '@/services/trainer-reviews';
 import { useTrainrTheme } from '@/theme';
+import { formatCurrency } from '@/utils/formatCurrency';
 
 type SessionTab = 'Upcoming' | 'History' | 'Payments';
 
@@ -83,10 +84,11 @@ function formatTime(value: string) {
   });
 }
 
-function formatCurrency(amount: number, currency: string) {
-  return `${currency} ${new Intl.NumberFormat(undefined, {
+function formatMoney(amount: number, currency: string) {
+  return formatCurrency(amount, {
+    currency,
     maximumFractionDigits: 2,
-  }).format(amount)}`;
+  });
 }
 
 function formatStatus(status: Booking['status']) {
@@ -761,7 +763,7 @@ export default function SessionsScreen() {
     const receipt = [
       'TRAINR — PAYMENT RECEIPT',
       '',
-      `Amount: ${formatCurrency(payment.amount, payment.currency)}`,
+      `Amount: ${formatMoney(payment.amount, payment.currency)}`,
       `Status: ${payment.status.toUpperCase()}`,
       `Payment date: ${formatDate(payment.paid_at)}`,
       `Provider: ${payment.provider.toUpperCase()}`,
@@ -983,7 +985,7 @@ export default function SessionsScreen() {
                       <Pressable
                         accessibilityRole="button"
                         accessibilityState={{ expanded }}
-                        accessibilityLabel={`Payment ${formatCurrency(payment.amount, payment.currency)}, ${payment.status}. ${expanded ? 'Hide' : 'View'} details`}
+                        accessibilityLabel={`Payment ${formatMoney(payment.amount, payment.currency)}, ${payment.status}. ${expanded ? 'Hide' : 'View'} details`}
                         onPress={() => setExpandedPaymentId(expanded ? null : payment.id)}
                         style={{ gap: spacing.md }}
                       >
@@ -1000,7 +1002,7 @@ export default function SessionsScreen() {
                               PAYMENT AMOUNT
                             </AppText>
                             <AppText variant="h2" color={colors.text.primary}>
-                              {formatCurrency(payment.amount, payment.currency)}
+                              {formatMoney(payment.amount, payment.currency)}
                             </AppText>
                           </View>
 
@@ -1207,7 +1209,7 @@ export default function SessionsScreen() {
                     }}
                   >
                     <AppText variant="h3" color={colors.brand.red}>
-                      {formatCurrency(Number(booking.session_rate), booking.currency)}
+                      {formatMoney(Number(booking.session_rate), booking.currency)}
                     </AppText>
                     <AppText variant="caption" color={colors.text.secondary}>
                       STATUS: {formatStatus(booking.status).toUpperCase()}
@@ -1243,7 +1245,7 @@ export default function SessionsScreen() {
                         processingPaymentBookingId !== null ||
                         cancellingBookingId !== null
                       }
-                      accessibilityLabel={`Pay ${formatCurrency(
+                      accessibilityLabel={`Pay ${formatMoney(
                         Number(booking.session_rate),
                         booking.currency,
                       )} for this session`}
@@ -1264,7 +1266,7 @@ export default function SessionsScreen() {
                         processingPaymentBookingId !== null ||
                         cancellingBookingId !== null
                       }
-                      accessibilityLabel={`Retry payment for ${formatCurrency(
+                      accessibilityLabel={`Retry payment for ${formatMoney(
                         Number(booking.session_rate),
                         booking.currency,
                       )}`}

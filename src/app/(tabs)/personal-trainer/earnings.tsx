@@ -11,14 +11,27 @@ import { useTrainerTransactions } from '@/hooks/transactions/useTrainerTransacti
 import { useTrainrTheme } from '@/theme';
 import type { TrainerRecentEarning } from '@/types/earnings';
 import type { TrainerTransactionStatus } from '@/types/transactions';
-import {
-  formatEarningsAmount,
-  formatPayoutDate,
-} from '@/utils/earnings/earnings-formatters';
+import { formatPayoutDate } from '@/utils/earnings/earnings-formatters';
+import { formatCurrency } from '@/utils/formatCurrency';
 
 type EarningsView = 'Overview' | 'Transactions';
 
 const PAGE_SIZE = 20;
+
+function formatDashboardAmount(
+  amount: number | null,
+  currencyCode: string | null,
+): string {
+  if (amount === null || !currencyCode) {
+    return '—';
+  }
+
+  return formatCurrency(amount, {
+    currency: currencyCode,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
 
 const TRANSACTION_FILTERS: {
   label: string;
@@ -157,16 +170,16 @@ export default function EarningsScreen() {
     dashboard?.financialStatus === 'unavailable' || hasError;
 
   const totalEarnings = hasVerifiedEarnings
-    ? formatEarningsAmount(dashboard.totalEarnings, dashboard.currencyCode)
+    ? formatDashboardAmount(dashboard.totalEarnings, dashboard.currencyCode)
     : hasNoEarnings
-      ? formatEarningsAmount(0, dashboard.currencyCode)
+      ? formatDashboardAmount(0, dashboard.currencyCode)
       : '—';
 
   const hasScheduledPayout =
     dashboard?.nextPayoutStatus === 'scheduled' && dashboard.nextPayoutAmount !== null;
 
   const nextPayoutAmount = hasScheduledPayout
-    ? formatEarningsAmount(dashboard.nextPayoutAmount, dashboard.currencyCode)
+    ? formatDashboardAmount(dashboard.nextPayoutAmount, dashboard.currencyCode)
     : '—';
 
   const nextPayoutDate = hasScheduledPayout
@@ -567,7 +580,7 @@ export default function EarningsScreen() {
                           </SectionLabel>
 
                           <AppText variant="bodySmall" color={colors.text.primary}>
-                            {formatEarningsAmount(
+                            {formatDashboardAmount(
                               earning.grossAmount,
                               earning.currencyCode,
                             )}
@@ -587,7 +600,7 @@ export default function EarningsScreen() {
                           </SectionLabel>
 
                           <AppText variant="bodySmall" color={colors.text.secondary}>
-                            {formatEarningsAmount(
+                            {formatDashboardAmount(
                               earning.commissionAmount,
                               earning.currencyCode,
                             )}
@@ -607,7 +620,7 @@ export default function EarningsScreen() {
                           </SectionLabel>
 
                           <AppText variant="h3" color={colors.text.primary}>
-                            {formatEarningsAmount(
+                            {formatDashboardAmount(
                               earning.trainerNetAmount,
                               earning.currencyCode,
                             )}

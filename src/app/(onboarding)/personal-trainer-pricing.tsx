@@ -21,6 +21,7 @@ import {
   type TrainingPackageFormValues,
 } from '@/schemas/trainer-pricing';
 import { useTrainrTheme } from '@/theme';
+import { formatCurrency } from '@/utils/formatCurrency';
 
 const currencies = ['NGN', 'GBP', 'USD', 'EUR'] as const;
 
@@ -36,6 +37,22 @@ const createPackage = (): TrainingPackage => ({
   sessionsCount: '',
   price: '',
 });
+
+function getCurrencySymbol(currencyCode: string): string {
+  try {
+    return (
+      new Intl.NumberFormat('en', {
+        style: 'currency',
+        currency: currencyCode,
+        currencyDisplay: 'narrowSymbol',
+      })
+        .formatToParts(0)
+        .find((part) => part.type === 'currency')?.value ?? currencyCode
+    );
+  } catch {
+    return currencyCode;
+  }
+}
 
 export default function PersonalTrainerPricingScreen() {
   const { colors, spacing } = useTrainrTheme();
@@ -225,6 +242,7 @@ export default function PersonalTrainerPricingScreen() {
       <Pressable
         key={option}
         accessibilityRole="radio"
+        accessibilityLabel={`${option} (${getCurrencySymbol(option)})`}
         accessibilityState={{ checked: selected }}
         disabled={isSaving || isLoading}
         onPress={() => {
@@ -252,7 +270,7 @@ export default function PersonalTrainerPricingScreen() {
           variant="button"
           color={selected ? colors.brand.red : colors.text.primary}
         >
-          {option}
+          {getCurrencySymbol(option)}
         </AppText>
       </Pressable>
     );
@@ -432,6 +450,18 @@ export default function PersonalTrainerPricingScreen() {
                   </AppText>
                 ) : null}
 
+                {sessionRate.trim() !== '' && Number.isFinite(Number(sessionRate)) ? (
+                  <AppText variant="bodySmall" color={colors.text.secondary}>
+                    Preview:{' '}
+                    {formatCurrency(Number(sessionRate), {
+                      currency,
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}{' '}
+                    per session
+                  </AppText>
+                ) : null}
+
                 <View style={{ gap: spacing.sm }}>
                   <AppText variant="body" color={colors.text.primary}>
                     Currency
@@ -557,7 +587,7 @@ export default function PersonalTrainerPricingScreen() {
                     ) : null}
 
                     {renderField(
-                      `Package price (${currency})`,
+                      `Package price (${getCurrencySymbol(currency)})`,
                       item.price,
                       (value) => updatePackage(index, 'price', value),
                       'e.g. 35000',

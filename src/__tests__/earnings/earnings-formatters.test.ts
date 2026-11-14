@@ -2,6 +2,7 @@ import {
     formatEarningsAmount,
     formatPayoutDate,
 } from "@/utils/earnings/earnings-formatters";
+import { describe, expect, it } from "@jest/globals";
 
 describe("formatEarningsAmount", () => {
     it("formats a valid currency amount", () => {
@@ -10,6 +11,7 @@ describe("formatEarningsAmount", () => {
         const expected = new Intl.NumberFormat("en", {
             style: "currency",
             currency: "USD",
+            currencyDisplay: "narrowSymbol",
             minimumFractionDigits: 2,
             maximumFractionDigits: 2,
         }).format(1250.5);
@@ -20,14 +22,7 @@ describe("formatEarningsAmount", () => {
     it("formats zero earnings correctly", () => {
         const result = formatEarningsAmount(0, "NGN");
 
-        const expected = new Intl.NumberFormat("en", {
-            style: "currency",
-            currency: "NGN",
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-        }).format(0);
-
-        expect(result).toBe(expected);
+        expect(result).toBe("₦0.00");
     });
 
     it("returns a placeholder when the amount is null", () => {

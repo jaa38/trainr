@@ -8,6 +8,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/providers/AuthProvider';
 import { getProfileImageUrl } from '@/services/profile-images';
 import { useTrainrTheme } from '@/theme';
+import { formatCurrency } from '@/utils/formatCurrency';
 
 type TrainerProfile = {
   professional_bio: string | null;
@@ -521,9 +522,11 @@ export default function PersonalTrainerReviewScreen() {
                 {renderValue(
                   'Rate per session',
                   pricing
-                    ? `${pricing.currency} ${Number(
-                        pricing.session_rate,
-                      ).toLocaleString()}`
+                    ? formatCurrency(Number(pricing.session_rate), {
+                        currency: pricing.currency,
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })
                     : '',
                 )}
 
@@ -559,8 +562,12 @@ export default function PersonalTrainerReviewScreen() {
                           ? renderValue('Details', item.description)
                           : null}
                         <AppText variant="bodySmall" color={colors.text.secondary}>
-                          {item.sessions_count} sessions · {item.currency}{' '}
-                          {Number(item.price).toLocaleString()}
+                          {item.sessions_count} sessions ·{' '}
+                          {formatCurrency(Number(item.price), {
+                            currency: item.currency,
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}
                         </AppText>
                       </View>
                     ))
