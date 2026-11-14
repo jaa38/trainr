@@ -1,6 +1,8 @@
+
 import { useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Svg, { Circle, Line, Polyline } from 'react-native-svg';
 
 import { AppText } from '@/components/AppText';
 import {
@@ -9,7 +11,11 @@ import {
 } from '@/hooks/earnings/useTrainerEarnings';
 import { useTrainerTransactions } from '@/hooks/transactions/useTrainerTransactions';
 import { useTrainrTheme } from '@/theme';
-import type { TrainerRecentEarning } from '@/types/earnings';
+import type {
+  EarningsPeriod,
+  TrainerEarningsTrendPoint,
+  TrainerRecentEarning,
+} from '@/types/earnings';
 import type { TrainerTransactionStatus } from '@/types/transactions';
 import { formatPayoutDate } from '@/utils/earnings/earnings-formatters';
 import { formatCurrency } from '@/utils/formatCurrency';
@@ -17,6 +23,28 @@ import { formatCurrency } from '@/utils/formatCurrency';
 type EarningsView = 'Overview' | 'Transactions';
 
 const PAGE_SIZE = 20;
+
+const PERIOD_OPTIONS: {
+  label: string;
+  value: EarningsPeriod;
+}[] = [
+  { label: 'This week', value: 'this_week' },
+  { label: 'This month', value: 'this_month' },
+  { label: 'Last month', value: 'last_month' },
+  { label: '3 months', value: 'last_3_months' },
+  { label: 'This year', value: 'this_year' },
+];
+
+const TRANSACTION_FILTERS: {
+  label: string;
+  value: TrainerTransactionStatus | null;
+}[] = [
+  { label: 'All', value: null },
+  { label: 'Pending', value: 'pending' },
+  { label: 'Successful', value: 'successful' },
+  { label: 'Failed', value: 'failed' },
+  { label: 'Cancelled', value: 'cancelled' },
+];
 
 function formatDashboardAmount(
   amount: number | null,
@@ -33,34 +61,10 @@ function formatDashboardAmount(
   });
 }
 
-const TRANSACTION_FILTERS: {
-  label: string;
-  value: TrainerTransactionStatus | null;
-}[] = [
-  { label: 'All', value: null },
-  { label: 'Pending', value: 'pending' },
-  { label: 'Successful', value: 'successful' },
-  { label: 'Failed', value: 'failed' },
-  { label: 'Cancelled', value: 'cancelled' },
-];
-
-function SectionLabel({ children, color }: { children: string; color: string }) {
-  return (
-    <AppText variant="caption" color={color}>
-      {children}
-    </AppText>
-  );
-}
-
-/**
- * Formats a decimal amount as currency.
- *
- * Accepts both numbers and decimal strings to match the current
- * transaction type while avoiding floating-point conversion when
- * the API supplies an amount as a string.
- */
-
-function formatTransactionAmount(amount: number | string, currency: string): string {
+function formatTransactionAmount(
+  amount: number | string,
+  currency: string,
+): string {
   const amountString = String(amount);
 
   if (!/^(?:0|[1-9]\d*)(?:\.\d+)?$/.test(amountString) || !currency?.trim()) {
@@ -94,19 +98,281 @@ function formatTransactionDate(value: string): string {
   }).format(date);
 }
 
+function formatTrendDate(value: string): string {
+  const date = new Date(`${value}T12:00:00`);
+
+  if (Number.isNaN(date.getTime())) return value;
+
+  return new Intl.DateTimeFormat(undefined, {
+    day: 'numeric',
+    month: 'short',
+  }).format(date);
+}
+
 function formatStatus(status: TrainerTransactionStatus): string {
   return status.toUpperCase();
+}
+
+function SectionLabel({
+  children,
+  color,
+}: {
+  children: string;
+  color: string;
+}) {
+  return (
+    <AppText variant="caption" color={color}>
+      {children}
+    </AppText>
+  );
+}
+
+function AnalyticsMetric({
+  label,
+  value,
+  description,
+  colors,
+  spacing,
+}: {
+  label: string;
+  value: string;
+  description: string;
+  colors: ReturnType<typeof useTrainrTheme>['colors'];
+  spacing: ReturnType<typeof useTrainrTheme>['spacing'];
+}) {
+  return (
+    <View
+      style={{
+        flex: 1,
+        minWidth: '46%',
+        padding: spacing.md,
+        borderRadius: 16,
+        borderWidth: 1,
+        borderColor: colors.border.default,
+        backgroundColor: colors.background.secondary,
+        gap: spacing.sm,
+      }}
+    >
+      <SectionLabel color={colors.text.secondary}>{label}</SectionLabel>
+
+      <AppText
+        variant="h3"
+        color={colors.text.primary}
+        style={{ fontVariant: ['tabular-nums'] }}
+      >
+        {value}
+      </AppText>
+
+      <AppText variant="caption" color={colors.text.tertiary}>
+        {description}
+      </AppText>
+    </View>
+  );
+}
+
+function buildTrendCoordinates(
+  trend: TrainerEarningsTrendPoint[],
+  key: 'grossRevenue' | 'netEarnings',
+): string {
+  if (trend.length === 0) return '';
+
+  const values = trend.map((point) => point[key]);
+  const maximum = Math.max(...values, 0);
+
+  return values
+    .map((value, index) => {
+      const x =
+        trend.length === 1
+          ? 160
+          : 12 + (index / (trend.length - 1)) * 296;
+
+      const y =
+        maximum === 0
+          ? 140
+          : 140 - (value / maximum) * 120;
+
+      return `${x},${y}`;
+    })
+    .join(' ');
+}
+
+function EarningsTrendChart({
+  trend,
+  colors,
+  spacing,
+}: {
+  trend: TrainerEarningsTrendPoint[];
+  colors: ReturnType<typeof useTrainrTheme>['colors'];
+  spacing: ReturnType<typeof useTrainrTheme>['spacing'];
+}) {
+  if (trend.length === 0) {
+    return (
+      <View
+        style={{
+          minHeight: 150,
+          alignItems: 'center',
+          justifyContent: 'center',
+          borderRadius: 16,
+          backgroundColor: colors.background.secondary,
+        }}
+      >
+        <AppText variant="bodySmall" color={colors.text.secondary}>
+          No trend data available for this period.
+        </AppText>
+      </View>
+    );
+  }
+
+  const grossCoordinates = buildTrendCoordinates(trend, 'grossRevenue');
+  const netCoordinates = buildTrendCoordinates(trend, 'netEarnings');
+
+  const firstDate = trend[0]?.date;
+  const lastDate = trend[trend.length - 1]?.date;
+
+  return (
+    <View style={{ gap: spacing.md }}>
+      <View
+        style={{
+          padding: spacing.sm,
+          borderRadius: 16,
+          backgroundColor: colors.background.secondary,
+        }}
+      >
+        <Svg
+          width="100%"
+          height={170}
+          viewBox="0 0 320 160"
+          preserveAspectRatio="none"
+        >
+          {[20, 60, 100, 140].map((y) => (
+            <Line
+              key={y}
+              x1="12"
+              y1={y}
+              x2="308"
+              y2={y}
+              stroke={colors.border.default}
+              strokeWidth="1"
+              strokeDasharray="4 5"
+            />
+          ))}
+
+          {trend.length > 1 && (
+            <>
+              <Polyline
+                points={grossCoordinates}
+                fill="none"
+                stroke={colors.brand.red}
+                strokeWidth="3"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+
+              <Polyline
+                points={netCoordinates}
+                fill="none"
+                stroke={colors.text.primary}
+                strokeWidth="3"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </>
+          )}
+
+          {trend.length === 1 && (
+            <>
+              <Circle
+                cx="160"
+                cy={
+                  trend[0].grossRevenue === 0
+                    ? 140
+                    : 20
+                }
+                r="5"
+                fill={colors.brand.red}
+              />
+              <Circle
+                cx="160"
+                cy={
+                  trend[0].netEarnings === 0
+                    ? 140
+                    : 20
+                }
+                r="5"
+                fill={colors.text.primary}
+              />
+            </>
+          )}
+        </Svg>
+      </View>
+
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+        }}
+      >
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
+          <View
+            style={{
+              width: 9,
+              height: 9,
+              borderRadius: 5,
+              backgroundColor: colors.brand.red,
+            }}
+          />
+          <AppText variant="caption" color={colors.text.secondary}>
+            Gross revenue
+          </AppText>
+        </View>
+
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
+          <View
+            style={{
+              width: 9,
+              height: 9,
+              borderRadius: 5,
+              backgroundColor: colors.text.primary,
+            }}
+          />
+          <AppText variant="caption" color={colors.text.secondary}>
+            Net earnings
+          </AppText>
+        </View>
+      </View>
+
+      {firstDate && lastDate && (
+        <View
+          style={{
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+          }}
+        >
+          <AppText variant="caption" color={colors.text.tertiary}>
+            {formatTrendDate(firstDate)}
+          </AppText>
+
+          <AppText variant="caption" color={colors.text.tertiary}>
+            {formatTrendDate(lastDate)}
+          </AppText>
+        </View>
+      )}
+    </View>
+  );
 }
 
 export default function EarningsScreen() {
   const { colors, spacing } = useTrainrTheme();
 
   const [activeView, setActiveView] = useState<EarningsView>('Overview');
+  const [selectedPeriod, setSelectedPeriod] =
+    useState<EarningsPeriod>('this_month');
   const [transactionStatus, setTransactionStatus] =
     useState<TrainerTransactionStatus | null>(null);
   const [transactionPage, setTransactionPage] = useState(1);
 
-  const earningsQuery = useTrainerEarnings();
+  const earningsQuery = useTrainerEarnings(selectedPeriod);
 
   const transactionsQuery = useTrainerTransactions(
     {
@@ -121,13 +387,13 @@ export default function EarningsScreen() {
 
   const dashboard = earningsQuery.data?.data ?? null;
   const serviceError = earningsQuery.data?.error ?? null;
+  const analytics = dashboard?.analytics ?? null;
 
-  const recentEarnings: TrainerRecentEarning[] = dashboard?.recentEarnings ?? [];
+  const recentEarnings: TrainerRecentEarning[] =
+    dashboard?.recentEarnings ?? [];
 
   const isOverview = activeView === 'Overview';
-  const isTransactions = activeView === 'Transactions';
 
-  // A disabled query is not the same as a successful empty response.
   const isNotConnected =
     !TRAINER_EARNINGS_QUERY_ENABLED &&
     earningsQuery.isPending &&
@@ -149,10 +415,14 @@ export default function EarningsScreen() {
       : '—';
 
   const hasScheduledPayout =
-    dashboard?.nextPayoutStatus === 'scheduled' && dashboard.nextPayoutAmount !== null;
+    dashboard?.nextPayoutStatus === 'scheduled' &&
+    dashboard.nextPayoutAmount !== null;
 
   const nextPayoutAmount = hasScheduledPayout
-    ? formatDashboardAmount(dashboard.nextPayoutAmount, dashboard.currencyCode)
+    ? formatDashboardAmount(
+        dashboard.nextPayoutAmount,
+        dashboard.currencyCode,
+      )
     : '—';
 
   const nextPayoutDate = hasScheduledPayout
@@ -204,7 +474,9 @@ export default function EarningsScreen() {
     void earningsQuery.refetch();
   };
 
-  const handleStatusChange = (status: TrainerTransactionStatus | null) => {
+  const handleStatusChange = (
+    status: TrainerTransactionStatus | null,
+  ) => {
     setTransactionStatus(status);
     setTransactionPage(1);
   };
@@ -216,7 +488,9 @@ export default function EarningsScreen() {
   const transactionHasError = transactionsQuery.isError;
 
   const transactionHasNoResults =
-    !transactionIsLoading && !transactionHasError && transactions.length === 0;
+    !transactionIsLoading &&
+    !transactionHasError &&
+    transactions.length === 0;
 
   const transactionEmptyTitle = transactionStatus
     ? 'NO MATCHING TRANSACTIONS'
@@ -225,6 +499,8 @@ export default function EarningsScreen() {
   const transactionEmptyDescription = transactionStatus
     ? 'There are no transactions matching this status. Try another filter.'
     : 'Your payment transactions will appear here when they become available.';
+
+  const analyticsCurrency = analytics?.currencyCode ?? null;
 
   return (
     <SafeAreaView
@@ -262,7 +538,9 @@ export default function EarningsScreen() {
               }}
             />
 
-            <SectionLabel color={colors.brand.red}>TRAINER WORKSPACE</SectionLabel>
+            <SectionLabel color={colors.brand.red}>
+              TRAINER WORKSPACE
+            </SectionLabel>
           </View>
 
           <AppText variant="displayLarge" color={colors.text.primary}>
@@ -272,16 +550,13 @@ export default function EarningsScreen() {
           <AppText
             variant="body"
             color={colors.text.secondary}
-            style={{
-              maxWidth: 340,
-              lineHeight: 26,
-            }}
+            style={{ maxWidth: 340, lineHeight: 26 }}
           >
             Your training business, financial performance and payouts.
           </AppText>
         </View>
 
-        {/* COMBINED TOTAL EARNINGS & NEXT PAYOUT CARD */}
+        {/* LIFETIME EARNINGS AND PAYOUT */}
         <View
           style={{
             borderRadius: 22,
@@ -299,13 +574,7 @@ export default function EarningsScreen() {
             }}
           />
 
-          <View
-            style={{
-              padding: spacing.lg,
-              gap: spacing.lg,
-            }}
-          >
-            {/* TOTAL EARNINGS */}
+          <View style={{ padding: spacing.lg, gap: spacing.lg }}>
             <View style={{ gap: spacing.md }}>
               <View
                 style={{
@@ -314,7 +583,9 @@ export default function EarningsScreen() {
                   alignItems: 'center',
                 }}
               >
-                <SectionLabel color={colors.text.secondary}>TOTAL EARNINGS</SectionLabel>
+                <SectionLabel color={colors.text.secondary}>
+                  TOTAL EARNINGS
+                </SectionLabel>
 
                 <View
                   style={{
@@ -347,7 +618,6 @@ export default function EarningsScreen() {
               }}
             />
 
-            {/* NEXT PAYOUT */}
             <View
               style={{
                 flexDirection: 'row',
@@ -356,13 +626,10 @@ export default function EarningsScreen() {
                 gap: spacing.md,
               }}
             >
-              <View
-                style={{
-                  flex: 1,
-                  gap: spacing.sm,
-                }}
-              >
-                <SectionLabel color={colors.text.secondary}>NEXT PAYOUT</SectionLabel>
+              <View style={{ flex: 1, gap: spacing.sm }}>
+                <SectionLabel color={colors.text.secondary}>
+                  NEXT PAYOUT
+                </SectionLabel>
 
                 <AppText variant="h2" color={colors.text.primary}>
                   {nextPayoutAmount}
@@ -400,7 +667,6 @@ export default function EarningsScreen() {
               </View>
             </View>
 
-            {/* VERIFICATION STATUS */}
             <View
               accessibilityLiveRegion="polite"
               style={{
@@ -458,7 +724,9 @@ export default function EarningsScreen() {
                     justifyContent: 'center',
                     paddingVertical: spacing.md,
                     borderRadius: 11,
-                    backgroundColor: selected ? colors.brand.red : 'transparent',
+                    backgroundColor: selected
+                      ? colors.brand.red
+                      : 'transparent',
                   }}
                 >
                   <AppText
@@ -473,21 +741,273 @@ export default function EarningsScreen() {
           </View>
 
           {isOverview ? (
-            /* OVERVIEW CONTENT */
-            <View style={{ gap: spacing.md }}>
-              {recentEarnings.length > 0 ? (
-                <>
-                  <View style={{ gap: spacing.xs }}>
+            <View style={{ gap: spacing.lg }}>
+              {/* ANALYTICS */}
+              <View style={{ gap: spacing.md }}>
+                <View style={{ gap: spacing.xs }}>
+                  <AppText variant="h3" color={colors.text.primary}>
+                    EARNINGS ANALYTICS
+                  </AppText>
+
+                  <AppText variant="bodySmall" color={colors.text.secondary}>
+                    Your verified financial performance by reporting period.
+                  </AppText>
+                </View>
+
+                {/* REPORTING PERIOD SELECTOR */}
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={{
+                    gap: spacing.sm,
+                    paddingVertical: spacing.xs,
+                  }}
+                >
+                  {PERIOD_OPTIONS.map((option) => {
+                    const selected = selectedPeriod === option.value;
+
+                    return (
+                      <Pressable
+                        key={option.value}
+                        accessibilityRole="button"
+                        accessibilityLabel={option.label}
+                        accessibilityState={{ selected }}
+                        onPress={() => setSelectedPeriod(option.value)}
+                        style={{
+                          paddingHorizontal: spacing.md,
+                          paddingVertical: spacing.sm,
+                          borderRadius: 20,
+                          borderWidth: 1,
+                          borderColor: selected
+                            ? colors.brand.red
+                            : colors.border.default,
+                          backgroundColor: selected
+                            ? colors.brand.red
+                            : colors.background.secondary,
+                        }}
+                      >
+                        <AppText
+                          variant="caption"
+                          color={selected ? '#FFFFFF' : colors.text.secondary}
+                        >
+                          {option.label}
+                        </AppText>
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+
+                {/* ANALYTICS LOADING */}
+                {earningsQuery.isLoading && (
+                  <View
+                    accessibilityLiveRegion="polite"
+                    style={{
+                      padding: spacing.xl,
+                      borderRadius: 18,
+                      borderWidth: 1,
+                      borderColor: colors.border.default,
+                      alignItems: 'center',
+                      gap: spacing.sm,
+                    }}
+                  >
                     <AppText variant="h3" color={colors.text.primary}>
-                      RECENT EARNINGS
+                      LOADING ANALYTICS
                     </AppText>
 
                     <AppText variant="bodySmall" color={colors.text.secondary}>
-                      Earnings from your completed and verified training sessions.
+                      Retrieving your verified earnings for this period.
                     </AppText>
                   </View>
+                )}
 
-                  {recentEarnings.map((earning) => (
+                {/* ANALYTICS ERROR */}
+                {hasError && !earningsQuery.isLoading && (
+                  <View
+                    accessibilityLiveRegion="polite"
+                    style={{
+                      padding: spacing.xl,
+                      borderRadius: 18,
+                      borderWidth: 1,
+                      borderColor: colors.border.default,
+                      alignItems: 'center',
+                      gap: spacing.md,
+                    }}
+                  >
+                    <AppText variant="h3" color={colors.text.primary}>
+                      ANALYTICS UNAVAILABLE
+                    </AppText>
+
+                    <AppText
+                      variant="bodySmall"
+                      color={colors.text.secondary}
+                      style={{ textAlign: 'center', lineHeight: 24 }}
+                    >
+                      We could not retrieve earnings analytics for this period.
+                      Your lifetime earnings and transaction history are separate
+                      from this reporting view.
+                    </AppText>
+
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="Retry loading analytics"
+                      disabled={earningsQuery.isFetching}
+                      onPress={handleRetryEarnings}
+                      style={{
+                        paddingHorizontal: spacing.xl,
+                        paddingVertical: spacing.md,
+                        borderRadius: 12,
+                        backgroundColor: colors.brand.red,
+                        opacity: earningsQuery.isFetching ? 0.6 : 1,
+                      }}
+                    >
+                      <AppText variant="button" color="#FFFFFF">
+                        {earningsQuery.isFetching ? 'RETRYING...' : 'TRY AGAIN'}
+                      </AppText>
+                    </Pressable>
+                  </View>
+                )}
+
+                {/* ANALYTICS DATA */}
+                {!earningsQuery.isLoading && !hasError && analytics && (
+                  <View style={{ gap: spacing.lg }}>
+                    <View style={{ gap: spacing.xs }}>
+                      <AppText variant="caption" color={colors.text.tertiary}>
+                        {formatTrendDate(analytics.startDate)} –{' '}
+                        {formatTrendDate(analytics.endDate)}
+                      </AppText>
+
+                      <AppText variant="bodySmall" color={colors.text.secondary}>
+                        Reporting period: {PERIOD_OPTIONS.find(
+                          (option) => option.value === analytics.period,
+                        )?.label ?? 'Selected period'}
+                      </AppText>
+                    </View>
+
+                    {/* METRIC CARDS */}
+                    <View
+                      style={{
+                        flexDirection: 'row',
+                        flexWrap: 'wrap',
+                        gap: spacing.sm,
+                      }}
+                    >
+                      <AnalyticsMetric
+                        label="GROSS REVENUE"
+                        value={formatDashboardAmount(
+                          analytics.grossRevenue,
+                          analyticsCurrency,
+                        )}
+                        description="Total verified session value"
+                        colors={colors}
+                        spacing={spacing}
+                      />
+
+                      <AnalyticsMetric
+                        label="TRAINR COMMISSION"
+                        value={formatDashboardAmount(
+                          analytics.commissionAmount,
+                          analyticsCurrency,
+                        )}
+                        description="Platform commission"
+                        colors={colors}
+                        spacing={spacing}
+                      />
+
+                      <AnalyticsMetric
+                        label="NET EARNINGS"
+                        value={formatDashboardAmount(
+                          analytics.netEarnings,
+                          analyticsCurrency,
+                        )}
+                        description="Your earnings after commission"
+                        colors={colors}
+                        spacing={spacing}
+                      />
+
+                      <AnalyticsMetric
+                        label="COMPLETED SESSIONS"
+                        value={analytics.completedSessions.toLocaleString()}
+                        description="Verified completed sessions"
+                        colors={colors}
+                        spacing={spacing}
+                      />
+                    </View>
+
+                    {/* TREND CHART */}
+                    <View
+                      style={{
+                        padding: spacing.lg,
+                        borderRadius: 18,
+                        borderWidth: 1,
+                        borderColor: colors.border.default,
+                        backgroundColor: colors.background.secondary,
+                        gap: spacing.md,
+                      }}
+                    >
+                      <View style={{ gap: spacing.xs }}>
+                        <AppText variant="h3" color={colors.text.primary}>
+                          EARNINGS TREND
+                        </AppText>
+
+                        <AppText variant="bodySmall" color={colors.text.secondary}>
+                          Gross revenue compared with your net earnings.
+                        </AppText>
+                      </View>
+
+                      <EarningsTrendChart
+                        trend={analytics.trend}
+                        colors={colors}
+                        spacing={spacing}
+                      />
+                    </View>
+                  </View>
+                )}
+
+                {/* EMPTY ANALYTICS */}
+                {!earningsQuery.isLoading &&
+                  !hasError &&
+                  !analytics && (
+                    <View
+                      style={{
+                        padding: spacing.xl,
+                        borderRadius: 18,
+                        borderWidth: 1,
+                        borderColor: colors.border.default,
+                        alignItems: 'center',
+                        gap: spacing.md,
+                      }}
+                    >
+                      <AppText variant="h3" color={colors.text.primary}>
+                        NO ANALYTICS AVAILABLE
+                      </AppText>
+
+                      <AppText
+                        variant="bodySmall"
+                        color={colors.text.secondary}
+                        style={{ textAlign: 'center', lineHeight: 24 }}
+                      >
+                        Verified earnings analytics will appear here when
+                        completed sessions and their payments have been
+                        recognised in the earnings ledger.
+                      </AppText>
+                    </View>
+                  )}
+              </View>
+
+              {/* RECENT VERIFIED EARNINGS */}
+              <View style={{ gap: spacing.md }}>
+                <View style={{ gap: spacing.xs }}>
+                  <AppText variant="h3" color={colors.text.primary}>
+                    RECENT EARNINGS
+                  </AppText>
+
+                  <AppText variant="bodySmall" color={colors.text.secondary}>
+                    Earnings from your completed and verified training sessions.
+                  </AppText>
+                </View>
+
+                {recentEarnings.length > 0 ? (
+                  recentEarnings.map((earning) => (
                     <View
                       key={earning.paymentId}
                       style={{
@@ -601,101 +1121,33 @@ export default function EarningsScreen() {
                         </View>
                       </View>
                     </View>
-                  ))}
-                </>
-              ) : (
-                <View
-                  style={{
-                    paddingHorizontal: spacing.lg,
-                    paddingVertical: spacing.xl,
-                    borderRadius: 20,
-                    borderWidth: 1,
-                    borderColor: colors.border.default,
-                    alignItems: 'center',
-                    gap: spacing.md,
-                  }}
-                >
+                  ))
+                ) : (
                   <View
-                    accessible={false}
                     style={{
-                      width: 54,
-                      height: 54,
+                      padding: spacing.lg,
                       borderRadius: 18,
-                      backgroundColor: colors.brand.redLight,
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}
-                  >
-                    <AppText variant="h3" color={colors.brand.red}>
-                      —
-                    </AppText>
-                  </View>
-
-                  <View
-                    style={{
+                      borderWidth: 1,
+                      borderColor: colors.border.default,
                       alignItems: 'center',
                       gap: spacing.sm,
                     }}
                   >
-                    <AppText
-                      variant="h3"
-                      color={colors.text.primary}
-                      style={{ textAlign: 'center' }}
-                    >
-                      {emptyStateTitle}
+                    <AppText variant="body" color={colors.text.primary}>
+                      NO RECENT EARNINGS
                     </AppText>
 
                     <AppText
                       variant="bodySmall"
                       color={colors.text.secondary}
-                      style={{
-                        textAlign: 'center',
-                        lineHeight: 24,
-                      }}
+                      style={{ textAlign: 'center', lineHeight: 24 }}
                     >
-                      {emptyStateDescription}
+                      Recent verified earnings will appear here after completed
+                      bookings and successful payments have been recognised.
                     </AppText>
                   </View>
-
-                  {hasError && TRAINER_EARNINGS_QUERY_ENABLED && (
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel="Retry loading earnings"
-                      accessibilityHint="Attempts to retrieve your financial information again"
-                      disabled={earningsQuery.isFetching}
-                      onPress={handleRetryEarnings}
-                      style={{
-                        paddingHorizontal: spacing.xl,
-                        paddingVertical: spacing.md,
-                        borderRadius: 12,
-                        backgroundColor: colors.brand.red,
-                        opacity: earningsQuery.isFetching ? 0.6 : 1,
-                      }}
-                    >
-                      <AppText variant="button" color="#FFFFFF">
-                        {earningsQuery.isFetching ? 'RETRYING...' : 'TRY AGAIN'}
-                      </AppText>
-                    </Pressable>
-                  )}
-
-                  <View
-                    accessible={false}
-                    style={{
-                      alignSelf: 'stretch',
-                      height: 1,
-                      backgroundColor: colors.border.default,
-                    }}
-                  />
-
-                  <AppText
-                    variant="caption"
-                    color={colors.text.tertiary}
-                    style={{ textAlign: 'center' }}
-                  >
-                    Financial information will only be displayed after verification.
-                  </AppText>
-                </View>
-              )}
+                )}
+              </View>
             </View>
           ) : (
             /* TRANSACTIONS CONTENT */
@@ -734,7 +1186,9 @@ export default function EarningsScreen() {
                         paddingVertical: spacing.sm,
                         borderRadius: 20,
                         borderWidth: 1,
-                        borderColor: selected ? colors.brand.red : colors.border.default,
+                        borderColor: selected
+                          ? colors.brand.red
+                          : colors.border.default,
                         backgroundColor: selected
                           ? colors.brand.red
                           : colors.background.secondary,
@@ -751,7 +1205,7 @@ export default function EarningsScreen() {
                 })}
               </ScrollView>
 
-              {/* TRANSACTION LOADING STATE */}
+              {/* TRANSACTION LOADING */}
               {transactionIsLoading && (
                 <View
                   accessibilityLiveRegion="polite"
@@ -774,7 +1228,7 @@ export default function EarningsScreen() {
                 </View>
               )}
 
-              {/* TRANSACTION ERROR STATE */}
+              {/* TRANSACTION ERROR */}
               {transactionHasError && (
                 <View
                   accessibilityLiveRegion="polite"
@@ -930,7 +1384,9 @@ export default function EarningsScreen() {
                       }}
                     >
                       <View style={{ flex: 1, gap: spacing.xs }}>
-                        <SectionLabel color={colors.text.tertiary}>AMOUNT</SectionLabel>
+                        <SectionLabel color={colors.text.tertiary}>
+                          AMOUNT
+                        </SectionLabel>
 
                         <AppText variant="h2" color={colors.text.primary}>
                           {formatTransactionAmount(
@@ -941,7 +1397,9 @@ export default function EarningsScreen() {
                       </View>
 
                       <View style={{ alignItems: 'flex-end', gap: spacing.xs }}>
-                        <SectionLabel color={colors.text.tertiary}>PROVIDER</SectionLabel>
+                        <SectionLabel color={colors.text.tertiary}>
+                          PROVIDER
+                        </SectionLabel>
 
                         <AppText variant="bodySmall" color={colors.text.secondary}>
                           Paystack
@@ -971,7 +1429,10 @@ export default function EarningsScreen() {
                   <Pressable
                     accessibilityRole="button"
                     accessibilityLabel="Previous transaction page"
-                    disabled={!pagination.hasPreviousPage || transactionsQuery.isFetching}
+                    disabled={
+                      !pagination.hasPreviousPage ||
+                      transactionsQuery.isFetching
+                    }
                     onPress={() =>
                       setTransactionPage((current) => Math.max(1, current - 1))
                     }
@@ -982,7 +1443,8 @@ export default function EarningsScreen() {
                       borderWidth: 1,
                       borderColor: colors.border.default,
                       opacity:
-                        !pagination.hasPreviousPage || transactionsQuery.isFetching
+                        !pagination.hasPreviousPage ||
+                        transactionsQuery.isFetching
                           ? 0.4
                           : 1,
                     }}
@@ -999,7 +1461,10 @@ export default function EarningsScreen() {
                   <Pressable
                     accessibilityRole="button"
                     accessibilityLabel="Next transaction page"
-                    disabled={!pagination.hasNextPage || transactionsQuery.isFetching}
+                    disabled={
+                      !pagination.hasNextPage ||
+                      transactionsQuery.isFetching
+                    }
                     onPress={() => setTransactionPage((current) => current + 1)}
                     style={{
                       paddingHorizontal: spacing.md,
@@ -1008,7 +1473,10 @@ export default function EarningsScreen() {
                       borderWidth: 1,
                       borderColor: colors.border.default,
                       opacity:
-                        !pagination.hasNextPage || transactionsQuery.isFetching ? 0.4 : 1,
+                        !pagination.hasNextPage ||
+                        transactionsQuery.isFetching
+                          ? 0.4
+                          : 1,
                     }}
                   >
                     <AppText variant="button" color={colors.text.secondary}>

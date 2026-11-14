@@ -1,3 +1,4 @@
+
 import React from 'react';
 
 import { fireEvent, render } from '@testing-library/react-native';
@@ -38,6 +39,7 @@ jest.mock('@/theme', () => ({
       },
     },
     spacing: {
+      xs: 4,
       sm: 8,
       md: 12,
       lg: 16,
@@ -63,14 +65,15 @@ const mockUseTrainerTransactions = jest.mocked(useTrainerTransactions);
 type RenderResult = Awaited<ReturnType<typeof render>>;
 
 const verifiedDashboard: TrainerEarningsDashboard = {
-  totalEarnings: 1250,
+  totalEarnings: 125000,
   nextPayoutAmount: null,
   nextPayoutDate: null,
   currencyCode: 'NGN',
   financialStatus: 'available',
   nextPayoutStatus: 'not_available',
-  updatedAt: '2026-01-01T00:00:00.000Z',
+  updatedAt: '2026-11-14T09:00:00.000Z',
   recentEarnings: [],
+  analytics: null,
 };
 
 const noEarningsDashboard: TrainerEarningsDashboard = {
@@ -80,8 +83,43 @@ const noEarningsDashboard: TrainerEarningsDashboard = {
   currencyCode: 'NGN',
   financialStatus: 'no_earnings',
   nextPayoutStatus: 'not_available',
-  updatedAt: '2026-01-01T00:00:00.000Z',
+  updatedAt: '2026-11-14T09:00:00.000Z',
   recentEarnings: [],
+  analytics: null,
+};
+
+const analyticsDashboard: TrainerEarningsDashboard = {
+  ...verifiedDashboard,
+  analytics: {
+    period: 'this_month',
+    startDate: '2026-11-01',
+    endDate: '2026-11-14',
+    grossRevenue: 100000,
+    commissionAmount: 10000,
+    netEarnings: 90000,
+    completedSessions: 10,
+    currencyCode: 'NGN',
+    trend: [
+      {
+        date: '2026-11-01',
+        grossRevenue: 20000,
+        commissionAmount: 2000,
+        netEarnings: 18000,
+      },
+      {
+        date: '2026-11-07',
+        grossRevenue: 30000,
+        commissionAmount: 3000,
+        netEarnings: 27000,
+      },
+      {
+        date: '2026-11-14',
+        grossRevenue: 50000,
+        commissionAmount: 5000,
+        netEarnings: 45000,
+      },
+    ],
+  },
 };
 
 const successfulTransaction = {
@@ -170,19 +208,15 @@ describe('EarningsScreen', () => {
       ).toBeTruthy();
     });
 
-    it('shows the payment integration pending state when the query is disabled', async () => {
-      const { getAllByText, getByText } = await render(<EarningsScreen />);
+    it('shows the payment integration pending status when the query is disabled', async () => {
+      const { getByText } = await render(<EarningsScreen />);
 
-      expect(getAllByText('AWAITING PAYMENT INTEGRATION').length).toBeGreaterThan(0);
+      expect(getByText('AWAITING PAYMENT INTEGRATION')).toBeTruthy();
 
-      expect(
-        getByText(
-          'Your earnings dashboard will become available when payment processing and the earnings service are configured.',
-        ),
-      ).toBeTruthy();
+      expect(getByText('NO ANALYTICS AVAILABLE')).toBeTruthy();
     });
 
-    it('shows a loading state while earnings are being retrieved', async () => {
+    it('shows the financial and analytics loading states', async () => {
       mockUseTrainerEarnings.mockReturnValue(
         createQuery({
           isPending: true,
@@ -193,11 +227,11 @@ describe('EarningsScreen', () => {
 
       const { getByText } = await render(<EarningsScreen />);
 
-      expect(getByText('LOADING EARNINGS')).toBeTruthy();
       expect(getByText('LOADING FINANCIAL INFORMATION')).toBeTruthy();
+      expect(getByText('LOADING ANALYTICS')).toBeTruthy();
     });
 
-    it('displays verified earnings', async () => {
+    it('displays verified lifetime earnings', async () => {
       mockUseTrainerEarnings.mockReturnValue(
         createQuery({
           data: {
@@ -213,9 +247,15 @@ describe('EarningsScreen', () => {
 
       expect(getByText('VERIFIED EARNINGS')).toBeTruthy();
 
-      expect(getByText(formatEarningsAmount(1250, 'NGN'))).toBeTruthy();
+      expect(
+        getByText(formatEarningsAmount(125000, 'NGN')),
+      ).toBeTruthy();
 
-      expect(getByText('Verified earnings after TRAINR commission.')).toBeTruthy();
+      expect(
+        getByText('Verified earnings after TRAINR commission.'),
+      ).toBeTruthy();
+
+      expect(getByText('NO ANALYTICS AVAILABLE')).toBeTruthy();
     });
 
     it('displays the no earnings state', async () => {
@@ -233,9 +273,12 @@ describe('EarningsScreen', () => {
       const { getByText } = await render(<EarningsScreen />);
 
       expect(getByText('NO VERIFIED EARNINGS')).toBeTruthy();
-      expect(getByText('NO EARNINGS YET')).toBeTruthy();
+      expect(getByText('NO ANALYTICS AVAILABLE')).toBeTruthy();
+      expect(getByText('NO RECENT EARNINGS')).toBeTruthy();
 
-      expect(getByText(formatEarningsAmount(0, 'NGN'))).toBeTruthy();
+      expect(
+        getByText(formatEarningsAmount(0, 'NGN')),
+      ).toBeTruthy();
     });
 
     it('shows an unavailable state when the query fails', async () => {
@@ -247,12 +290,17 @@ describe('EarningsScreen', () => {
         }),
       );
 
-      const { getByText, queryByText } = await render(<EarningsScreen />);
+      const { getByText, getByRole } = await render(<EarningsScreen />);
 
-      expect(getByText('FINANCIAL INFORMATION UNAVAILABLE')).toBeTruthy();
+      expect(
+        getByText('FINANCIAL INFORMATION UNAVAILABLE'),
+      ).toBeTruthy();
 
-      expect(getByText('EARNINGS UNAVAILABLE')).toBeTruthy();
-      expect(queryByText('TRY AGAIN')).toBeNull();
+      expect(getByText('ANALYTICS UNAVAILABLE')).toBeTruthy();
+
+      expect(
+        getByRole('button', { name: 'Retry loading analytics' }),
+      ).toBeTruthy();
     });
 
     it('shows the next payout placeholder when no payout is scheduled', async () => {
@@ -283,7 +331,77 @@ describe('EarningsScreen', () => {
 
       const { queryByText } = await render(<EarningsScreen />);
 
-      expect(queryByText(formatEarningsAmount(1250, 'NGN'))).toBeNull();
+      expect(
+        queryByText(formatEarningsAmount(125000, 'NGN')),
+      ).toBeNull();
+    });
+
+    it('displays the earnings analytics metrics when analytics are available', async () => {
+      mockUseTrainerEarnings.mockReturnValue(
+        createQuery({
+          data: {
+            data: analyticsDashboard,
+            error: null,
+          },
+          isPending: false,
+          fetchStatus: 'idle',
+        }),
+      );
+
+      const { getByText } = await render(<EarningsScreen />);
+
+      expect(getByText('EARNINGS ANALYTICS')).toBeTruthy();
+      expect(getByText('GROSS REVENUE')).toBeTruthy();
+      expect(getByText('TRAINR COMMISSION')).toBeTruthy();
+      expect(getByText('NET EARNINGS')).toBeTruthy();
+      expect(getByText('COMPLETED SESSIONS')).toBeTruthy();
+
+      expect(
+        getByText(formatEarningsAmount(100000, 'NGN')),
+      ).toBeTruthy();
+
+      expect(
+        getByText(formatEarningsAmount(10000, 'NGN')),
+      ).toBeTruthy();
+
+      expect(
+        getByText(formatEarningsAmount(90000, 'NGN')),
+      ).toBeTruthy();
+
+      expect(getByText('10')).toBeTruthy();
+      expect(getByText('EARNINGS TREND')).toBeTruthy();
+      expect(getByText('Gross revenue')).toBeTruthy();
+      expect(getByText('Net earnings')).toBeTruthy();
+    });
+
+    it('provides all five reporting period options', async () => {
+      const { getByRole } = await render(<EarningsScreen />);
+
+      expect(getByRole('button', { name: 'This week' })).toBeTruthy();
+      expect(getByRole('button', { name: 'This month' })).toBeTruthy();
+      expect(getByRole('button', { name: 'Last month' })).toBeTruthy();
+      expect(getByRole('button', { name: '3 months' })).toBeTruthy();
+      expect(getByRole('button', { name: 'This year' })).toBeTruthy();
+    });
+
+    it('selects the requested reporting period', async () => {
+      const { getByRole } = await render(<EarningsScreen />);
+
+      await fireEvent.press(
+        getByRole('button', { name: 'Last month' }),
+      );
+
+      expect(
+        getByRole('button', { name: 'Last month' }).props
+          .accessibilityState?.selected,
+      ).toBe(true);
+
+      expect(
+        getByRole('button', { name: 'This month' }).props
+          .accessibilityState?.selected,
+      ).toBe(false);
+
+      expect(mockUseTrainerEarnings).toHaveBeenLastCalledWith('last_month');
     });
   });
 
@@ -294,22 +412,24 @@ describe('EarningsScreen', () => {
       await openTransactionsTab(getByRole);
 
       expect(
-        getByRole('button', { name: 'Transactions' }).props.accessibilityState?.selected,
+        getByRole('button', { name: 'Transactions' }).props
+          .accessibilityState?.selected,
       ).toBe(true);
     });
 
     it('switches back to Overview', async () => {
-      const { getByRole, getAllByText } = await render(<EarningsScreen />);
+      const { getByRole, getByText } = await render(<EarningsScreen />);
 
       await openTransactionsTab(getByRole);
 
       await fireEvent.press(getByRole('button', { name: 'Overview' }));
 
       expect(
-        getByRole('button', { name: 'Overview' }).props.accessibilityState?.selected,
+        getByRole('button', { name: 'Overview' }).props
+          .accessibilityState?.selected,
       ).toBe(true);
 
-      expect(getAllByText('AWAITING PAYMENT INTEGRATION').length).toBeGreaterThan(0);
+      expect(getByText('NO ANALYTICS AVAILABLE')).toBeTruthy();
     });
   });
 
@@ -320,7 +440,8 @@ describe('EarningsScreen', () => {
       await openTransactionsTab(getByRole);
 
       expect(
-        getByRole('button', { name: 'Transactions' }).props.accessibilityState?.selected,
+        getByRole('button', { name: 'Transactions' }).props
+          .accessibilityState?.selected,
       ).toBe(true);
 
       expect(getByText('TRANSACTION HISTORY')).toBeTruthy();
@@ -346,12 +467,13 @@ describe('EarningsScreen', () => {
         }),
       );
 
-      const { getByRole, getByText, getAllByText } = await render(<EarningsScreen />);
+      const { getByRole, getByText, getAllByText } = await render(
+        <EarningsScreen />,
+      );
 
       await openTransactionsTab(getByRole);
 
       expect(getAllByText(/successful/i).length).toBeGreaterThan(0);
-
       expect(getByText(/5,000/)).toBeTruthy();
     });
 
@@ -359,7 +481,8 @@ describe('EarningsScreen', () => {
       const { queryByText, getByRole } = await render(<EarningsScreen />);
 
       expect(
-        getByRole('button', { name: 'Overview' }).props.accessibilityState?.selected,
+        getByRole('button', { name: 'Overview' }).props
+          .accessibilityState?.selected,
       ).toBe(true);
 
       expect(queryByText('TRANSACTION HISTORY')).toBeNull();
