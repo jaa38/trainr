@@ -47,6 +47,15 @@ export default function TrainerProfileScreen() {
     },
   ] as const;
 
+  const financialSections = [
+    {
+      title: 'Payout Management',
+      description:
+        'Manage your payout account, review payout history and track payment status.',
+      route: '/(tabs)/personal-trainer/more/payout-management',
+    },
+  ] as const;
+
   const profileSections = [
     {
       title: 'Professional Bio',
@@ -221,6 +230,55 @@ export default function TrainerProfileScreen() {
           </View>
 
           {workspaceSections.map((section) => (
+            <Pressable
+              key={section.route}
+              accessibilityRole="button"
+              accessibilityLabel={`Open ${section.title}`}
+              onPress={() => router.push(section.route)}
+              style={({ pressed }) => ({
+                minHeight: 68,
+                flexDirection: 'row',
+                alignItems: 'center',
+                padding: spacing.lg,
+                gap: spacing.md,
+                borderRadius: 16,
+                borderWidth: 1,
+                borderColor: colors.border.default,
+                backgroundColor: colors.background.secondary,
+                opacity: pressed ? 0.75 : 1,
+              })}
+            >
+              <View style={{ flex: 1, gap: spacing.xs }}>
+                <AppText variant="h3" color={colors.text.primary}>
+                  {section.title}
+                </AppText>
+
+                <AppText
+                  variant="bodySmall"
+                  color={colors.text.secondary}
+                >
+                  {section.description}
+                </AppText>
+              </View>
+
+              <ArrowRight size={20} color={colors.text.secondary} />
+            </Pressable>
+          ))}
+        </View>
+
+        {/* Financial Management */}
+        <View style={{ gap: spacing.md }}>
+          <View style={{ gap: spacing.sm }}>
+            <AppText variant="h2" color={colors.text.primary}>
+              FINANCIAL MANAGEMENT.
+            </AppText>
+
+            <AppText variant="body" color={colors.text.secondary}>
+              Manage your earnings and payout preferences.
+            </AppText>
+          </View>
+
+          {financialSections.map((section) => (
             <Pressable
               key={section.route}
               accessibilityRole="button"

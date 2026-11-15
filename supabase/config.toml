@@ -465,3 +465,10 @@ enabled = true
 verify_jwt = true
 import_map = "./functions/trainer-transaction-history/deno.json"
 entrypoint = "./functions/trainer-transaction-history/index.ts"
+
+# Trainer payout management
+[functions.trainer-payout-management]
+enabled = true
+verify_jwt = true
+import_map = "./functions/trainer-payout-management/deno.json"
+entrypoint = "./functions/trainer-payout-management/index.ts"

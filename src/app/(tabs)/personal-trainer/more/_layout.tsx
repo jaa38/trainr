@@ -12,6 +12,7 @@ export default function MoreLayout() {
             <Stack.Screen name="workout-plans" />
             <Stack.Screen name="workout-plan-builder" />
             <Stack.Screen name="profile" />
+            <Stack.Screen name="payout-management" />
         </Stack>
     );
 }
