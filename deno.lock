@@ -62,7 +62,7 @@
   "workspace": {
     "packageJson": {
       "dependencies": [
-        "npm:@eslint/js@^10.0.1",
+        "npm:@eslint/js@^9.39.5",
         "npm:@expo-google-fonts/barlow-condensed@~0.4.1",
         "npm:@expo-google-fonts/inter@~0.4.2",
         "npm:@expo/ui@~57.0.26",
@@ -77,6 +77,7 @@
         "npm:@types/react@~19.2.2",
         "npm:eslint-config-expo@~57.0.2",
         "npm:eslint@^9.39.5",
+        "npm:expo-application@~57.0.3",
         "npm:expo-build-properties@~57.0.23",
         "npm:expo-constants@~57.0.21",
         "npm:expo-crypto@~57.0.4",
@@ -116,6 +117,7 @@
         "npm:react-native@0.86.3",
         "npm:react@19.2.3",
         "npm:supabase@^2.121.0",
+        "npm:test-renderer@^1.2.0",
         "npm:typescript-eslint@^8.72.2",
         "npm:typescript@~6.0.3",
         "npm:zod@^4.6.7"

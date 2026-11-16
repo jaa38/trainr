@@ -1,21 +1,68 @@
 import { router } from 'expo-router';
 import {
-    AlertCircle,
-    ArrowLeft,
-    Bell,
-    CheckCircle2,
-    Smartphone
+  AlertCircle,
+  ArrowLeft,
+  Bell,
+  CheckCircle2,
+  Smartphone,
 } from 'lucide-react-native';
-import { useState } from 'react';
-import { ActivityIndicator, Linking, Pressable, ScrollView, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  Linking,
+  Pressable,
+  ScrollView,
+  Switch,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/AppText';
+import { useAuth } from '@/providers/AuthProvider';
 import { useNotifications } from '@/providers/notifications/NotificationProvider';
+import {
+  getNotificationPreferences,
+  updateNotificationPreference,
+  type NotificationPreferences,
+  type NotificationPreferenceKey,
+} from '@/services/notifications/notification-preferences';
 import { useTrainrTheme } from '@/theme';
+
+const PREFERENCE_ITEMS: {
+  key: NotificationPreferenceKey;
+  title: string;
+  description: string;
+}[] = [
+  {
+    key: 'booking_updates',
+    title: 'Booking Updates',
+    description: 'Receive updates when bookings are requested, confirmed, declined or changed.',
+  },
+  {
+    key: 'session_reminders',
+    title: 'Session Reminders',
+    description: 'Get reminders about your upcoming training sessions.',
+  },
+  {
+    key: 'workout_updates',
+    title: 'Workout Updates',
+    description: 'Stay informed when workouts are assigned or updated.',
+  },
+  {
+    key: 'feedback_updates',
+    title: 'Feedback Updates',
+    description: 'Receive notifications when trainer feedback is available.',
+  },
+  {
+    key: 'post_session_followups',
+    title: 'Post-session Follow-ups',
+    description: 'Get follow-up notifications after completed training sessions.',
+  },
+];
 
 export default function NotificationSettingsScreen() {
   const { colors, spacing } = useTrainrTheme();
+  const { user } = useAuth();
 
   const {
     permissionStatus,
@@ -28,6 +75,59 @@ export default function NotificationSettingsScreen() {
   } = useNotifications();
 
   const [localError, setLocalError] = useState<string | null>(null);
+  const [preferences, setPreferences] =
+    useState<NotificationPreferences | null>(null);
+  const [isLoadingPreferences, setIsLoadingPreferences] = useState(true);
+  const [savingPreference, setSavingPreference] =
+    useState<NotificationPreferenceKey | null>(null);
+  const [preferenceError, setPreferenceError] = useState<string | null>(null);
+
+  const activeUserIdRef = useRef<string | null>(user?.id ?? null);
+  activeUserIdRef.current = user?.id ?? null;
+
+  useEffect(() => {
+    let isActive = true;
+
+    setSavingPreference(null);
+
+    async function loadPreferences() {
+      if (!user?.id) {
+        setPreferences(null);
+        setIsLoadingPreferences(false);
+        return;
+      }
+
+      setIsLoadingPreferences(true);
+      setPreferenceError(null);
+      setPreferences(null);
+
+      try {
+        const savedPreferences = await getNotificationPreferences(user.id);
+
+        if (isActive) {
+          setPreferences(savedPreferences);
+        }
+      } catch (loadError) {
+        if (isActive) {
+          setPreferenceError(
+            loadError instanceof Error
+              ? loadError.message
+              : 'Unable to load notification preferences.',
+          );
+        }
+      } finally {
+        if (isActive) {
+          setIsLoadingPreferences(false);
+        }
+      }
+    }
+
+    loadPreferences();
+
+    return () => {
+      isActive = false;
+    };
+  }, [user?.id]);
 
   const permissionGranted = permissionStatus?.granted ?? false;
   const canAskAgain = permissionStatus?.canAskAgain ?? true;
@@ -65,8 +165,53 @@ export default function NotificationSettingsScreen() {
     }
   }
 
+  async function handlePreferenceChange(
+    preference: NotificationPreferenceKey,
+    enabled: boolean,
+  ) {
+    const userId = user?.id;
+    const previousValue = preferences?.[preference];
+
+    if (
+      !userId ||
+      !preferences ||
+      previousValue === undefined ||
+      savingPreference !== null
+    ) {
+      return;
+    }
+
+    setPreferenceError(null);
+    setPreferences((current) =>
+      current ? { ...current, [preference]: enabled } : current,
+    );
+    setSavingPreference(preference);
+
+    try {
+      await updateNotificationPreference(userId, preference, enabled);
+    } catch (saveError) {
+      if (activeUserIdRef.current === userId) {
+        setPreferences((current) =>
+          current ? { ...current, [preference]: previousValue } : current,
+        );
+
+        setPreferenceError(
+          saveError instanceof Error
+            ? saveError.message
+            : 'Unable to save your notification preference.',
+        );
+      }
+    } finally {
+      if (activeUserIdRef.current === userId) {
+        setSavingPreference(null);
+      }
+    }
+  }
+
   const showDeviceSettings =
-    !permissionGranted && permissionStatus?.status === 'denied' && !canAskAgain;
+    !permissionGranted &&
+    permissionStatus?.status === 'denied' &&
+    !canAskAgain;
 
   return (
     <SafeAreaView
@@ -180,6 +325,178 @@ export default function NotificationSettingsScreen() {
           </AppText>
         </View>
 
+        {/* Notification Preferences */}
+        <View
+          style={{
+            padding: spacing.lg,
+            gap: spacing.lg,
+            borderRadius: 16,
+            borderWidth: 1,
+            borderColor: colors.border.default,
+            backgroundColor: colors.background.secondary,
+          }}
+        >
+          <View style={{ gap: spacing.xs }}>
+            <AppText variant="h3" color={colors.text.primary}>
+              Notification Preferences
+            </AppText>
+
+            <AppText variant="bodySmall" color={colors.text.secondary}>
+              Choose which TRAINR activities you want to receive notifications about.
+            </AppText>
+          </View>
+
+          {isLoadingPreferences ? (
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                paddingVertical: spacing.lg,
+                gap: spacing.sm,
+              }}
+            >
+              <ActivityIndicator color={colors.brand.red} />
+
+              <AppText variant="bodySmall" color={colors.text.secondary}>
+                Loading your preferences...
+              </AppText>
+            </View>
+          ) : preferences ? (
+            <View style={{ gap: spacing.lg }}>
+              {PREFERENCE_ITEMS.map((item, index) => (
+                <View
+                  key={item.key}
+                  style={{
+                    gap: spacing.sm,
+                    paddingTop: index === 0 ? 0 : spacing.md,
+                    borderTopWidth: index === 0 ? 0 : 1,
+                    borderTopColor: colors.border.default,
+                  }}
+                >
+                  <View
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: spacing.md,
+                    }}
+                  >
+                    <View style={{ flex: 1, gap: spacing.xs }}>
+                      <AppText variant="button" color={colors.text.primary}>
+                        {item.title}
+                      </AppText>
+
+                      <AppText variant="caption" color={colors.text.secondary}>
+                        {item.description}
+                      </AppText>
+                    </View>
+
+                    <Switch
+                      accessibilityLabel={`${item.title} notifications`}
+                      accessibilityHint={item.description}
+                      value={preferences[item.key]}
+                      onValueChange={(enabled) =>
+                        handlePreferenceChange(item.key, enabled)
+                      }
+                      disabled={savingPreference !== null}
+                      trackColor={{
+                        false: colors.border.default,
+                        true: colors.brand.red,
+                      }}
+                      thumbColor="#FFFFFF"
+                    />
+                  </View>
+
+                  {savingPreference === item.key && (
+                    <View
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: spacing.xs,
+                      }}
+                    >
+                      <ActivityIndicator
+                        size="small"
+                        color={colors.brand.red}
+                      />
+
+                      <AppText variant="caption" color={colors.text.tertiary}>
+                        Saving...
+                      </AppText>
+                    </View>
+                  )}
+                </View>
+              ))}
+            </View>
+          ) : (
+            <View style={{ gap: spacing.sm }}>
+              <AppText variant="bodySmall" color={colors.text.error}>
+                {preferenceError || 'Notification preferences are unavailable.'}
+              </AppText>
+
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => {
+                  setPreferences(null);
+                  setIsLoadingPreferences(true);
+                  setPreferenceError(null);
+                  if (user?.id) {
+                    const retryUserId = user.id;
+
+                    getNotificationPreferences(retryUserId)
+                      .then((savedPreferences) => {
+                        if (activeUserIdRef.current === retryUserId) {
+                          setPreferences(savedPreferences);
+                        }
+                      })
+                      .catch((retryError) => {
+                        if (activeUserIdRef.current === retryUserId) {
+                          setPreferenceError(
+                            retryError instanceof Error
+                              ? retryError.message
+                              : 'Unable to load notification preferences.',
+                          );
+                        }
+                      })
+                      .finally(() => {
+                        if (activeUserIdRef.current === retryUserId) {
+                          setIsLoadingPreferences(false);
+                        }
+                      });
+                  } else {
+                    setIsLoadingPreferences(false);
+                  }
+                }}
+                style={{
+                  alignSelf: 'flex-start',
+                  paddingVertical: spacing.sm,
+                }}
+              >
+                <AppText variant="button" color={colors.brand.red}>
+                  Try Again
+                </AppText>
+              </Pressable>
+            </View>
+          )}
+
+          {preferenceError && preferences && (
+            <View
+              accessibilityRole="alert"
+              style={{
+                padding: spacing.md,
+                borderRadius: 12,
+                borderWidth: 1,
+                borderColor: colors.brand.red,
+              }}
+            >
+              <AppText variant="bodySmall" color={colors.text.error}>
+                {preferenceError}
+              </AppText>
+            </View>
+          )}
+        </View>
+
         {/* Device Registration */}
         <View
           style={{
@@ -265,7 +582,12 @@ export default function NotificationSettingsScreen() {
                 gap: spacing.sm,
                 borderRadius: 14,
                 backgroundColor: colors.brand.red,
-                opacity: pressed || isRegistering ? 0.75 : isCheckingPermission ? 0.5 : 1,
+                opacity:
+                  pressed || isRegistering
+                    ? 0.75
+                    : isCheckingPermission
+                      ? 0.5
+                      : 1,
               })}
             >
               {isRegistering ? (

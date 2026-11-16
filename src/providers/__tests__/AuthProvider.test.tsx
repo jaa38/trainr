@@ -11,6 +11,7 @@ import type { Session } from '@supabase/supabase-js';
 import { Pressable, Text, View } from 'react-native';
 
 import { supabase } from '@/lib/supabase';
+import { removeCurrentDevicePushToken } from '@/services/notifications/notification-cleanup';
 import { AuthProvider, useAuth } from '@/providers/AuthProvider';
 
 jest.mock('@/lib/supabase', () => ({
@@ -40,7 +41,14 @@ jest.mock('@/lib/supabase', () => ({
   },
 }));
 
+jest.mock('@/services/notifications/notification-cleanup', () => ({
+  removeCurrentDevicePushToken: jest.fn(),
+}));
+
 const mockSupabase = jest.mocked(supabase);
+const mockRemoveCurrentDevicePushToken = jest.mocked(
+  removeCurrentDevicePushToken,
+);
 const unsubscribe = jest.fn();
 const mockSubscriptionCallback = jest.fn();
 
@@ -149,6 +157,8 @@ describe('AuthProvider', () => {
     mockSupabase.auth.signOut.mockResolvedValue({
       error: null,
     });
+
+    mockRemoveCurrentDevicePushToken.mockResolvedValue(undefined);
   });
 
   it('restores a signed-out session', async () => {
@@ -223,18 +233,74 @@ describe('AuthProvider', () => {
     });
   });
 
-  it('calls Supabase signOut when requested', async () => {
+  it('cleans up the current device token before calling Supabase signOut', async () => {
+    const session = createMockSession();
+
+    mockSupabase.auth.getSession.mockResolvedValue({
+      data: { session },
+      error: null,
+    });
+
     const { getByTestId } = await renderAuthProvider();
 
     await waitFor(() => {
-      expect(getByTestId('loading').props.children).toBe('false');
+      expect(getByTestId('session').props.children).toBe('authenticated');
     });
 
     await act(async () => {
       fireEvent.press(getByTestId('sign-out'));
     });
 
+    expect(mockRemoveCurrentDevicePushToken).toHaveBeenCalledWith(
+      session.user.id,
+    );
+
     expect(mockSupabase.auth.signOut).toHaveBeenCalledTimes(1);
+
+    expect(
+      mockRemoveCurrentDevicePushToken.mock.invocationCallOrder[0],
+    ).toBeLessThan(
+      mockSupabase.auth.signOut.mock.invocationCallOrder[0],
+    );
+  });
+
+  it('continues signing out when device-token cleanup fails', async () => {
+    const session = createMockSession();
+    const cleanupError = new Error('Token cleanup failed');
+
+    mockSupabase.auth.getSession.mockResolvedValue({
+      data: { session },
+      error: null,
+    });
+
+    mockRemoveCurrentDevicePushToken.mockRejectedValue(cleanupError);
+
+    const consoleWarn = jest
+      .spyOn(console, 'warn')
+      .mockImplementation(() => {});
+
+    try {
+      const { getByTestId } = await renderAuthProvider();
+
+      await waitFor(() => {
+        expect(getByTestId('session').props.children).toBe('authenticated');
+      });
+
+      await act(async () => {
+        fireEvent.press(getByTestId('sign-out'));
+      });
+
+      expect(mockRemoveCurrentDevicePushToken).toHaveBeenCalledWith(
+        session.user.id,
+      );
+      expect(mockSupabase.auth.signOut).toHaveBeenCalledTimes(1);
+      expect(consoleWarn).toHaveBeenCalledWith(
+        '[Auth] Device-token cleanup failed. Continuing with sign-out:',
+        cleanupError,
+      );
+    } finally {
+      consoleWarn.mockRestore();
+    }
   });
 
   it('shows an error when useAuth is used outside AuthProvider', async () => {

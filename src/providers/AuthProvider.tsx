@@ -11,6 +11,7 @@ import {
 } from 'react';
 
 import { supabase } from '@/lib/supabase';
+import { removeCurrentDevicePushToken } from '@/services/notifications/notification-cleanup';
 
 export type AccountType = 'gym_goer' | 'trainer';
 
@@ -217,6 +218,19 @@ export function AuthProvider({ children }: PropsWithChildren) {
     }
 
     console.log('[Auth] Session exists before sign-out:', Boolean(data.session));
+
+    const userId = data.session?.user.id;
+
+    if (userId) {
+      try {
+        await removeCurrentDevicePushToken(userId);
+      } catch (cleanupError: unknown) {
+        console.warn(
+          '[Auth] Device-token cleanup failed. Continuing with sign-out:',
+          cleanupError,
+        );
+      }
+    }
 
     const result = await supabase.auth.signOut();
 

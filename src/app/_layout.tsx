@@ -7,9 +7,10 @@ import {
   useRootNavigationState,
   useRouter,
   useSegments,
+  type Href,
 } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useColorScheme } from 'react-native';
 
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -29,7 +30,12 @@ import {
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import { AuthProvider, useAuth } from '@/providers/AuthProvider';
-import { NotificationProvider } from '@/providers/notifications/NotificationProvider';
+import {
+  NotificationProvider,
+  useNotifications,
+} from '@/providers/notifications/NotificationProvider';
+import { markNotificationAsReadByOutboxId } from '@/services/notifications/notification-history';
+import { resolveNotificationRoute } from '@/services/notifications/notification-navigation';
 import { TrainrThemeProvider } from '@/theme';
 
 import { QueryProvider } from '@/providers/QueryProvider';
@@ -42,6 +48,11 @@ function AuthenticatedNavigation() {
   const router = useRouter();
   const segments = useSegments();
   const navigationState = useRootNavigationState();
+  const {
+    lastNotificationResponse,
+    clearLastNotificationResponse,
+  } = useNotifications();
+  const handledNotificationRef = useRef<string | null>(null);
 
   useEffect(() => {
     console.log('[Navigation] Auth state:', {
@@ -167,6 +178,72 @@ function AuthenticatedNavigation() {
     profileError,
     router,
     segments,
+    session,
+  ]);
+
+  /**
+   * Handle notification taps after authentication, profile setup,
+   * and root navigation are ready.
+   */
+  useEffect(() => {
+    if (!lastNotificationResponse) {
+      return;
+    }
+
+    if (
+      isLoading ||
+      !navigationState?.key ||
+      !session ||
+      isProfileLoading ||
+      profileError ||
+      !profile ||
+      !profile.account_type_selected ||
+      !profile.onboarding_completed
+    ) {
+      return;
+    }
+
+    const notification = lastNotificationResponse.notification;
+    const data = notification.request.content.data as Record<string, unknown>;
+    const notificationId =
+      typeof data.notificationId === 'string' ? data.notificationId : null;
+    const responseKey = notificationId ?? notification.request.identifier;
+
+    if (handledNotificationRef.current === responseKey) {
+      clearLastNotificationResponse();
+      return;
+    }
+
+    handledNotificationRef.current = responseKey;
+
+    const route = resolveNotificationRoute({
+      eventType: typeof data.eventType === 'string' ? data.eventType : '',
+      entityType: typeof data.entityType === 'string' ? data.entityType : '',
+      entityId: typeof data.entityId === 'string' ? data.entityId : '',
+      role: profile.role === 'trainer' ? 'trainer' : 'gym_goer',
+    });
+
+    router.push(route as Href);
+
+    if (notificationId) {
+      void markNotificationAsReadByOutboxId(notificationId).catch((error) => {
+        console.warn(
+          '[Navigation] Could not mark the opened push notification as read:',
+          error,
+        );
+      });
+    }
+
+    clearLastNotificationResponse();
+  }, [
+    clearLastNotificationResponse,
+    isLoading,
+    isProfileLoading,
+    lastNotificationResponse,
+    navigationState?.key,
+    profile,
+    profileError,
+    router,
     session,
   ]);
 

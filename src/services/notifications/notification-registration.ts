@@ -1,8 +1,11 @@
+
 import { supabase } from '@/lib/supabase';
+import { ensureNotificationPreferences } from '@/services/notifications/notification-preferences';
 
 export type DevicePlatform = 'ios' | 'android';
 
 export type RegisterDevicePushTokenInput = {
+  expectedUserId: string;
   expoPushToken: string;
   platform: DevicePlatform;
   deviceId?: string | null;
@@ -20,21 +23,25 @@ export type DevicePushToken = {
   timezone: string | null;
   is_active: boolean;
   last_seen_at: string;
-  last_error: string | null;
   created_at: string;
   updated_at: string;
 };
 
+const DEVICE_TOKEN_COLUMNS =
+  'id,user_id,expo_push_token,platform,device_id,device_name,timezone,is_active,last_seen_at,created_at,updated_at' as const;
+
 /**
- * Registers or refreshes a push token for the authenticated user.
+ * Registers or refreshes a push token for the expected authenticated user.
  *
- * Existing tokens are updated only when they belong to the current user.
+ * Existing tokens are updated only when they belong to that user.
  * A token owned by another account is never reassigned.
+ * Registration is rejected if the authenticated account has changed.
  */
 export async function registerDevicePushToken(
   input: RegisterDevicePushTokenInput,
 ): Promise<DevicePushToken> {
   const expoPushToken = input.expoPushToken?.trim();
+  const expectedUserId = input.expectedUserId?.trim();
 
   if (!expoPushToken) {
     throw new Error('A valid Expo push token is required.');
@@ -42,6 +49,10 @@ export async function registerDevicePushToken(
 
   if (input.platform !== 'ios' && input.platform !== 'android') {
     throw new Error('Push notifications are only supported on iOS and Android.');
+  }
+
+  if (!expectedUserId) {
+    throw new Error('A valid user ID is required.');
   }
 
   const {
@@ -54,7 +65,14 @@ export async function registerDevicePushToken(
       '[Notifications] Unable to verify authenticated user:',
       authError,
     );
+
     throw new Error('Please sign in to register this device.');
+  }
+
+  if (user.id !== expectedUserId) {
+    throw new Error(
+      'Your account changed during device registration. Please try again.',
+    );
   }
 
   const now = new Date().toISOString();
@@ -66,15 +84,14 @@ export async function registerDevicePushToken(
     timezone: input.timezone?.trim() || null,
     is_active: true,
     last_seen_at: now,
-    last_error: null,
     updated_at: now,
   };
 
   const { data: existingToken, error: lookupError } = await supabase
     .from('device_push_tokens')
-    .select('*')
+    .select(DEVICE_TOKEN_COLUMNS)
     .eq('expo_push_token', expoPushToken)
-    .eq('user_id', user.id)
+    .eq('user_id', expectedUserId)
     .maybeSingle();
 
   if (lookupError) {
@@ -82,6 +99,7 @@ export async function registerDevicePushToken(
       '[Notifications] Unable to check existing device registration:',
       lookupError,
     );
+
     throw new Error('Unable to check device registration. Please try again.');
   }
 
@@ -90,8 +108,8 @@ export async function registerDevicePushToken(
       .from('device_push_tokens')
       .update(deviceDetails)
       .eq('id', existingToken.id)
-      .eq('user_id', user.id)
-      .select('*')
+      .eq('user_id', expectedUserId)
+      .select(DEVICE_TOKEN_COLUMNS)
       .single();
 
     if (error) {
@@ -99,8 +117,11 @@ export async function registerDevicePushToken(
         '[Notifications] Unable to refresh device registration:',
         error,
       );
+
       throw new Error('Unable to refresh device registration. Please try again.');
     }
+
+    await ensureNotificationPreferences(expectedUserId);
 
     return data as DevicePushToken;
   }
@@ -108,11 +129,11 @@ export async function registerDevicePushToken(
   const { data, error } = await supabase
     .from('device_push_tokens')
     .insert({
-      user_id: user.id,
+      user_id: expectedUserId,
       expo_push_token: expoPushToken,
       ...deviceDetails,
     })
-    .select('*')
+    .select(DEVICE_TOKEN_COLUMNS)
     .single();
 
   if (error) {
@@ -120,6 +141,7 @@ export async function registerDevicePushToken(
       console.warn(
         '[Notifications] This push token is already registered to another account.',
       );
+
       throw new Error(
         'This device is already registered to another account. Please contact support if you need help.',
       );
@@ -129,8 +151,11 @@ export async function registerDevicePushToken(
       '[Notifications] Unable to register device:',
       error,
     );
+
     throw new Error('Unable to register this device. Please try again.');
   }
+
+  await ensureNotificationPreferences(expectedUserId);
 
   return data as DevicePushToken;
 }

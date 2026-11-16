@@ -1,25 +1,27 @@
+
 import * as Notifications from 'expo-notifications';
 import {
-    createContext,
-    useCallback,
-    useContext,
-    useEffect,
-    useMemo,
-    useRef,
-    useState,
-    type ReactNode,
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
 } from 'react';
-import { Platform } from 'react-native';
+import { AppState, Platform } from 'react-native';
 
 import { useAuth } from '@/providers/AuthProvider';
 import {
-    getNotificationPermissionStatus,
-    requestPushNotificationPermission,
-    type NotificationPermissionStatus,
+  getNotificationPermissionStatus,
+  getPushNotificationDeviceIfPermitted,
+  requestPushNotificationPermission,
+  type NotificationPermissionStatus,
 } from '@/services/notifications/notification-permissions';
 import {
-    registerDevicePushToken,
-    type DevicePushToken,
+  registerDevicePushToken,
+  type DevicePushToken,
 } from '@/services/notifications/notification-registration';
 
 type NotificationContextValue = {
@@ -44,29 +46,66 @@ type NotificationProviderProps = {
 };
 
 export function NotificationProvider({ children }: NotificationProviderProps) {
-  const { user } = useAuth();
+  const { user, isLoading: isAuthLoading } = useAuth();
+
   const userId = user?.id;
 
+  // Keep the current account ID available to asynchronous operations.
   const currentUserIdRef = useRef(userId);
+  currentUserIdRef.current = userId;
 
-  useEffect(() => {
-    currentUserIdRef.current = userId;
-  }, [userId]);
+  // Prevent duplicate registration attempts for the same account.
+  const registrationInFlightUsersRef = useRef(new Set<string>());
+
+  // Prevent an older registration from changing the loading state
+  // of a newer registration attempt.
+  const registrationAttemptRef = useRef(0);
+
+  const previousUserIdRef = useRef(userId);
 
   const [permissionStatus, setPermissionStatus] =
     useState<NotificationPermissionStatus | null>(null);
+
+  // Triggers automatic registration after a foreground permission refresh.
+  const [permissionRefreshVersion, setPermissionRefreshVersion] = useState(0);
+
   const [isCheckingPermission, setIsCheckingPermission] = useState(true);
+
   const [isRegistering, setIsRegistering] = useState(false);
+
   const [registeredUserId, setRegisteredUserId] = useState<string | null>(null);
+
   const [registrationError, setRegistrationError] = useState<{
     userId: string | null;
     message: string;
   } | null>(null);
+
   const [lastNotification, setLastNotification] =
     useState<Notifications.Notification | null>(null);
+
   const [lastNotificationResponse, setLastNotificationResponse] =
     useState<Notifications.NotificationResponse | null>(null);
 
+  // Prevent stale asynchronous cold-start responses from replacing
+  // newer notification responses or restoring cleared responses.
+  const notificationResponseVersionRef = useRef(0);
+
+  /**
+   * Reset account-specific registration state when the
+   * authenticated user changes.
+   */
+  useEffect(() => {
+    if (previousUserIdRef.current !== userId) {
+      previousUserIdRef.current = userId;
+
+      setRegisteredUserId(null);
+      setRegistrationError(null);
+    }
+  }, [userId]);
+
+  /**
+   * Refresh the current device notification permission status.
+   */
   const refreshPermissionStatus = useCallback(async () => {
     if (Platform.OS !== 'ios' && Platform.OS !== 'android') {
       setPermissionStatus(null);
@@ -78,32 +117,156 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
 
     try {
       const status = await getNotificationPermissionStatus();
+
       setPermissionStatus(status);
+
       return status;
     } catch (refreshError) {
-      console.error('[Notifications] Unable to refresh permission status:', refreshError);
+      console.error(
+        '[Notifications] Unable to refresh permission status:',
+        refreshError,
+      );
+
       return null;
     } finally {
       setIsCheckingPermission(false);
     }
   }, []);
 
+  /**
+   * Refresh notification permissions whenever the app returns
+   * to the foreground, including after the user visits Settings.
+   */
   useEffect(() => {
+    let isMounted = true;
+
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
+      if (nextAppState === 'active') {
+        void (async () => {
+          const status = await refreshPermissionStatus();
+
+          if (isMounted && status !== null) {
+            setPermissionRefreshVersion((version) => version + 1);
+          }
+        })();
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      subscription.remove();
+    };
+  }, [refreshPermissionStatus]);
+
+  /**
+   * Automatically register the device after authentication
+   * has been restored, but only if notification permission
+   * has already been granted.
+   *
+   * This function never opens the operating system permission prompt.
+   */
+  useEffect(() => {
+    if (isAuthLoading) {
+      return;
+    }
+
     let isActive = true;
 
-    async function checkPermissionStatus() {
+    async function registerAutomatically() {
+      if (Platform.OS !== 'ios' && Platform.OS !== 'android') {
+        setPermissionStatus(null);
+        setIsCheckingPermission(false);
+        return;
+      }
+
+      setIsCheckingPermission(true);
+
       try {
-        if (Platform.OS !== 'ios' && Platform.OS !== 'android') {
+        const status = await getNotificationPermissionStatus();
+
+        if (!isActive || currentUserIdRef.current !== userId) {
           return;
         }
 
-        const status = await getNotificationPermissionStatus();
+        setPermissionStatus(status);
 
-        if (isActive) {
-          setPermissionStatus(status);
+        // No authenticated user: permission can still be displayed,
+        // but there is no account to associate with the device.
+        if (!userId) {
+          return;
         }
-      } catch (refreshError) {
-        console.error('[Notifications] Unable to check permission status:', refreshError);
+
+        // Do not request permission automatically.
+        if (!status.granted) {
+          return;
+        }
+
+        // This account has already registered during this session.
+        if (registeredUserId === userId) {
+          return;
+        }
+
+        // Avoid duplicate concurrent registrations.
+        if (registrationInFlightUsersRef.current.has(userId)) {
+          return;
+        }
+
+        registrationInFlightUsersRef.current.add(userId);
+
+        const attemptId = ++registrationAttemptRef.current;
+
+        setIsRegistering(true);
+        setRegistrationError(null);
+
+        try {
+          const device = await getPushNotificationDeviceIfPermitted();
+
+          if (!device || !isActive || currentUserIdRef.current !== userId) {
+            return;
+          }
+
+          const registeredToken = await registerDevicePushToken({
+            ...device,
+            expectedUserId: userId,
+          });
+
+          if (isActive && currentUserIdRef.current === userId) {
+            setRegisteredUserId(userId);
+
+            console.log(
+              '[Notifications] Device automatically registered:',
+              registeredToken.id,
+            );
+          }
+        } catch (registrationError) {
+          const message =
+            registrationError instanceof Error
+              ? registrationError.message
+              : 'Unable to register this device. Please try again.';
+
+          if (isActive && currentUserIdRef.current === userId) {
+            setRegistrationError({
+              userId,
+              message,
+            });
+          }
+
+          console.error(
+            '[Notifications] Automatic registration failed:',
+            registrationError,
+          );
+        } finally {
+          registrationInFlightUsersRef.current.delete(userId);
+
+          if (registrationAttemptRef.current === attemptId) {
+            setIsRegistering(false);
+          }
+        }
+      } catch (permissionError) {
+        console.error(
+          '[Notifications] Automatic permission check failed:',
+          permissionError,
+        );
       } finally {
         if (isActive) {
           setIsCheckingPermission(false);
@@ -111,21 +274,43 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
       }
     }
 
-    void checkPermissionStatus();
+    void registerAutomatically();
 
     return () => {
       isActive = false;
     };
-  }, []);
+  }, [
+    isAuthLoading,
+    userId,
+    registeredUserId,
+    permissionRefreshVersion,
+  ]);
 
+  /**
+   * Manually request notification permission and register
+   * the device following an explicit user action.
+   */
   const requestPermissionAndRegister = useCallback(async () => {
     if (!userId) {
       const message = 'Please sign in to enable notifications.';
-      setRegistrationError({ userId: null, message });
+
+      setRegistrationError({
+        userId: null,
+        message,
+      });
+
       throw new Error(message);
     }
 
     const registeringUserId = userId;
+
+    if (registrationInFlightUsersRef.current.has(registeringUserId)) {
+      throw new Error('Device registration is already in progress. Please wait.');
+    }
+
+    registrationInFlightUsersRef.current.add(registeringUserId);
+
+    const attemptId = ++registrationAttemptRef.current;
 
     setIsRegistering(true);
     setRegistrationError(null);
@@ -139,7 +324,16 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
         return null;
       }
 
-      const registeredToken = await registerDevicePushToken(device);
+      // Do not register if the authenticated account changed
+      // while the permission request was in progress.
+      if (currentUserIdRef.current !== registeringUserId) {
+        return null;
+      }
+
+      const registeredToken = await registerDevicePushToken({
+        ...device,
+        expectedUserId: registeringUserId,
+      });
 
       if (currentUserIdRef.current === registeringUserId) {
         setRegisteredUserId(registeringUserId);
@@ -161,10 +355,17 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
 
       throw registrationError;
     } finally {
-      setIsRegistering(false);
+      registrationInFlightUsersRef.current.delete(registeringUserId);
+
+      if (registrationAttemptRef.current === attemptId) {
+        setIsRegistering(false);
+      }
     }
   }, [userId, refreshPermissionStatus]);
 
+  /**
+   * Listen for received notifications and notification responses.
+   */
   useEffect(() => {
     let isMounted = true;
 
@@ -176,17 +377,24 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
       },
     );
 
-    const responseSubscription = Notifications.addNotificationResponseReceivedListener(
-      (response) => {
+    const responseSubscription =
+      Notifications.addNotificationResponseReceivedListener((response) => {
         if (isMounted) {
+          notificationResponseVersionRef.current += 1;
           setLastNotificationResponse(response);
         }
-      },
-    );
+      });
+
+    const initialResponseVersion =
+      notificationResponseVersionRef.current;
 
     void Notifications.getLastNotificationResponseAsync()
       .then((response) => {
-        if (isMounted && response) {
+        if (
+          isMounted &&
+          response &&
+          notificationResponseVersionRef.current === initialResponseVersion
+        ) {
           setLastNotificationResponse(response);
         }
       })
@@ -199,12 +407,17 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
 
     return () => {
       isMounted = false;
+
       receivedSubscription.remove();
       responseSubscription.remove();
     };
   }, []);
 
+  /**
+   * Clear the most recently received notification response.
+   */
   const clearLastNotificationResponse = useCallback(() => {
+    notificationResponseVersionRef.current += 1;
     setLastNotificationResponse(null);
   }, []);
 
@@ -213,11 +426,17 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
       permissionStatus,
       isCheckingPermission,
       isRegistering,
+
       isRegistered: registeredUserId === userId && userId !== undefined,
+
       error:
-        registrationError?.userId === (userId ?? null) ? registrationError.message : null,
+        registrationError?.userId === (userId ?? null)
+          ? registrationError.message
+          : null,
+
       lastNotification,
       lastNotificationResponse,
+
       refreshPermissionStatus,
       requestPermissionAndRegister,
       clearLastNotificationResponse,
@@ -238,7 +457,9 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
   );
 
   return (
-    <NotificationContext.Provider value={value}>{children}</NotificationContext.Provider>
+    <NotificationContext.Provider value={value}>
+      {children}
+    </NotificationContext.Provider>
   );
 }
 

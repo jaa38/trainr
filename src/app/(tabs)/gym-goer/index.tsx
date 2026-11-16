@@ -7,6 +7,7 @@ import Svg, { Circle, Line, Path } from 'react-native-svg';
 
 import { AppText } from '@/components/AppText';
 import { Card } from '@/components/Card';
+import { NotificationBell } from '@/components/notifications/NotificationBell';
 import { useAuth } from '@/providers/AuthProvider';
 import { getBodyWeightHistory, type FitnessProgress } from '@/services/fitness-progress';
 import { useTrainrTheme } from '@/theme';
@@ -229,6 +230,8 @@ export default function HomeTabScreen() {
               YOUR FITNESS. YOUR JOURNEY.
             </AppText>
           </View>
+
+          <NotificationBell />
 
           {/* Theme-aware App Icon */}
           <Image

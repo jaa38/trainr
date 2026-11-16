@@ -11,6 +11,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/AppText';
+import { NotificationBell } from '@/components/notifications/NotificationBell';
 import {
   getTrainerDashboard,
   type TrainerDashboardData,
@@ -231,12 +232,22 @@ export default function PersonalTrainerHomeScreen() {
             </AppText>
           </View>
 
-          <Image
-            source={appIcon}
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: spacing.sm,
+            }}
+          >
+            <NotificationBell />
+
+            <Image
+              source={appIcon}
             accessibilityLabel="TRAINR app icon"
             resizeMode="contain"
-            style={{ width: 52, height: 52, borderRadius: 12 }}
-          />
+              style={{ width: 52, height: 52, borderRadius: 12 }}
+            />
+          </View>
         </View>
 
         {/* Welcome */}
