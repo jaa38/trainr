@@ -1,10 +1,11 @@
-
+import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import {
   createContext,
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -52,7 +53,10 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
 
   // Keep the current account ID available to asynchronous operations.
   const currentUserIdRef = useRef(userId);
-  currentUserIdRef.current = userId;
+
+  useLayoutEffect(() => {
+    currentUserIdRef.current = userId;
+  }, [userId]);
 
   // Prevent duplicate registration attempts for the same account.
   const registrationInFlightUsersRef = useRef(new Set<string>());
@@ -122,10 +126,7 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
 
       return status;
     } catch (refreshError) {
-      console.error(
-        '[Notifications] Unable to refresh permission status:',
-        refreshError,
-      );
+      console.error('[Notifications] Unable to refresh permission status:', refreshError);
 
       return null;
     } finally {
@@ -164,6 +165,7 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
    * has already been granted.
    *
    * This function never opens the operating system permission prompt.
+   * Remote push registration is skipped on simulators.
    */
   useEffect(() => {
     if (isAuthLoading) {
@@ -198,6 +200,13 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
 
         // Do not request permission automatically.
         if (!status.granted) {
+          return;
+        }
+
+        // Simulators support local notifications but not remote
+        // Expo push-token registration.
+        if (!Device.isDevice) {
+          console.log('[Notifications] Skipping remote push registration on simulator.');
           return;
         }
 
@@ -279,16 +288,14 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
     return () => {
       isActive = false;
     };
-  }, [
-    isAuthLoading,
-    userId,
-    registeredUserId,
-    permissionRefreshVersion,
-  ]);
+  }, [isAuthLoading, userId, registeredUserId, permissionRefreshVersion]);
 
   /**
    * Manually request notification permission and register
    * the device following an explicit user action.
+   *
+   * On simulators, permission can still be requested.
+   * Only remote push-token registration is skipped.
    */
   const requestPermissionAndRegister = useCallback(async () => {
     if (!userId) {
@@ -316,6 +323,34 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
     setRegistrationError(null);
 
     try {
+      // On physical devices this requests permission and obtains
+      // the Expo push token.
+      // On simulators this helper currently rejects before requesting
+      // permission, so we handle the simulator permission flow separately.
+      if (!Device.isDevice) {
+        let permission = await Notifications.getPermissionsAsync();
+
+        if (!permission.granted && permission.canAskAgain) {
+          permission = await Notifications.requestPermissionsAsync();
+        }
+
+        const status = await refreshPermissionStatus();
+
+        if (currentUserIdRef.current !== registeringUserId) {
+          return null;
+        }
+
+        if (!status?.granted) {
+          return null;
+        }
+
+        console.log(
+          '[Notifications] Permission granted. Remote push registration skipped on simulator.',
+        );
+
+        return null;
+      }
+
       const device = await requestPushNotificationPermission();
 
       await refreshPermissionStatus();
@@ -377,16 +412,16 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
       },
     );
 
-    const responseSubscription =
-      Notifications.addNotificationResponseReceivedListener((response) => {
+    const responseSubscription = Notifications.addNotificationResponseReceivedListener(
+      (response) => {
         if (isMounted) {
           notificationResponseVersionRef.current += 1;
           setLastNotificationResponse(response);
         }
-      });
+      },
+    );
 
-    const initialResponseVersion =
-      notificationResponseVersionRef.current;
+    const initialResponseVersion = notificationResponseVersionRef.current;
 
     void Notifications.getLastNotificationResponseAsync()
       .then((response) => {
@@ -430,9 +465,7 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
       isRegistered: registeredUserId === userId && userId !== undefined,
 
       error:
-        registrationError?.userId === (userId ?? null)
-          ? registrationError.message
-          : null,
+        registrationError?.userId === (userId ?? null) ? registrationError.message : null,
 
       lastNotification,
       lastNotificationResponse,
@@ -457,9 +490,7 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
   );
 
   return (
-    <NotificationContext.Provider value={value}>
-      {children}
-    </NotificationContext.Provider>
+    <NotificationContext.Provider value={value}>{children}</NotificationContext.Provider>
   );
 }
 

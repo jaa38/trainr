@@ -16,6 +16,15 @@ import {
 } from '@/services/notifications/notification-permissions';
 import { registerDevicePushToken } from '@/services/notifications/notification-registration';
 
+// Controls whether the test represents a physical device or simulator.
+let mockIsPhysicalDevice = true;
+
+jest.mock('expo-device', () => ({
+  get isDevice() {
+    return mockIsPhysicalDevice;
+  },
+}));
+
 jest.mock('@/providers/AuthProvider', () => ({
   useAuth: jest.fn(),
 }));
@@ -38,6 +47,16 @@ jest.mock('expo-notifications', () => ({
     remove: jest.fn(),
   })),
   getLastNotificationResponseAsync: jest.fn().mockResolvedValue(null),
+  getPermissionsAsync: jest.fn().mockResolvedValue({
+    granted: false,
+    canAskAgain: true,
+    status: 'denied',
+  }),
+  requestPermissionsAsync: jest.fn().mockResolvedValue({
+    granted: true,
+    canAskAgain: true,
+    status: 'granted',
+  }),
 }));
 
 const mockUseAuth = jest.mocked(useAuth);
@@ -55,6 +74,8 @@ const mockAddNotificationResponseReceivedListener = jest.mocked(
 const mockGetLastNotificationResponse = jest.mocked(
   Notifications.getLastNotificationResponseAsync,
 );
+const mockGetOSPermissionStatus = jest.mocked(Notifications.getPermissionsAsync);
+const mockRequestOSPermission = jest.mocked(Notifications.requestPermissionsAsync);
 
 const testUserId = 'test-user-123';
 
@@ -163,6 +184,9 @@ describe('NotificationProvider', () => {
   beforeEach(() => {
     jest.clearAllMocks();
 
+    // Physical device is the default for existing registration tests.
+    mockIsPhysicalDevice = true;
+
     mockUseAuth.mockReturnValue({
       user: createMockUser(),
       isLoading: false,
@@ -178,6 +202,14 @@ describe('NotificationProvider', () => {
 
     mockRegisterDevice.mockResolvedValue(
       mockRegisteredToken as Awaited<ReturnType<typeof registerDevicePushToken>>,
+    );
+
+    mockGetOSPermissionStatus.mockResolvedValue(
+      mockPermissionDenied as Notifications.NotificationPermissionsStatus,
+    );
+
+    mockRequestOSPermission.mockResolvedValue(
+      mockPermissionGranted as Notifications.NotificationPermissionsStatus,
     );
   });
 
@@ -265,6 +297,54 @@ describe('NotificationProvider', () => {
       ...mockDevice,
       expectedUserId: testUserId,
     });
+  });
+
+  it('requests notification permission on a simulator without registering a remote push token', async () => {
+    mockIsPhysicalDevice = false;
+
+    mockGetPermissionStatus.mockResolvedValue(
+      mockPermissionDenied as Awaited<ReturnType<typeof getNotificationPermissionStatus>>,
+    );
+
+    const { getByTestId } = await renderNotificationProvider();
+
+    await waitFor(() => {
+      expect(getByTestId('permission').props.children).toBe('denied');
+    });
+
+    // The OS reports that permission has not yet been granted.
+    mockGetOSPermissionStatus.mockResolvedValueOnce(
+      mockPermissionDenied as Notifications.NotificationPermissionsStatus,
+    );
+
+    // The user grants permission through the OS prompt.
+    mockRequestOSPermission.mockResolvedValueOnce(
+      mockPermissionGranted as Notifications.NotificationPermissionsStatus,
+    );
+
+    // The provider refreshes the permission status after the request.
+    mockGetPermissionStatus.mockResolvedValue(
+      mockPermissionGranted as Awaited<
+        ReturnType<typeof getNotificationPermissionStatus>
+      >,
+    );
+
+    fireEvent.press(getByTestId('request-permission'));
+
+    await waitFor(() => {
+      expect(mockRequestOSPermission).toHaveBeenCalledTimes(1);
+    });
+
+    expect(mockGetOSPermissionStatus).toHaveBeenCalled();
+    expect(mockRequestPermission).not.toHaveBeenCalled();
+    expect(mockGetDeviceIfPermitted).not.toHaveBeenCalled();
+    expect(mockRegisterDevice).not.toHaveBeenCalled();
+
+    await waitFor(() => {
+      expect(getByTestId('permission').props.children).toBe('granted');
+    });
+
+    expect(getByTestId('registered').props.children).toBe('false');
   });
 
   it('exposes registration errors without marking the device as registered', async () => {
@@ -371,20 +451,17 @@ describe('NotificationProvider', () => {
 
     const { unmount } = await renderNotificationProvider();
 
-    // Wait until both notification listeners have been registered.
     await waitFor(() => {
       expect(mockAddNotificationReceivedListener).toHaveBeenCalledTimes(1);
       expect(mockAddNotificationResponseReceivedListener).toHaveBeenCalledTimes(1);
     });
 
-    // Retrieve subscriptions only after registration is confirmed.
     const receivedSubscription =
       mockAddNotificationReceivedListener.mock.results[0]?.value;
 
     const responseSubscription =
       mockAddNotificationResponseReceivedListener.mock.results[0]?.value;
 
-    // Confirm that the mocked subscriptions contain the expected spies.
     expect(receivedSubscription?.remove).toBe(receivedRemove);
     expect(responseSubscription?.remove).toBe(responseRemove);
 
@@ -409,24 +486,19 @@ describe('NotificationProvider', () => {
 
     const { getByTestId, unmount } = await renderNotificationProvider();
 
-    // Allow the independent permission check to finish first.
     await waitFor(() => {
       expect(getByTestId('checking').props.children).toBe('false');
     });
 
-    // Clear the current notification response.
     fireEvent.press(getByTestId('clear-response'));
 
-    // Resolve the delayed cold-start response.
     await act(async () => {
       resolveColdStart(coldStartResponse);
       await Promise.resolve();
     });
 
-    // The cleared notification must not be restored.
     expect(getByTestId('notification-response').props.children).toBe('no-response');
 
-    // Clean up the provider.
     await act(async () => {
       unmount();
     });

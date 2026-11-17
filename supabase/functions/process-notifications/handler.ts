@@ -54,6 +54,13 @@ type WorkerDependencies = {
 const BATCH_SIZE = 25;
 const EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
 
+class NotificationLockRenewalError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "NotificationLockRenewalError";
+  }
+}
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
@@ -256,6 +263,24 @@ async function processNotification(
   workerId: string,
   fetchImpl: typeof fetch,
 ): Promise<"sent" | "failed" | "skipped"> {
+  const { data: lockRenewed, error: lockRenewalError } = await client.rpc(
+    "renew_notification_lock",
+    {
+      p_notification_id: notification.id,
+      p_worker_id: workerId,
+    },
+  );
+
+  if (lockRenewalError) {
+    throw new NotificationLockRenewalError(
+      `Could not renew notification lock: ${lockRenewalError.message}`,
+    );
+  }
+
+  if (lockRenewed !== true) {
+    return "skipped";
+  }
+
   let completionAttempted = false;
 
   const completeOnce = async (
@@ -614,14 +639,26 @@ export async function handleNotificationWorkerRequest(
     };
 
     for (const notification of notifications as NotificationRow[]) {
-      const outcome = await processNotification(
-        client,
-        notification,
-        workerId,
-        fetchImpl,
-      );
+      try {
+        const outcome = await processNotification(
+          client,
+          notification,
+          workerId,
+          fetchImpl,
+        );
 
-      summary[outcome] += 1;
+        summary[outcome] += 1;
+      } catch (error) {
+        if (!(error instanceof NotificationLockRenewalError)) {
+          throw error;
+        }
+
+        summary.failed += 1;
+        dependencies.logError(
+          `Could not renew lock for notification ${notification.id}.`,
+          error,
+        );
+      }
     }
 
     return jsonResponse({ success: true, workerId, ...summary });

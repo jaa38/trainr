@@ -40,6 +40,10 @@ import { TrainrThemeProvider } from '@/theme';
 
 import { QueryProvider } from '@/providers/QueryProvider';
 
+import { configureNotificationPresentation } from '@/services/notifications/notification-presentation';
+
+configureNotificationPresentation();
+
 SplashScreen.preventAutoHideAsync();
 
 function AuthenticatedNavigation() {
@@ -48,10 +52,7 @@ function AuthenticatedNavigation() {
   const router = useRouter();
   const segments = useSegments();
   const navigationState = useRootNavigationState();
-  const {
-    lastNotificationResponse,
-    clearLastNotificationResponse,
-  } = useNotifications();
+  const { lastNotificationResponse, clearLastNotificationResponse } = useNotifications();
   const handledNotificationRef = useRef<string | null>(null);
 
   useEffect(() => {

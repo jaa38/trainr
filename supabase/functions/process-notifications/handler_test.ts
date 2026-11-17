@@ -27,6 +27,9 @@ function createDependencies(options: {
   tokens?: { id: string; expo_push_token: string }[];
   rpcError?: string;
   completionRpcError?: string;
+  lockRenewalResult?: boolean;
+  lockRenewalError?: string;
+  lockRenewalErrorOnFirstCall?: string;
   historyError?: string;
   fetchResponse?: Response;
 } = {}) {
@@ -59,6 +62,29 @@ function createDependencies(options: {
 
         return {
           data: options.notifications ?? [],
+          error: null,
+        };
+      }
+
+      if (name === "renew_notification_lock") {
+        const renewalCallCount = calls.filter(
+          (call) => call.name === "renew_notification_lock",
+        ).length;
+
+        const renewalError = options.lockRenewalError ??
+          (renewalCallCount === 1
+            ? options.lockRenewalErrorOnFirstCall
+            : undefined);
+
+        if (renewalError) {
+          return {
+            data: null,
+            error: { message: renewalError },
+          };
+        }
+
+        return {
+          data: options.lockRenewalResult ?? true,
           error: null,
         };
       }
@@ -304,6 +330,132 @@ Deno.test("returns a safe worker error when queue claiming fails", async () => {
 
   assertEquals(completionCalls.length, 0);
 });
+
+Deno.test("skips a notification when its lock cannot be renewed", async () => {
+  const { dependencies, calls, historyWrites, fetchCalls } = createDependencies(
+    {
+      notifications: [createNotification()],
+      lockRenewalResult: false,
+    },
+  );
+
+  const response = await handleNotificationWorkerRequest(
+    createRequest(),
+    dependencies,
+  );
+
+  assertEquals(response.status, 200);
+
+  const result = await response.json();
+
+  assertEquals(result.claimed, 1);
+  assertEquals(result.skipped, 1);
+  assertEquals(result.sent, 0);
+  assertEquals(result.failed, 0);
+
+  assertEquals(
+    calls.filter((call) => call.name === "renew_notification_lock").length,
+    1,
+  );
+  assertEquals(
+    calls.filter((call) => call.name === "complete_notification_attempt")
+      .length,
+    0,
+  );
+  assertEquals(historyWrites.length, 0);
+  assertEquals(fetchCalls.length, 0);
+});
+
+Deno.test("does not process a notification when lock renewal fails", async () => {
+  const { dependencies, calls, historyWrites, fetchCalls } = createDependencies(
+    {
+      notifications: [createNotification()],
+      lockRenewalError: "Lock renewal failed",
+    },
+  );
+
+  const response = await handleNotificationWorkerRequest(
+    createRequest(),
+    dependencies,
+  );
+
+  assertEquals(response.status, 200);
+
+  const result = await response.json();
+  assertEquals(result.claimed, 1);
+  assertEquals(result.failed, 1);
+  assertEquals(result.sent, 0);
+  assertEquals(result.skipped, 0);
+
+  assertEquals(
+    calls.filter((call) => call.name === "renew_notification_lock").length,
+    1,
+  );
+  assertEquals(
+    calls.filter((call) => call.name === "complete_notification_attempt")
+      .length,
+    0,
+  );
+  assertEquals(historyWrites.length, 0);
+  assertEquals(fetchCalls.length, 0);
+});
+
+Deno.test(
+  "continues processing the batch when one notification lock renewal fails",
+  async () => {
+    const {
+      dependencies,
+      calls,
+      historyWrites,
+      fetchCalls,
+    } = createDependencies({
+      notifications: [
+        createNotification({ id: "notification-1" }),
+        createNotification({ id: "notification-2" }),
+      ],
+      lockRenewalErrorOnFirstCall: "Lock renewal failed",
+      tokens: [
+        {
+          id: "token-1",
+          expo_push_token: "ExponentPushToken[test-device]",
+        },
+      ],
+    });
+
+    const response = await handleNotificationWorkerRequest(
+      createRequest(),
+      dependencies,
+    );
+
+    assertEquals(response.status, 200);
+
+    const result = await response.json();
+
+    assertEquals(result.claimed, 2);
+    assertEquals(result.failed, 1);
+    assertEquals(result.sent, 1);
+    assertEquals(result.skipped, 0);
+
+    assertEquals(
+      calls.filter((call) => call.name === "renew_notification_lock").length,
+      2,
+    );
+    assertEquals(
+      calls.filter((call) => call.name === "complete_notification_attempt")
+        .length,
+      1,
+    );
+    assertEquals(historyWrites.length, 1);
+    assertEquals(fetchCalls.length, 1);
+
+    const completion = calls.find(
+      (call) => call.name === "complete_notification_attempt",
+    );
+    const args = completion?.args as Record<string, unknown>;
+
+    assertEquals(args.p_notification_id, "notification-2");
+  },
+);
 
 // ============================================================
 // SUCCESSFUL PUSH DELIVERY

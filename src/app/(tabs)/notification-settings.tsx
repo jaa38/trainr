@@ -1,3 +1,4 @@
+
 import { router } from 'expo-router';
 import {
   AlertCircle,
@@ -6,7 +7,7 @@ import {
   CheckCircle2,
   Smartphone,
 } from 'lucide-react-native';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Linking,
@@ -23,9 +24,10 @@ import { useNotifications } from '@/providers/notifications/NotificationProvider
 import {
   getNotificationPreferences,
   updateNotificationPreference,
-  type NotificationPreferences,
   type NotificationPreferenceKey,
+  type NotificationPreferences,
 } from '@/services/notifications/notification-preferences';
+import { scheduleLocalTestNotification } from '@/services/notifications/notification-presentation';
 import { useTrainrTheme } from '@/theme';
 
 const PREFERENCE_ITEMS: {
@@ -36,7 +38,8 @@ const PREFERENCE_ITEMS: {
   {
     key: 'booking_updates',
     title: 'Booking Updates',
-    description: 'Receive updates when bookings are requested, confirmed, declined or changed.',
+    description:
+      'Receive updates when bookings are requested, confirmed, declined or changed.',
   },
   {
     key: 'session_reminders',
@@ -60,6 +63,11 @@ const PREFERENCE_ITEMS: {
   },
 ];
 
+type SavingPreference = {
+  userId: string;
+  preference: NotificationPreferenceKey;
+};
+
 export default function NotificationSettingsScreen() {
   const { colors, spacing } = useTrainrTheme();
   const { user } = useAuth();
@@ -79,16 +87,27 @@ export default function NotificationSettingsScreen() {
     useState<NotificationPreferences | null>(null);
   const [isLoadingPreferences, setIsLoadingPreferences] = useState(true);
   const [savingPreference, setSavingPreference] =
-    useState<NotificationPreferenceKey | null>(null);
+    useState<SavingPreference | null>(null);
   const [preferenceError, setPreferenceError] = useState<string | null>(null);
 
+  const [isSchedulingTest, setIsSchedulingTest] = useState(false);
+  const [testNotificationError, setTestNotificationError] = useState<
+    string | null
+  >(null);
+
   const activeUserIdRef = useRef<string | null>(user?.id ?? null);
-  activeUserIdRef.current = user?.id ?? null;
+
+  useLayoutEffect(() => {
+    activeUserIdRef.current = user?.id ?? null;
+  }, [user?.id]);
+
+  const activeSavingPreference =
+    savingPreference?.userId === user?.id
+      ? savingPreference.preference
+      : null;
 
   useEffect(() => {
     let isActive = true;
-
-    setSavingPreference(null);
 
     async function loadPreferences() {
       if (!user?.id) {
@@ -154,6 +173,23 @@ export default function NotificationSettingsScreen() {
     }
   }
 
+  async function handleTestNotification() {
+    setIsSchedulingTest(true);
+    setTestNotificationError(null);
+
+    try {
+      await scheduleLocalTestNotification();
+    } catch (testError) {
+      setTestNotificationError(
+        testError instanceof Error
+          ? testError.message
+          : 'Unable to schedule the test notification.',
+      );
+    } finally {
+      setIsSchedulingTest(false);
+    }
+  }
+
   async function handleOpenDeviceSettings() {
     try {
       await Linking.openSettings();
@@ -176,16 +212,18 @@ export default function NotificationSettingsScreen() {
       !userId ||
       !preferences ||
       previousValue === undefined ||
-      savingPreference !== null
+      activeSavingPreference !== null
     ) {
       return;
     }
 
     setPreferenceError(null);
+
     setPreferences((current) =>
       current ? { ...current, [preference]: enabled } : current,
     );
-    setSavingPreference(preference);
+
+    setSavingPreference({ userId, preference });
 
     try {
       await updateNotificationPreference(userId, preference, enabled);
@@ -202,9 +240,12 @@ export default function NotificationSettingsScreen() {
         );
       }
     } finally {
-      if (activeUserIdRef.current === userId) {
-        setSavingPreference(null);
-      }
+      setSavingPreference((current) =>
+        current?.userId === userId &&
+        current.preference === preference
+          ? null
+          : current,
+      );
     }
   }
 
@@ -313,7 +354,11 @@ export default function NotificationSettingsScreen() {
 
             <AppText
               variant="button"
-              color={permissionGranted ? colors.brand.red : colors.text.secondary}
+              color={
+                permissionGranted
+                  ? colors.brand.red
+                  : colors.text.secondary
+              }
             >
               {permissionLabel}
             </AppText>
@@ -399,7 +444,7 @@ export default function NotificationSettingsScreen() {
                       onValueChange={(enabled) =>
                         handlePreferenceChange(item.key, enabled)
                       }
-                      disabled={savingPreference !== null}
+                      disabled={activeSavingPreference !== null}
                       trackColor={{
                         false: colors.border.default,
                         true: colors.brand.red,
@@ -408,7 +453,7 @@ export default function NotificationSettingsScreen() {
                     />
                   </View>
 
-                  {savingPreference === item.key && (
+                  {activeSavingPreference === item.key && (
                     <View
                       style={{
                         flexDirection: 'row',
@@ -416,10 +461,7 @@ export default function NotificationSettingsScreen() {
                         gap: spacing.xs,
                       }}
                     >
-                      <ActivityIndicator
-                        size="small"
-                        color={colors.brand.red}
-                      />
+                      <ActivityIndicator size="small" color={colors.brand.red} />
 
                       <AppText variant="caption" color={colors.text.tertiary}>
                         Saving...
@@ -441,6 +483,7 @@ export default function NotificationSettingsScreen() {
                   setPreferences(null);
                   setIsLoadingPreferences(true);
                   setPreferenceError(null);
+
                   if (user?.id) {
                     const retryUserId = user.id;
 
@@ -610,6 +653,66 @@ export default function NotificationSettingsScreen() {
             Permission is requested only when you choose to enable notifications.
           </AppText>
         </View>
+
+        {/* Development-only Local Notification Test */}
+        {__DEV__ && (
+          <View
+            style={{
+              padding: spacing.lg,
+              gap: spacing.md,
+              borderRadius: 16,
+              borderWidth: 1,
+              borderColor: colors.border.default,
+              backgroundColor: colors.background.secondary,
+            }}
+          >
+            <AppText variant="h3" color={colors.text.primary}>
+              Local Notification Test
+            </AppText>
+
+            <AppText variant="bodySmall" color={colors.text.secondary}>
+              Test notification presentation on this device. A local notification will
+              appear approximately five seconds after scheduling.
+            </AppText>
+
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Send test notification"
+              accessibilityState={{
+                disabled: isSchedulingTest,
+                busy: isSchedulingTest,
+              }}
+              disabled={isSchedulingTest}
+              onPress={handleTestNotification}
+              style={({ pressed }) => ({
+                minHeight: 54,
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: spacing.sm,
+                borderRadius: 14,
+                backgroundColor: colors.brand.red,
+                opacity: pressed || isSchedulingTest ? 0.75 : 1,
+              })}
+            >
+              {isSchedulingTest ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <Bell size={19} color="#FFFFFF" />
+              )}
+
+              <AppText variant="buttonLarge" color="#FFFFFF">
+                {isSchedulingTest ? 'Scheduling...' : 'Send Test Notification'}
+              </AppText>
+            </Pressable>
+
+            {testNotificationError && (
+              <AppText variant="bodySmall" color={colors.text.error}>
+                {testNotificationError}
+              </AppText>
+            )}
+          </View>
+        )}
 
         {/* Error Feedback */}
         {(localError || error) && (
