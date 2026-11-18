@@ -1,3 +1,4 @@
+
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import {
@@ -15,10 +16,16 @@ import { NotificationBell } from '@/components/notifications/NotificationBell';
 import {
   getTrainerDashboard,
   type TrainerDashboardData,
+  type TrainerDashboardProgress,
 } from '@/services/trainer-dashboard';
 import { useTrainrTheme } from '@/theme';
 
-import { ArrowRight } from 'lucide-react-native';
+import {
+  ArrowDown,
+  ArrowRight,
+  ArrowUp,
+  Minus,
+} from 'lucide-react-native';
 
 const EMPTY_DASHBOARD: TrainerDashboardData = {
   metrics: {
@@ -62,15 +69,40 @@ function formatActivityDate(value: string, timezone: string) {
   return new Date(value).toLocaleDateString('en-GB', {
     day: 'numeric',
     month: 'short',
+    year: 'numeric',
     timeZone: timezone,
   });
+}
+
+function formatMeasurement(value: number) {
+  return Number.isInteger(value)
+    ? String(value)
+    : value.toFixed(1);
+}
+
+function getProgressChangeLabel(item: TrainerDashboardProgress) {
+  if (item.change === null) {
+    return 'First measurement';
+  }
+
+  if (item.change > 0) {
+    return `+${formatMeasurement(item.change)} ${item.unit}`;
+  }
+
+  if (item.change < 0) {
+    return `${formatMeasurement(item.change)} ${item.unit}`;
+  }
+
+  return `No change`;
 }
 
 export default function PersonalTrainerHomeScreen() {
   const router = useRouter();
   const { colors, spacing, mode } = useTrainrTheme();
 
-  const [dashboard, setDashboard] = useState<TrainerDashboardData>(EMPTY_DASHBOARD);
+  const [dashboard, setDashboard] =
+    useState<TrainerDashboardData>(EMPTY_DASHBOARD);
+
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -93,7 +125,11 @@ export default function PersonalTrainerHomeScreen() {
       const result = await getTrainerDashboard();
       setDashboard(result);
     } catch (error) {
-      console.error('[Trainer Dashboard] Unable to load dashboard:', error);
+      console.error(
+        '[Trainer Dashboard] Unable to load dashboard:',
+        error,
+      );
+
       setErrorMessage(
         error instanceof Error
           ? error.message
@@ -140,9 +176,11 @@ export default function PersonalTrainerHomeScreen() {
         <AppText variant="caption" color={colors.text.secondary}>
           {label}
         </AppText>
+
         <AppText variant="h1" color={colors.text.primary}>
           {value}
         </AppText>
+
         <AppText variant="caption" color={colors.text.tertiary}>
           {description}
         </AppText>
@@ -173,12 +211,155 @@ export default function PersonalTrainerHomeScreen() {
         </AppText>
 
         {action && onPress ? (
-          <Pressable accessibilityRole="button" onPress={onPress} hitSlop={8}>
+          <Pressable
+            accessibilityRole="button"
+            onPress={onPress}
+            hitSlop={8}
+          >
             <AppText variant="caption" color={colors.brand.red}>
               {action}
             </AppText>
           </Pressable>
         ) : null}
+      </View>
+    );
+  }
+
+  function ProgressCard({
+    item,
+  }: {
+    item: TrainerDashboardProgress;
+  }) {
+    const hasPreviousMeasurement = item.previous_value !== null;
+    const hasChange = item.change !== null;
+
+    const changeColor =
+      !hasChange || item.change === 0
+        ? colors.text.secondary
+        : item.change > 0
+          ? colors.brand.red
+          : colors.text.secondary;
+
+    const ChangeIcon = !hasChange
+      ? Minus
+      : item.change > 0
+        ? ArrowUp
+        : item.change < 0
+          ? ArrowDown
+          : Minus;
+
+    return (
+      <View
+        style={{
+          padding: spacing.lg,
+          borderRadius: 16,
+          borderWidth: 1,
+          borderColor: colors.border.default,
+          backgroundColor: colors.background.secondary,
+          gap: spacing.md,
+        }}
+      >
+        {/* Client information */}
+        <View
+          style={{
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            gap: spacing.md,
+          }}
+        >
+          <View style={{ flex: 1, gap: spacing.xs }}>
+            <AppText variant="bodyMedium" color={colors.text.primary}>
+              {item.client_name}
+            </AppText>
+
+            <AppText variant="caption" color={colors.text.secondary}>
+              {formatMetricType(item.metric_type)}
+            </AppText>
+          </View>
+
+          <AppText variant="caption" color={colors.text.tertiary}>
+            {formatActivityDate(
+              item.recorded_at,
+              dashboard.timezone,
+            )}
+          </AppText>
+        </View>
+
+        {/* Measurement comparison */}
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: spacing.md,
+          }}
+        >
+          <View style={{ flex: 1, gap: spacing.xs }}>
+            <AppText variant="caption" color={colors.text.tertiary}>
+              PREVIOUS
+            </AppText>
+
+            <AppText variant="h3" color={colors.text.secondary}>
+              {hasPreviousMeasurement
+                ? `${formatMeasurement(item.previous_value!)} ${item.unit}`
+                : '--'}
+            </AppText>
+          </View>
+
+          <View
+            style={{
+              width: 1,
+              height: 42,
+              backgroundColor: colors.border.default,
+            }}
+          />
+
+          <View style={{ flex: 1, gap: spacing.xs }}>
+            <AppText variant="caption" color={colors.text.tertiary}>
+              CURRENT
+            </AppText>
+
+            <AppText variant="h2" color={colors.text.primary}>
+              {formatMeasurement(item.value)} {item.unit}
+            </AppText>
+          </View>
+        </View>
+
+        {/* Recorded change */}
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            paddingTop: spacing.md,
+            borderTopWidth: 1,
+            borderTopColor: colors.border.default,
+          }}
+        >
+          <AppText variant="caption" color={colors.text.secondary}>
+            RECORDED CHANGE
+          </AppText>
+
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: spacing.xs,
+            }}
+          >
+            <ChangeIcon
+              size={16}
+              color={changeColor}
+            />
+
+            <AppText
+              variant="bodyMedium"
+              color={changeColor}
+            >
+              {getProgressChangeLabel(item)}
+            </AppText>
+          </View>
+        </View>
       </View>
     );
   }
@@ -220,6 +401,7 @@ export default function PersonalTrainerHomeScreen() {
             <AppText variant="h1" color={colors.text.primary}>
               TRAINR
             </AppText>
+
             <AppText
               variant="caption"
               color={colors.text.tertiary}
@@ -242,7 +424,11 @@ export default function PersonalTrainerHomeScreen() {
               source={appIcon}
               accessibilityLabel="TRAINR app icon"
               resizeMode="contain"
-              style={{ width: 52, height: 52, borderRadius: 12 }}
+              style={{
+                width: 52,
+                height: 52,
+                borderRadius: 12,
+              }}
             />
           </View>
         </View>
@@ -256,12 +442,17 @@ export default function PersonalTrainerHomeScreen() {
           >
             YOUR BUSINESS. YOUR IMPACT.
           </AppText>
-          <AppText variant="displayMedium" color={colors.text.primary}>
+
+          <AppText
+            variant="displayMedium"
+            color={colors.text.primary}
+          >
             YOUR DASHBOARD.
           </AppText>
+
           <AppText variant="body" color={colors.text.secondary}>
-            Manage your clients, organise your sessions and track training progress from
-            one place.
+            Manage your clients, organise your sessions and track training
+            progress from one place.
           </AppText>
         </View>
 
@@ -281,6 +472,7 @@ export default function PersonalTrainerHomeScreen() {
             <AppText variant="body" color={colors.text.error}>
               {errorMessage}
             </AppText>
+
             <Pressable
               accessibilityRole="button"
               onPress={() => void loadDashboard()}
@@ -308,28 +500,41 @@ export default function PersonalTrainerHomeScreen() {
                 gap: spacing.md,
               }}
             >
-              <ActivityIndicator size="large" color={colors.brand.red} />
+              <ActivityIndicator
+                size="large"
+                color={colors.brand.red}
+              />
+
               <AppText variant="bodySmall" color={colors.text.secondary}>
                 Loading your dashboard...
               </AppText>
             </View>
           ) : (
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md }}>
+            <View
+              style={{
+                flexDirection: 'row',
+                flexWrap: 'wrap',
+                gap: spacing.md,
+              }}
+            >
               <MetricCard
                 label="ACTIVE CLIENTS"
                 value={dashboard.metrics.activeClients}
                 description="Clients with confirmed bookings"
               />
+
               <MetricCard
                 label="PENDING REQUESTS"
                 value={dashboard.metrics.pendingRequests}
                 description="Awaiting your response"
               />
+
               <MetricCard
                 label="UPCOMING SESSIONS"
                 value={dashboard.metrics.upcomingSessions}
                 description="Confirmed future sessions"
               />
+
               <MetricCard
                 label="COMPLETED SESSIONS"
                 value={dashboard.metrics.completedSessions}
@@ -344,7 +549,9 @@ export default function PersonalTrainerHomeScreen() {
           <SectionHeading
             title="UPCOMING SESSIONS"
             action="View schedule"
-            onPress={() => navigateTo('/(tabs)/personal-trainer/schedule')}
+            onPress={() =>
+              navigateTo('/(tabs)/personal-trainer/schedule')
+            }
           />
 
           {dashboard.upcomingSessions.length === 0 ? (
@@ -361,6 +568,7 @@ export default function PersonalTrainerHomeScreen() {
               <AppText variant="bodyMedium" color={colors.text.primary}>
                 No upcoming sessions
               </AppText>
+
               <AppText variant="bodySmall" color={colors.text.secondary}>
                 Confirmed future bookings will appear here.
               </AppText>
@@ -372,7 +580,9 @@ export default function PersonalTrainerHomeScreen() {
                   key={session.id}
                   accessibilityRole="button"
                   accessibilityLabel={`View schedule for ${session.client_name}`}
-                  onPress={() => navigateTo('/(tabs)/personal-trainer/schedule')}
+                  onPress={() =>
+                    navigateTo('/(tabs)/personal-trainer/schedule')
+                  }
                   style={({ pressed }) => ({
                     flexDirection: 'row',
                     alignItems: 'center',
@@ -389,17 +599,33 @@ export default function PersonalTrainerHomeScreen() {
                     <AppText variant="bodyMedium" color={colors.text.primary}>
                       {session.client_name}
                     </AppText>
+
                     <AppText variant="caption" color={colors.text.secondary}>
-                      {formatSessionDate(session.scheduled_start, dashboard.timezone)}
+                      {formatSessionDate(
+                        session.scheduled_start,
+                        dashboard.timezone,
+                      )}
                     </AppText>
                   </View>
 
-                  <View style={{ alignItems: 'flex-end', gap: spacing.xs }}>
+                  <View
+                    style={{
+                      alignItems: 'flex-end',
+                      gap: spacing.xs,
+                    }}
+                  >
                     <AppText variant="bodyMedium" color={colors.brand.red}>
-                      {formatSessionTime(session.scheduled_start, dashboard.timezone)}
+                      {formatSessionTime(
+                        session.scheduled_start,
+                        dashboard.timezone,
+                      )}
                     </AppText>
+
                     <AppText variant="caption" color={colors.text.tertiary}>
-                      {formatSessionTime(session.scheduled_end, dashboard.timezone)}
+                      {formatSessionTime(
+                        session.scheduled_end,
+                        dashboard.timezone,
+                      )}
                     </AppText>
                   </View>
                 </Pressable>
@@ -413,7 +639,9 @@ export default function PersonalTrainerHomeScreen() {
           <SectionHeading
             title="RECENT WORKOUTS"
             action="View clients"
-            onPress={() => navigateTo('/(tabs)/personal-trainer/clients')}
+            onPress={() =>
+              navigateTo('/(tabs)/personal-trainer/clients')
+            }
           />
 
           {dashboard.recentWorkouts.length === 0 ? (
@@ -427,7 +655,8 @@ export default function PersonalTrainerHomeScreen() {
               }}
             >
               <AppText variant="bodySmall" color={colors.text.secondary}>
-                Completed workouts linked to your assigned plans will appear here.
+                Completed workouts linked to your assigned plans will appear
+                here.
               </AppText>
             </View>
           ) : (
@@ -447,17 +676,23 @@ export default function PersonalTrainerHomeScreen() {
                   <AppText variant="bodyMedium" color={colors.text.primary}>
                     {workout.client_name}
                   </AppText>
+
                   {(workout.day_name || workout.day_number) && (
                     <AppText variant="caption" color={colors.text.secondary}>
                       {workout.day_name || `Day ${workout.day_number}`}
                     </AppText>
                   )}
+
                   <AppText variant="caption" color={colors.text.secondary}>
-                    {formatActivityDate(workout.started_at, dashboard.timezone)}
+                    {formatActivityDate(
+                      workout.started_at,
+                      dashboard.timezone,
+                    )}
                     {workout.duration_minutes
                       ? ` · ${workout.duration_minutes} minutes`
                       : ''}
                   </AppText>
+
                   <AppText variant="caption" color={colors.text.tertiary}>
                     {workout.completed_at ? 'Completed' : 'In progress'}
                   </AppText>
@@ -467,7 +702,7 @@ export default function PersonalTrainerHomeScreen() {
           )}
         </View>
 
-        {/* Recent fitness progress */}
+        {/* Client progress */}
         <View>
           <SectionHeading title="CLIENT PROGRESS" />
 
@@ -479,41 +714,25 @@ export default function PersonalTrainerHomeScreen() {
                 borderWidth: 1,
                 borderColor: colors.border.default,
                 backgroundColor: colors.background.secondary,
+                gap: spacing.xs,
               }}
             >
+              <AppText variant="bodyMedium" color={colors.text.primary}>
+                No client measurements yet
+              </AppText>
+
               <AppText variant="bodySmall" color={colors.text.secondary}>
-                Recent fitness measurements from your confirmed clients will appear here.
+                Fitness measurements from your confirmed and completed
+                clients will appear here.
               </AppText>
             </View>
           ) : (
-            <View style={{ gap: spacing.sm }}>
+            <View style={{ gap: spacing.md }}>
               {dashboard.recentProgress.map((item) => (
-                <View
-                  key={item.id}
-                  style={{
-                    padding: spacing.lg,
-                    borderRadius: 14,
-                    borderWidth: 1,
-                    borderColor: colors.border.default,
-                    backgroundColor: colors.background.secondary,
-                    flexDirection: 'row',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                  }}
-                >
-                  <View style={{ flex: 1, gap: spacing.xs }}>
-                    <AppText variant="bodyMedium" color={colors.text.primary}>
-                      {item.client_name}
-                    </AppText>
-                    <AppText variant="caption" color={colors.text.secondary}>
-                      {formatMetricType(item.metric_type)} ·{' '}
-                      {formatActivityDate(item.recorded_at, dashboard.timezone)}
-                    </AppText>
-                  </View>
-                  <AppText variant="h3" color={colors.brand.red}>
-                    {item.value} {item.unit}
-                  </AppText>
-                </View>
+                <ProgressCard
+                  key={`${item.user_id}-${item.metric_type}`}
+                  item={item}
+                />
               ))}
             </View>
           )}
@@ -538,7 +757,8 @@ export default function PersonalTrainerHomeScreen() {
               {
                 label: 'WORKOUT PLANS',
                 description: 'Create and manage training programmes.',
-                route: '/(tabs)/personal-trainer/more/workout-plans',
+                route:
+                  '/(tabs)/personal-trainer/more/workout-plans',
               },
             ].map((action) => (
               <Pressable
@@ -569,13 +789,20 @@ export default function PersonalTrainerHomeScreen() {
                   </AppText>
                 </View>
 
-                <ArrowRight size={20} color={colors.text.secondary} />
+                <ArrowRight
+                  size={20}
+                  color={colors.text.secondary}
+                />
               </Pressable>
             ))}
           </View>
         </View>
 
-        <AppText variant="caption" color={colors.text.tertiary} align="center">
+        <AppText
+          variant="caption"
+          color={colors.text.tertiary}
+          align="center"
+        >
           TRAINR · TRAIN SMARTER. PERFORM BETTER.
         </AppText>
       </ScrollView>
