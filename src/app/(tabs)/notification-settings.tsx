@@ -1,4 +1,3 @@
-
 import { router } from 'expo-router';
 import {
   AlertCircle,
@@ -83,17 +82,13 @@ export default function NotificationSettingsScreen() {
   } = useNotifications();
 
   const [localError, setLocalError] = useState<string | null>(null);
-  const [preferences, setPreferences] =
-    useState<NotificationPreferences | null>(null);
+  const [preferences, setPreferences] = useState<NotificationPreferences | null>(null);
   const [isLoadingPreferences, setIsLoadingPreferences] = useState(true);
-  const [savingPreference, setSavingPreference] =
-    useState<SavingPreference | null>(null);
+  const [savingPreference, setSavingPreference] = useState<SavingPreference | null>(null);
   const [preferenceError, setPreferenceError] = useState<string | null>(null);
 
   const [isSchedulingTest, setIsSchedulingTest] = useState(false);
-  const [testNotificationError, setTestNotificationError] = useState<
-    string | null
-  >(null);
+  const [testNotificationError, setTestNotificationError] = useState<string | null>(null);
 
   const activeUserIdRef = useRef<string | null>(user?.id ?? null);
 
@@ -102,7 +97,7 @@ export default function NotificationSettingsScreen() {
   }, [user?.id]);
 
   const activeSavingPreference =
-    savingPreference?.userId === user?.id
+    savingPreference && savingPreference.userId === user?.id
       ? savingPreference.preference
       : null;
 
@@ -241,18 +236,13 @@ export default function NotificationSettingsScreen() {
       }
     } finally {
       setSavingPreference((current) =>
-        current?.userId === userId &&
-        current.preference === preference
-          ? null
-          : current,
+        current?.userId === userId && current.preference === preference ? null : current,
       );
     }
   }
 
   const showDeviceSettings =
-    !permissionGranted &&
-    permissionStatus?.status === 'denied' &&
-    !canAskAgain;
+    !permissionGranted && permissionStatus?.status === 'denied' && !canAskAgain;
 
   return (
     <SafeAreaView
@@ -354,11 +344,7 @@ export default function NotificationSettingsScreen() {
 
             <AppText
               variant="button"
-              color={
-                permissionGranted
-                  ? colors.brand.red
-                  : colors.text.secondary
-              }
+              color={permissionGranted ? colors.brand.red : colors.text.secondary}
             >
               {permissionLabel}
             </AppText>
@@ -625,12 +611,7 @@ export default function NotificationSettingsScreen() {
                 gap: spacing.sm,
                 borderRadius: 14,
                 backgroundColor: colors.brand.red,
-                opacity:
-                  pressed || isRegistering
-                    ? 0.75
-                    : isCheckingPermission
-                      ? 0.5
-                      : 1,
+                opacity: pressed || isRegistering ? 0.75 : isCheckingPermission ? 0.5 : 1,
               })}
             >
               {isRegistering ? (

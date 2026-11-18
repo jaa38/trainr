@@ -42,11 +42,49 @@ function normaliseExerciseInput(input: ExerciseInput) {
     description: input.description?.trim() || null,
     muscle_group: input.muscle_group?.trim() || null,
     category: input.category?.trim() || null,
-    equipment: input.equipment ?? [],
+    equipment: (input.equipment ?? [])
+      .map((item) => item.trim())
+      .filter(Boolean),
     instructions: input.instructions?.trim() || null,
     image_url: input.image_url?.trim() || null,
     video_url: input.video_url?.trim() || null,
   };
+}
+
+async function getAuthenticatedUserId(): Promise<string> {
+  const {
+    data: { user },
+    error,
+  } = await supabase.auth.getUser();
+
+  if (error) {
+    console.error(
+      '[Exercise Library] Unable to verify user:',
+      error,
+    );
+
+    throw new Error('Unable to verify your account. Please try again.');
+  }
+
+  if (!user) {
+    throw new Error('Please sign in to continue.');
+  }
+
+  return user.id;
+}
+
+function handleExerciseError(
+  action: string,
+  error: { message: string },
+): never {
+  console.error(
+    `[Exercise Library] Unable to ${action}:`,
+    error,
+  );
+
+  throw new Error(
+    `Unable to ${action}: ${error.message}`,
+  );
 }
 
 /**
@@ -62,8 +100,7 @@ export async function getExercises(): Promise<Exercise[]> {
     .order('name', { ascending: true });
 
   if (error) {
-    console.error('[Exercise Library] Unable to load exercises:', error);
-    throw new Error(`Unable to load exercises: ${error.message}`);
+    handleExerciseError('load exercises', error);
   }
 
   return (data ?? []) as Exercise[];
@@ -75,22 +112,32 @@ export async function getExercises(): Promise<Exercise[]> {
 export async function createExercise(
   input: ExerciseInput,
 ): Promise<Exercise> {
+  await getAuthenticatedUserId();
+
   const exercise = normaliseExerciseInput(input);
 
-  const { data, error } = await supabase.rpc('create_trainer_exercise', {
-    p_name: exercise.name,
-    p_description: exercise.description,
-    p_muscle_group: exercise.muscle_group,
-    p_category: exercise.category,
-    p_equipment: exercise.equipment,
-    p_instructions: exercise.instructions,
-    p_image_url: exercise.image_url,
-    p_video_url: exercise.video_url,
-  });
+  const { data, error } = await supabase.rpc(
+    'create_trainer_exercise',
+    {
+      p_name: exercise.name,
+      p_description: exercise.description,
+      p_muscle_group: exercise.muscle_group,
+      p_category: exercise.category,
+      p_equipment: exercise.equipment,
+      p_instructions: exercise.instructions,
+      p_image_url: exercise.image_url,
+      p_video_url: exercise.video_url,
+    },
+  );
 
   if (error) {
-    console.error('[Exercise Library] Unable to create exercise:', error);
-    throw new Error(`Unable to create exercise: ${error.message}`);
+    handleExerciseError('create exercise', error);
+  }
+
+  if (!data) {
+    throw new Error(
+      'The exercise was not created. Please try again.',
+    );
   }
 
   return data as Exercise;
@@ -103,46 +150,71 @@ export async function updateExercise(
   exerciseId: string,
   input: ExerciseInput,
 ): Promise<Exercise> {
-  if (!exerciseId) {
+  if (!exerciseId?.trim()) {
     throw new Error('An exercise ID is required.');
   }
 
+  const userId = await getAuthenticatedUserId();
   const exercise = normaliseExerciseInput(input);
 
-  const { data, error } = await supabase.rpc('update_trainer_exercise', {
-    p_exercise_id: exerciseId,
-    p_name: exercise.name,
-    p_description: exercise.description,
-    p_muscle_group: exercise.muscle_group,
-    p_category: exercise.category,
-    p_equipment: exercise.equipment,
-    p_instructions: exercise.instructions,
-    p_image_url: exercise.image_url,
-    p_video_url: exercise.video_url,
-  });
+  const { data, error } = await supabase.rpc(
+    'update_trainer_exercise',
+    {
+      p_exercise_id: exerciseId,
+      p_name: exercise.name,
+      p_description: exercise.description,
+      p_muscle_group: exercise.muscle_group,
+      p_category: exercise.category,
+      p_equipment: exercise.equipment,
+      p_instructions: exercise.instructions,
+      p_image_url: exercise.image_url,
+      p_video_url: exercise.video_url,
+    },
+  );
 
   if (error) {
-    console.error('[Exercise Library] Unable to update exercise:', error);
-    throw new Error(`Unable to update exercise: ${error.message}`);
+    handleExerciseError('update exercise', error);
   }
 
-  return data as Exercise;
+  if (!data) {
+    throw new Error(
+      'The exercise could not be updated. It may have been removed or you may not have permission.',
+    );
+  }
+
+  const updatedExercise = data as Exercise;
+
+  // Additional client-side ownership verification.
+  // The database RPC must enforce this independently.
+  if (updatedExercise.created_by !== userId) {
+    throw new Error(
+      'You do not have permission to update this exercise.',
+    );
+  }
+
+  return updatedExercise;
 }
 
 /**
  * Deletes a trainer-owned private exercise through the authorised RPC.
  */
-export async function deleteExercise(exerciseId: string): Promise<void> {
-  if (!exerciseId) {
+export async function deleteExercise(
+  exerciseId: string,
+): Promise<void> {
+  if (!exerciseId?.trim()) {
     throw new Error('An exercise ID is required.');
   }
 
-  const { error } = await supabase.rpc('delete_trainer_exercise', {
-    p_exercise_id: exerciseId,
-  });
+  await getAuthenticatedUserId();
+
+  const { error } = await supabase.rpc(
+    'delete_trainer_exercise',
+    {
+      p_exercise_id: exerciseId,
+    },
+  );
 
   if (error) {
-    console.error('[Exercise Library] Unable to delete exercise:', error);
-    throw new Error(`Unable to delete exercise: ${error.message}`);
+    handleExerciseError('delete exercise', error);
   }
 }

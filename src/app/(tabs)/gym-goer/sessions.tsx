@@ -1,3 +1,4 @@
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Crypto from 'expo-crypto';
 import { router, useFocusEffect } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
@@ -12,6 +13,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { Swipeable } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/AppText';
@@ -124,7 +126,7 @@ export default function SessionsScreen() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [cancellingBookingId, setCancellingBookingId] = useState<string | null>(null);
-  const [currentTime] = useState(() => Date.now());
+  const [currentTime, setCurrentTime] = useState<number | null>(null);
 
   const loadBookings = useCallback(
     async (refresh = false) => {
@@ -294,6 +296,85 @@ export default function SessionsScreen() {
       ],
     );
   };
+
+  /**
+   * Opens the existing booking flow for rescheduling.
+   */
+  const handleRescheduleBooking = (booking: Booking) => {
+    router.push({
+      pathname: '/(tabs)/booking/[trainerId]',
+      params: {
+        trainerId: booking.trainer_id,
+        bookingId: booking.id,
+      },
+    });
+  };
+
+  /**
+   * Swipe actions displayed when the user swipes a booking card left.
+   */
+  const renderBookingSwipeActions = (booking: Booking) => (
+    <View
+      style={{
+        flexDirection: 'row',
+        marginBottom: spacing.xs,
+        marginLeft: spacing.sm,
+        borderRadius: 18,
+        overflow: 'hidden',
+      }}
+    >
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Reschedule booking"
+        disabled={cancellingBookingId !== null || processingPaymentBookingId !== null}
+        onPress={() => handleRescheduleBooking(booking)}
+        style={{
+          width: 100,
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: colors.background.secondary,
+          borderWidth: 1,
+          borderColor: colors.border.default,
+          gap: spacing.sm,
+        }}
+      >
+        <MaterialCommunityIcons
+          name="calendar-edit"
+          size={25}
+          color={colors.text.primary}
+        />
+
+        <AppText variant="caption" color={colors.text.primary}>
+          Reschedule
+        </AppText>
+      </Pressable>
+
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Cancel booking"
+        disabled={cancellingBookingId !== null || processingPaymentBookingId !== null}
+        onPress={() => handleCancelBooking(booking)}
+        style={{
+          width: 100,
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: colors.brand.red,
+          gap: spacing.sm,
+          opacity: cancellingBookingId === booking.id ? 0.6 : 1,
+        }}
+      >
+        {cancellingBookingId === booking.id ? (
+          <ActivityIndicator color="#FFFFFF" />
+        ) : (
+          <MaterialCommunityIcons name="calendar-remove" size={25} color="#FFFFFF" />
+        )}
+
+        <AppText variant="caption" color="#FFFFFF">
+          Cancel
+        </AppText>
+      </Pressable>
+    </View>
+  );
 
   const handlePayForBooking = async (booking: Booking) => {
     if (!user || booking.status !== 'confirmed') {
@@ -503,7 +584,8 @@ export default function SessionsScreen() {
       booking.status !== 'confirmed' ||
       payment.status !== 'failed' ||
       !payment.id ||
-      new Date(booking.scheduled_start).getTime() <= Date.now()
+      currentTime === null ||
+      new Date(booking.scheduled_start).getTime() <= currentTime
     ) {
       Alert.alert('Payment retry unavailable', 'This payment is not eligible for retry.');
       return;
@@ -656,6 +738,7 @@ export default function SessionsScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      setCurrentTime(Date.now());
       void loadBookings();
     }, [loadBookings]),
   );
@@ -790,7 +873,10 @@ export default function SessionsScreen() {
   return (
     <SafeAreaView
       edges={['top']}
-      style={{ flex: 1, backgroundColor: colors.background.primary }}
+      style={{
+        flex: 1,
+        backgroundColor: colors.background.primary,
+      }}
     >
       <ScrollView
         contentContainerStyle={{
@@ -821,6 +907,7 @@ export default function SessionsScreen() {
           </AppText>
         </View>
 
+        {/* Session tabs */}
         <View
           style={{
             flexDirection: 'row',
@@ -872,6 +959,7 @@ export default function SessionsScreen() {
             <AppText variant="body" color={colors.text.primary}>
               {reviewSuccess}
             </AppText>
+
             <Pressable accessibilityRole="button" onPress={() => setReviewSuccess(null)}>
               <AppText variant="caption" color={colors.brand.red}>
                 Dismiss
@@ -889,6 +977,7 @@ export default function SessionsScreen() {
             }}
           >
             <ActivityIndicator size="large" color={colors.brand.red} />
+
             <AppText variant="body" color={colors.text.secondary}>
               Loading your sessions…
             </AppText>
@@ -907,9 +996,11 @@ export default function SessionsScreen() {
             <AppText variant="h3" color={colors.text.primary}>
               Bookings unavailable
             </AppText>
+
             <AppText variant="body" color={colors.text.secondary}>
               {errorMessage}
             </AppText>
+
             <Button variant="primary" fullWidth onPress={() => void loadBookings()}>
               Try again
             </Button>
@@ -920,6 +1011,7 @@ export default function SessionsScreen() {
               <AppText variant="h2" color={colors.text.primary}>
                 TRANSACTION HISTORY
               </AppText>
+
               <AppText variant="body" color={colors.text.secondary}>
                 View your payments, transaction references and receipts.
               </AppText>
@@ -940,6 +1032,7 @@ export default function SessionsScreen() {
                 <AppText variant="h3" color={colors.text.primary}>
                   NO TRANSACTIONS YET
                 </AppText>
+
                 <AppText variant="body" color={colors.text.secondary} align="center">
                   Your training session payments will appear here once you make a booking
                   payment.
@@ -948,11 +1041,13 @@ export default function SessionsScreen() {
             ) : (
               <>
                 <AppText variant="caption" color={colors.text.secondary}>
-                  {payments.length} TRANSACTION{payments.length === 1 ? '' : 'S'}
+                  {payments.length} TRANSACTION
+                  {payments.length === 1 ? '' : 'S'}
                 </AppText>
 
                 {payments.map((payment) => {
                   const expanded = expandedPaymentId === payment.id;
+
                   const booking = bookings.find((item) => item.id === payment.booking_id);
 
                   const trainerName = [
@@ -985,7 +1080,10 @@ export default function SessionsScreen() {
                       <Pressable
                         accessibilityRole="button"
                         accessibilityState={{ expanded }}
-                        accessibilityLabel={`Payment ${formatMoney(payment.amount, payment.currency)}, ${payment.status}. ${expanded ? 'Hide' : 'View'} details`}
+                        accessibilityLabel={`Payment ${formatMoney(
+                          payment.amount,
+                          payment.currency,
+                        )}, ${payment.status}. ${expanded ? 'Hide' : 'View'} details`}
                         onPress={() => setExpandedPaymentId(expanded ? null : payment.id)}
                         style={{ gap: spacing.md }}
                       >
@@ -1001,6 +1099,7 @@ export default function SessionsScreen() {
                             <AppText variant="caption" color={colors.text.secondary}>
                               PAYMENT AMOUNT
                             </AppText>
+
                             <AppText variant="h2" color={colors.text.primary}>
                               {formatMoney(payment.amount, payment.currency)}
                             </AppText>
@@ -1052,6 +1151,7 @@ export default function SessionsScreen() {
                             <AppText variant="caption" color={colors.text.secondary}>
                               TRANSACTION ID
                             </AppText>
+
                             <AppText variant="body" color={colors.text.primary}>
                               {payment.id}
                             </AppText>
@@ -1061,6 +1161,7 @@ export default function SessionsScreen() {
                             <AppText variant="caption" color={colors.text.secondary}>
                               BOOKING REFERENCE
                             </AppText>
+
                             <AppText variant="body" color={colors.text.primary}>
                               {payment.booking_id}
                             </AppText>
@@ -1070,6 +1171,7 @@ export default function SessionsScreen() {
                             <AppText variant="caption" color={colors.text.secondary}>
                               PAYMENT PROVIDER
                             </AppText>
+
                             <AppText variant="body" color={colors.text.primary}>
                               {payment.provider.toUpperCase()}
                             </AppText>
@@ -1080,6 +1182,7 @@ export default function SessionsScreen() {
                               <AppText variant="caption" color={colors.text.secondary}>
                                 TRAINER
                               </AppText>
+
                               <AppText variant="body" color={colors.text.primary}>
                                 {trainerName}
                               </AppText>
@@ -1091,6 +1194,7 @@ export default function SessionsScreen() {
                               <AppText variant="caption" color={colors.text.secondary}>
                                 VERIFIED PAYMENT DATE
                               </AppText>
+
                               <AppText variant="body" color={colors.text.primary}>
                                 {formatDate(payment.paid_at)}
                               </AppText>
@@ -1129,6 +1233,7 @@ export default function SessionsScreen() {
             <AppText variant="h3" color={colors.text.primary}>
               {activeTab === 'Upcoming' ? 'NO UPCOMING SESSIONS' : 'NO SESSION HISTORY'}
             </AppText>
+
             <AppText
               variant="body"
               color={colors.text.secondary}
@@ -1161,323 +1266,331 @@ export default function SessionsScreen() {
               const isPaid = payment?.status === 'successful';
 
               const canRetryPayment =
+                currentTime !== null &&
                 booking.status === 'confirmed' &&
                 new Date(booking.scheduled_start).getTime() > currentTime &&
                 payment?.status === 'failed' &&
                 Boolean(payment.id);
 
               const canPay =
+                currentTime !== null &&
                 booking.status === 'confirmed' &&
                 new Date(booking.scheduled_start).getTime() > currentTime &&
                 !isPaid &&
                 (!payment || payment.status === 'pending');
 
-              return (
-                <View
-                  key={booking.id}
-                  style={{
-                    padding: spacing.lg,
-                    borderRadius: 18,
-                    borderWidth: 1,
-                    borderColor: colors.border.default,
-                    backgroundColor: colors.background.secondary,
-                    gap: spacing.md,
-                  }}
-                >
-                  <View style={{ gap: spacing.xs }}>
-                    <AppText variant="caption" color={colors.brand.red}>
-                      TRAINR COACH
-                    </AppText>
-                    <AppText variant="h3" color={colors.text.primary}>
-                      {trainerName || 'TRAINR Coach'}
-                    </AppText>
-                    <AppText variant="body" color={colors.text.secondary}>
-                      {formatDate(booking.scheduled_start)}
-                    </AppText>
-                    <AppText variant="body" color={colors.text.secondary}>
-                      {formatTime(booking.scheduled_start)} –{' '}
-                      {formatTime(booking.scheduled_end)}
-                    </AppText>
-                  </View>
+              const canManageBooking =
+                currentTime !== null &&
+                (booking.status === 'pending' || booking.status === 'confirmed') &&
+                new Date(booking.scheduled_start).getTime() > currentTime;
 
+              return (
+                <Swipeable
+                  key={booking.id}
+                  renderRightActions={() => renderBookingSwipeActions(booking)}
+                  enabled={
+                    canManageBooking &&
+                    cancellingBookingId === null &&
+                    processingPaymentBookingId === null
+                  }
+                  friction={2}
+                  rightThreshold={45}
+                  overshootRight={false}
+                  containerStyle={{ overflow: 'visible' }}
+                >
                   <View
                     style={{
-                      paddingTop: spacing.md,
-                      borderTopWidth: 1,
-                      borderTopColor: colors.border.default,
-                      gap: spacing.xs,
+                      padding: spacing.lg,
+                      borderRadius: 18,
+                      borderWidth: 1,
+                      borderColor: colors.border.default,
+                      backgroundColor: colors.background.secondary,
+                      gap: spacing.md,
                     }}
                   >
-                    <AppText variant="h3" color={colors.brand.red}>
-                      {formatMoney(Number(booking.session_rate), booking.currency)}
-                    </AppText>
-                    <AppText variant="caption" color={colors.text.secondary}>
-                      STATUS: {formatStatus(booking.status).toUpperCase()}
-                    </AppText>
+                    <View style={{ gap: spacing.xs }}>
+                      <AppText variant="caption" color={colors.brand.red}>
+                        TRAINR COACH
+                      </AppText>
 
-                    {isPaid ? (
-                      <AppText variant="caption" color={colors.text.secondary}>
-                        PAYMENT: PAID
+                      <AppText variant="h3" color={colors.text.primary}>
+                        {trainerName || 'TRAINR Coach'}
                       </AppText>
-                    ) : payment?.status === 'pending' ? (
-                      <AppText variant="caption" color={colors.text.secondary}>
-                        PAYMENT: PENDING
+
+                      <AppText variant="body" color={colors.text.secondary}>
+                        {formatDate(booking.scheduled_start)}
                       </AppText>
-                    ) : payment?.status === 'failed' ? (
+
+                      <AppText variant="body" color={colors.text.secondary}>
+                        {formatTime(booking.scheduled_start)} –{' '}
+                        {formatTime(booking.scheduled_end)}
+                      </AppText>
+                    </View>
+
+                    <View
+                      style={{
+                        paddingTop: spacing.md,
+                        borderTopWidth: 1,
+                        borderTopColor: colors.border.default,
+                        gap: spacing.xs,
+                      }}
+                    >
+                      <AppText variant="h3" color={colors.brand.red}>
+                        {formatMoney(Number(booking.session_rate), booking.currency)}
+                      </AppText>
+
                       <AppText variant="caption" color={colors.text.secondary}>
-                        PAYMENT: FAILED
+                        STATUS: {formatStatus(booking.status).toUpperCase()}
+                      </AppText>
+
+                      {isPaid ? (
+                        <AppText variant="caption" color={colors.text.secondary}>
+                          PAYMENT: PAID
+                        </AppText>
+                      ) : payment?.status === 'pending' ? (
+                        <AppText variant="caption" color={colors.text.secondary}>
+                          PAYMENT: PENDING
+                        </AppText>
+                      ) : payment?.status === 'failed' ? (
+                        <AppText variant="caption" color={colors.text.secondary}>
+                          PAYMENT: FAILED
+                        </AppText>
+                      ) : null}
+                    </View>
+
+                    {booking.notes ? (
+                      <AppText variant="body" color={colors.text.secondary}>
+                        Notes: {booking.notes}
                       </AppText>
                     ) : null}
-                  </View>
 
-                  {booking.notes ? (
-                    <AppText variant="body" color={colors.text.secondary}>
-                      Notes: {booking.notes}
-                    </AppText>
-                  ) : null}
-
-                  {canPay ? (
-                    <Button
-                      variant="primary"
-                      fullWidth
-                      loading={processingPaymentBookingId === booking.id}
-                      disabled={
-                        processingPaymentBookingId !== null ||
-                        cancellingBookingId !== null
-                      }
-                      accessibilityLabel={`Pay ${formatMoney(
-                        Number(booking.session_rate),
-                        booking.currency,
-                      )} for this session`}
-                      onPress={() => void handlePayForBooking(booking)}
-                    >
-                      {payment?.status === 'pending'
-                        ? 'Continue payment'
-                        : 'Pay for session'}
-                    </Button>
-                  ) : null}
-
-                  {canRetryPayment && payment ? (
-                    <Button
-                      variant="primary"
-                      fullWidth
-                      loading={processingPaymentBookingId === booking.id}
-                      disabled={
-                        processingPaymentBookingId !== null ||
-                        cancellingBookingId !== null
-                      }
-                      accessibilityLabel={`Retry payment for ${formatMoney(
-                        Number(booking.session_rate),
-                        booking.currency,
-                      )}`}
-                      onPress={() => void handleRetryPayment(booking, payment)}
-                    >
-                      Retry payment
-                    </Button>
-                  ) : null}
-
-                  {(booking.status === 'pending' || booking.status === 'confirmed') &&
-                  new Date(booking.scheduled_start).getTime() > currentTime ? (
-                    <>
+                    {canPay ? (
                       <Button
-                        variant="outline"
+                        variant="primary"
                         fullWidth
-                        accessibilityLabel="Reschedule booking"
+                        loading={processingPaymentBookingId === booking.id}
                         disabled={
-                          cancellingBookingId !== null ||
-                          processingPaymentBookingId !== null
+                          processingPaymentBookingId !== null ||
+                          cancellingBookingId !== null
                         }
-                        onPress={() =>
-                          router.push({
-                            pathname: '/(tabs)/booking/[trainerId]',
-                            params: {
-                              trainerId: booking.trainer_id,
-                              bookingId: booking.id,
-                            },
-                          })
-                        }
+                        accessibilityLabel={`Pay ${formatMoney(
+                          Number(booking.session_rate),
+                          booking.currency,
+                        )} for this session`}
+                        onPress={() => void handlePayForBooking(booking)}
                       >
-                        Reschedule
+                        {payment?.status === 'pending'
+                          ? 'Continue payment'
+                          : 'Pay for session'}
                       </Button>
+                    ) : null}
 
+                    {canRetryPayment && payment ? (
                       <Button
-                        variant="destructive"
+                        variant="primary"
                         fullWidth
-                        accessibilityLabel="Cancel booking"
+                        loading={processingPaymentBookingId === booking.id}
                         disabled={
-                          cancellingBookingId !== null ||
-                          processingPaymentBookingId !== null
+                          processingPaymentBookingId !== null ||
+                          cancellingBookingId !== null
                         }
-                        loading={cancellingBookingId === booking.id}
-                        onPress={() => handleCancelBooking(booking)}
+                        accessibilityLabel={`Retry payment for ${formatMoney(
+                          Number(booking.session_rate),
+                          booking.currency,
+                        )}`}
+                        onPress={() => void handleRetryPayment(booking, payment)}
                       >
-                        Cancel booking
+                        Retry payment
                       </Button>
-                    </>
-                  ) : null}
+                    ) : null}
 
-                  {booking.status === 'completed' ? (
-                    isReviewed ? (
-                      <View
-                        style={{
-                          padding: spacing.md,
-                          borderRadius: 12,
-                          backgroundColor: colors.background.primary,
-                        }}
-                      >
-                        <AppText variant="button" color={colors.text.secondary}>
-                          ✓ REVIEW SUBMITTED
-                        </AppText>
-                      </View>
-                    ) : (
-                      <View style={{ gap: spacing.md }}>
-                        {!isReviewFormOpen ? (
-                          <Button
-                            variant="primary"
-                            fullWidth
-                            onPress={() => openReviewForm(booking.id)}
-                          >
-                            Leave a review
-                          </Button>
-                        ) : (
-                          <View
-                            style={{
-                              padding: spacing.md,
-                              borderRadius: 14,
-                              borderWidth: 1,
-                              borderColor: colors.border.default,
-                              gap: spacing.md,
-                            }}
-                          >
-                            <AppText variant="h3" color={colors.text.primary}>
-                              RATE YOUR SESSION
-                            </AppText>
-                            <AppText variant="body" color={colors.text.secondary}>
-                              How was your experience with this trainer?
-                            </AppText>
-
-                            <View
-                              accessibilityRole="radiogroup"
-                              style={{
-                                flexDirection: 'row',
-                                justifyContent: 'center',
-                                gap: spacing.sm,
-                              }}
-                            >
-                              {[1, 2, 3, 4, 5].map((star) => {
-                                const selected = star <= reviewRating;
-
-                                return (
-                                  <Pressable
-                                    key={star}
-                                    accessibilityRole="radio"
-                                    accessibilityLabel={`${star} ${
-                                      star === 1 ? 'star' : 'stars'
-                                    }`}
-                                    accessibilityState={{
-                                      selected: reviewRating === star,
-                                    }}
-                                    onPress={() => setReviewRating(star)}
-                                    disabled={isSubmittingReview}
-                                    hitSlop={6}
-                                    style={{
-                                      minWidth: 40,
-                                      minHeight: 44,
-                                      alignItems: 'center',
-                                      justifyContent: 'center',
-                                    }}
-                                  >
-                                    <AppText
-                                      variant="h2"
-                                      color={
-                                        selected
-                                          ? colors.brand.red
-                                          : colors.text.secondary
-                                      }
-                                    >
-                                      {selected ? '★' : '☆'}
-                                    </AppText>
-                                  </Pressable>
-                                );
-                              })}
-                            </View>
-
-                            <AppText
-                              variant="caption"
-                              color={colors.text.secondary}
-                              style={{ textAlign: 'center' }}
-                            >
-                              {reviewRating === 0
-                                ? 'Select a star rating'
-                                : `${reviewRating} out of 5 stars`}
-                            </AppText>
-
-                            <TextInput
-                              value={reviewText}
-                              onChangeText={setReviewText}
-                              placeholder="Share your experience (optional)"
-                              placeholderTextColor={colors.text.secondary}
-                              multiline
-                              maxLength={2000}
-                              editable={!isSubmittingReview}
-                              textAlignVertical="top"
-                              accessibilityLabel="Written trainer review"
-                              style={{
-                                minHeight: 110,
-                                padding: spacing.md,
-                                borderRadius: 12,
-                                borderWidth: 1,
-                                borderColor: colors.border.default,
-                                color: colors.text.primary,
-                                backgroundColor: colors.background.primary,
-                                fontSize: 15,
-                                lineHeight: 22,
-                              }}
-                            />
-
-                            <AppText
-                              variant="caption"
-                              color={colors.text.secondary}
-                              style={{ textAlign: 'right' }}
-                            >
-                              {reviewText.length}/2000
-                            </AppText>
-
-                            {reviewError ? (
-                              <AppText variant="body" color={colors.brand.red}>
-                                {reviewError}
-                              </AppText>
-                            ) : null}
-
+                    {booking.status === 'completed' ? (
+                      isReviewed ? (
+                        <View
+                          style={{
+                            padding: spacing.md,
+                            borderRadius: 12,
+                            backgroundColor: colors.background.primary,
+                          }}
+                        >
+                          <AppText variant="button" color={colors.text.secondary}>
+                            ✓ REVIEW SUBMITTED
+                          </AppText>
+                        </View>
+                      ) : (
+                        <View style={{ gap: spacing.md }}>
+                          {!isReviewFormOpen ? (
                             <Button
                               variant="primary"
                               fullWidth
-                              loading={isSubmittingReview}
-                              disabled={isSubmittingReview}
-                              onPress={() => void handleSubmitReview(booking)}
+                              onPress={() => openReviewForm(booking.id)}
                             >
-                              Submit review
+                              Leave a review
                             </Button>
+                          ) : (
+                            <View
+                              style={{
+                                padding: spacing.md,
+                                borderRadius: 14,
+                                borderWidth: 1,
+                                borderColor: colors.border.default,
+                                gap: spacing.md,
+                              }}
+                            >
+                              <AppText variant="h3" color={colors.text.primary}>
+                                RATE YOUR SESSION
+                              </AppText>
 
-                            <Button
-                              variant="ghost"
-                              fullWidth
-                              disabled={isSubmittingReview}
-                              onPress={closeReviewForm}
-                            >
-                              Cancel
-                            </Button>
-                          </View>
-                        )}
+                              <AppText variant="body" color={colors.text.secondary}>
+                                How was your experience with this trainer?
+                              </AppText>
+
+                              <View
+                                accessibilityRole="radiogroup"
+                                style={{
+                                  flexDirection: 'row',
+                                  justifyContent: 'center',
+                                  gap: spacing.sm,
+                                }}
+                              >
+                                {[1, 2, 3, 4, 5].map((star) => {
+                                  const selected = star <= reviewRating;
+
+                                  return (
+                                    <Pressable
+                                      key={star}
+                                      accessibilityRole="radio"
+                                      accessibilityLabel={`${star} ${
+                                        star === 1 ? 'star' : 'stars'
+                                      }`}
+                                      accessibilityState={{
+                                        selected: reviewRating === star,
+                                      }}
+                                      onPress={() => setReviewRating(star)}
+                                      disabled={isSubmittingReview}
+                                      hitSlop={6}
+                                      style={{
+                                        minWidth: 40,
+                                        minHeight: 44,
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                      }}
+                                    >
+                                      <AppText
+                                        variant="h2"
+                                        color={
+                                          selected
+                                            ? colors.brand.red
+                                            : colors.text.secondary
+                                        }
+                                      >
+                                        {selected ? '★' : '☆'}
+                                      </AppText>
+                                    </Pressable>
+                                  );
+                                })}
+                              </View>
+
+                              <AppText
+                                variant="caption"
+                                color={colors.text.secondary}
+                                style={{ textAlign: 'center' }}
+                              >
+                                {reviewRating === 0
+                                  ? 'Select a star rating'
+                                  : `${reviewRating} out of 5 stars`}
+                              </AppText>
+
+                              <TextInput
+                                value={reviewText}
+                                onChangeText={setReviewText}
+                                placeholder="Share your experience (optional)"
+                                placeholderTextColor={colors.text.secondary}
+                                multiline
+                                maxLength={2000}
+                                editable={!isSubmittingReview}
+                                textAlignVertical="top"
+                                accessibilityLabel="Written trainer review"
+                                style={{
+                                  minHeight: 110,
+                                  padding: spacing.md,
+                                  borderRadius: 12,
+                                  borderWidth: 1,
+                                  borderColor: colors.border.default,
+                                  color: colors.text.primary,
+                                  backgroundColor: colors.background.primary,
+                                  fontSize: 15,
+                                  lineHeight: 22,
+                                }}
+                              />
+
+                              <AppText
+                                variant="caption"
+                                color={colors.text.secondary}
+                                style={{ textAlign: 'right' }}
+                              >
+                                {reviewText.length}/2000
+                              </AppText>
+
+                              {reviewError ? (
+                                <AppText variant="body" color={colors.brand.red}>
+                                  {reviewError}
+                                </AppText>
+                              ) : null}
+
+                              <Button
+                                variant="primary"
+                                fullWidth
+                                loading={isSubmittingReview}
+                                disabled={isSubmittingReview}
+                                onPress={() => void handleSubmitReview(booking)}
+                              >
+                                Submit review
+                              </Button>
+
+                              <Button
+                                variant="ghost"
+                                fullWidth
+                                disabled={isSubmittingReview}
+                                onPress={closeReviewForm}
+                              >
+                                Cancel
+                              </Button>
+                            </View>
+                          )}
+                        </View>
+                      )
+                    ) : null}
+
+                    {canManageBooking ? (
+                      <View
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: spacing.xs,
+                          paddingTop: spacing.xs,
+                        }}
+                      >
+                        <MaterialCommunityIcons
+                          name="gesture-swipe-left"
+                          size={17}
+                          color={colors.text.secondary}
+                        />
+
+                        <AppText variant="caption" color={colors.text.secondary}>
+                          Swipe left to manage this booking
+                        </AppText>
                       </View>
-                    )
-                  ) : null}
-                </View>
+                    ) : null}
+                  </View>
+                </Swipeable>
               );
             })}
           </View>
         )}
 
+        {/* Session preparation reminder */}
         <View
           style={{
             padding: spacing.lg,
@@ -1490,12 +1603,15 @@ export default function SessionsScreen() {
           <AppText variant="h3" color={colors.text.primary}>
             BEFORE YOUR SESSION
           </AppText>
+
           <AppText variant="body" color={colors.text.secondary}>
             • Check your appointment details.
           </AppText>
+
           <AppText variant="body" color={colors.text.secondary}>
             • Arrive ready to train.
           </AppText>
+
           <AppText variant="body" color={colors.text.secondary}>
             • Contact your trainer if plans change.
           </AppText>

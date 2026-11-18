@@ -1,3 +1,4 @@
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -10,6 +11,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { Swipeable } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/AppText';
@@ -17,18 +19,23 @@ import { BottomSheet } from '@/components/BottomSheet';
 import { Button } from '@/components/Button';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/providers/AuthProvider';
-import { useTrainrTheme } from '@/theme';
-import { formatCurrency } from '@/utils/formatCurrency';
 import {
   createTrainerSessionNote,
   getTrainerSessionNote,
   updateTrainerSessionNote,
   type TrainerSessionNote,
 } from '@/services/trainer-session-notes';
+import { useTrainrTheme } from '@/theme';
+import { formatCurrency } from '@/utils/formatCurrency';
 
 type ScheduleView = 'Upcoming' | 'Availability' | 'History';
 
-type BookingStatus = 'pending' | 'confirmed' | 'declined' | 'cancelled' | 'completed';
+type BookingStatus =
+  | 'pending'
+  | 'confirmed'
+  | 'declined'
+  | 'cancelled'
+  | 'completed';
 
 type Booking = {
   id: string;
@@ -68,7 +75,11 @@ type DailyTimeWindow = {
 
 type WeeklySchedule = Partial<Record<AvailableDay, DailyTimeWindow>>;
 
-const HISTORY_STATUSES: BookingStatus[] = ['declined', 'cancelled', 'completed'];
+const HISTORY_STATUSES: BookingStatus[] = [
+  'declined',
+  'cancelled',
+  'completed',
+];
 
 const STATUS_LABELS: Record<BookingStatus, string> = {
   pending: 'Pending',
@@ -153,7 +164,8 @@ export default function ScheduleScreen() {
   const [savedDays, setSavedDays] = useState<AvailableDay[]>([]);
 
   const [weeklySchedule, setWeeklySchedule] = useState<WeeklySchedule>({});
-  const [savedWeeklySchedule, setSavedWeeklySchedule] = useState<WeeklySchedule>({});
+  const [savedWeeklySchedule, setSavedWeeklySchedule] =
+    useState<WeeklySchedule>({});
 
   const [activeTimePicker, setActiveTimePicker] = useState<{
     day: AvailableDay;
@@ -165,19 +177,27 @@ export default function ScheduleScreen() {
   const [isSavingAvailability, setIsSavingAvailability] = useState(false);
 
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [availabilityError, setAvailabilityError] = useState<string | null>(null);
-  const [updatingBookingId, setUpdatingBookingId] = useState<string | null>(null);
+  const [availabilityError, setAvailabilityError] = useState<string | null>(
+    null,
+  );
+  const [updatingBookingId, setUpdatingBookingId] = useState<string | null>(
+    null,
+  );
 
   const [expandedSessionNoteBookingId, setExpandedSessionNoteBookingId] =
     useState<string | null>(null);
-  const [sessionNote, setSessionNote] = useState<TrainerSessionNote | null>(null);
+  const [sessionNote, setSessionNote] = useState<TrainerSessionNote | null>(
+    null,
+  );
   const [sessionSummary, setSessionSummary] = useState('');
   const [sessionObservations, setSessionObservations] = useState('');
   const [sessionRecommendations, setSessionRecommendations] = useState('');
   const [isLoadingSessionNote, setIsLoadingSessionNote] = useState(false);
   const [hasLoadedSessionNote, setHasLoadedSessionNote] = useState(false);
   const [isSavingSessionNote, setIsSavingSessionNote] = useState(false);
-  const [sessionNoteError, setSessionNoteError] = useState<string | null>(null);
+  const [sessionNoteError, setSessionNoteError] = useState<string | null>(
+    null,
+  );
   const sessionNoteRequestId = useRef(0);
 
   useEffect(() => {
@@ -236,7 +256,9 @@ export default function ScheduleScreen() {
         setTrainerTimezone(trainerProfile?.timezone || DEFAULT_TIMEZONE);
 
         const rows = bookingRows ?? [];
-        const clientIds = [...new Set(rows.map((booking) => booking.gym_goer_id))];
+        const clientIds = [
+          ...new Set(rows.map((booking) => booking.gym_goer_id)),
+        ];
 
         const { data: clientProfiles, error: profilesError } = clientIds.length
           ? await supabase
@@ -290,7 +312,10 @@ export default function ScheduleScreen() {
             typeof availability.schedule === 'object' &&
             !Array.isArray(availability.schedule)
           ) {
-            const storedSchedule = availability.schedule as Record<string, unknown>;
+            const storedSchedule = availability.schedule as Record<
+              string,
+              unknown
+            >;
 
             for (const day of availabilityOptions) {
               const window = storedSchedule[day];
@@ -350,7 +375,11 @@ export default function ScheduleScreen() {
     setAvailabilityError(null);
   }
 
-  function updateDailyTime(day: AvailableDay, field: 'start' | 'end', value: string) {
+  function updateDailyTime(
+    day: AvailableDay,
+    field: 'start' | 'end',
+    value: string,
+  ) {
     setWeeklySchedule((current) => ({
       ...current,
       [day]: {
@@ -362,7 +391,10 @@ export default function ScheduleScreen() {
     setAvailabilityError(null);
   }
 
-  function handleTimePickerChange(event: { type: string }, selectedDate?: Date) {
+  function handleTimePickerChange(
+    event: { type: string },
+    selectedDate?: Date,
+  ) {
     if (event.type === 'dismissed' || !selectedDate || !activeTimePicker) {
       setActiveTimePicker(null);
       return;
@@ -395,7 +427,9 @@ export default function ScheduleScreen() {
       }
 
       if (window.end <= window.start) {
-        setAvailabilityError(`${day}: the end time must be later than the start time.`);
+        setAvailabilityError(
+          `${day}: the end time must be later than the start time.`,
+        );
         return;
       }
     }
@@ -468,7 +502,9 @@ export default function ScheduleScreen() {
     } catch (error) {
       console.error('[Trainer Schedule] Unable to save availability:', error);
 
-      setAvailabilityError('Unable to save your availability. Please try again.');
+      setAvailabilityError(
+        'Unable to save your availability. Please try again.',
+      );
     } finally {
       setIsSavingAvailability(false);
     }
@@ -476,7 +512,7 @@ export default function ScheduleScreen() {
 
   async function updateBookingStatus(
     booking: Booking,
-    status: 'confirmed' | 'declined' | 'completed',
+    status: 'confirmed' | 'declined' | 'cancelled' | 'completed',
   ) {
     if (!user) return;
 
@@ -496,6 +532,22 @@ export default function ScheduleScreen() {
         );
         return;
       }
+    } else if (status === 'cancelled') {
+      if (booking.status !== 'confirmed') {
+        Alert.alert(
+          'Cannot cancel session',
+          'Only confirmed sessions can be cancelled using this option.',
+        );
+        return;
+      }
+
+      if (new Date(booking.scheduled_start).getTime() <= now.getTime()) {
+        Alert.alert(
+          'Cannot cancel session',
+          'Only upcoming confirmed sessions can be cancelled here.',
+        );
+        return;
+      }
     } else if (booking.status !== 'pending') {
       Alert.alert(
         'Booking already updated',
@@ -505,7 +557,13 @@ export default function ScheduleScreen() {
     }
 
     const action =
-      status === 'confirmed' ? 'confirm' : status === 'declined' ? 'decline' : 'complete';
+      status === 'confirmed'
+        ? 'confirm'
+        : status === 'declined'
+          ? 'decline'
+          : status === 'cancelled'
+            ? 'cancel'
+            : 'complete';
 
     setUpdatingBookingId(booking.id);
 
@@ -537,15 +595,22 @@ export default function ScheduleScreen() {
           ? 'Session confirmed'
           : status === 'declined'
             ? 'Request declined'
-            : 'Session completed',
+            : status === 'cancelled'
+              ? 'Session cancelled'
+              : 'Session completed',
         status === 'confirmed'
           ? 'The session has been confirmed.'
           : status === 'declined'
             ? 'The booking request has been declined.'
-            : 'The session is now marked as completed. The gym-goer can leave a review.',
+            : status === 'cancelled'
+              ? 'The confirmed session has been cancelled.'
+              : 'The session is now marked as completed. The gym-goer can leave a review.',
       );
     } catch (error) {
-      console.error(`[Trainer Schedule] Unable to ${action} booking:`, error);
+      console.error(
+        `[Trainer Schedule] Unable to ${action} booking:`,
+        error,
+      );
 
       Alert.alert(
         'Unable to update booking',
@@ -554,6 +619,217 @@ export default function ScheduleScreen() {
     } finally {
       setUpdatingBookingId(null);
     }
+  }
+
+  function confirmSessionCancellation(booking: Booking) {
+    const clientName = [
+      booking.client?.first_name,
+      booking.client?.last_name,
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .trim();
+
+    Alert.alert(
+      'Cancel confirmed session?',
+      `Are you sure you want to cancel ${
+        clientName ? `${clientName}'s` : 'this'
+      } session? This action will update the booking status.`,
+      [
+        {
+          text: 'Keep session',
+          style: 'cancel',
+        },
+        {
+          text: 'Cancel session',
+          style: 'destructive',
+          onPress: () => void updateBookingStatus(booking, 'cancelled'),
+        },
+      ],
+    );
+  }
+
+  // Swipe actions for trainer bookings.
+  function renderBookingSwipeActions(booking: Booking) {
+    const isPending = booking.status === 'pending';
+
+    const isConfirmed = booking.status === 'confirmed';
+
+    const canCancel =
+      isConfirmed &&
+      new Date(booking.scheduled_start).getTime() > now.getTime();
+
+    const canComplete =
+      isConfirmed &&
+      new Date(booking.scheduled_end).getTime() <= now.getTime();
+
+    const isUpdating = updatingBookingId === booking.id;
+
+    if (isPending) {
+      return (
+        <View
+          style={{
+            flexDirection: 'row',
+            marginLeft: spacing.sm,
+            borderRadius: 18,
+            overflow: 'hidden',
+          }}
+        >
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Decline booking"
+            disabled={isUpdating}
+            onPress={() => void updateBookingStatus(booking, 'declined')}
+            style={{
+              width: 112,
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: colors.background.secondary,
+              gap: spacing.sm,
+            }}
+          >
+            {isUpdating ? (
+              <ActivityIndicator color={colors.text.primary} />
+            ) : (
+              <MaterialCommunityIcons
+                name="calendar-remove"
+                size={28}
+                color={colors.text.primary}
+              />
+            )}
+
+            <AppText variant="button" color={colors.text.primary}>
+              Decline
+            </AppText>
+          </Pressable>
+
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Confirm booking"
+            disabled={isUpdating}
+            onPress={() => void updateBookingStatus(booking, 'confirmed')}
+            style={{
+              width: 112,
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: colors.brand.red,
+              gap: spacing.sm,
+            }}
+          >
+            {isUpdating ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <MaterialCommunityIcons
+                name="calendar-check"
+                size={28}
+                color="#FFFFFF"
+              />
+            )}
+
+            <AppText variant="button" color="#FFFFFF">
+              Confirm
+            </AppText>
+          </Pressable>
+        </View>
+      );
+    }
+
+    if (canCancel) {
+      return (
+        <View
+          style={{
+            marginLeft: spacing.sm,
+            borderRadius: 18,
+            overflow: 'hidden',
+          }}
+        >
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Cancel confirmed session"
+            disabled={isUpdating}
+            onPress={() => confirmSessionCancellation(booking)}
+            style={{
+              width: 120,
+              flex: 1,
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: colors.brand.red,
+              gap: spacing.sm,
+            }}
+          >
+            {isUpdating ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <MaterialCommunityIcons
+                name="calendar-remove"
+                size={28}
+                color="#FFFFFF"
+              />
+            )}
+
+            <AppText variant="button" color="#FFFFFF">
+              Cancel
+            </AppText>
+          </Pressable>
+        </View>
+      );
+    }
+
+    if (canComplete) {
+      return (
+        <View
+          style={{
+            marginLeft: spacing.sm,
+            borderRadius: 18,
+            overflow: 'hidden',
+          }}
+        >
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Complete session"
+            disabled={isUpdating}
+            onPress={() => {
+              Alert.alert(
+                'Complete session?',
+                'Confirm that this training session has taken place.',
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  {
+                    text: 'Complete session',
+                    onPress: () =>
+                      void updateBookingStatus(booking, 'completed'),
+                  },
+                ],
+              );
+            }}
+            style={{
+              width: 140,
+              flex: 1,
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: colors.brand.red,
+              gap: spacing.sm,
+            }}
+          >
+            {isUpdating ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <MaterialCommunityIcons
+                name="check-circle-outline"
+                size={28}
+                color="#FFFFFF"
+              />
+            )}
+
+            <AppText variant="button" color="#FFFFFF">
+              Complete
+            </AppText>
+          </Pressable>
+        </View>
+      );
+    }
+
+    return null;
   }
 
   function closeSessionNoteSheet() {
@@ -621,7 +897,9 @@ export default function ScheduleScreen() {
       booking.status !== 'completed' ||
       isSavingSessionNote ||
       !hasLoadedSessionNote
-    ) return;
+    ) {
+      return;
+    }
 
     if (!sessionSummary.trim()) {
       setSessionNoteError('Please enter a session summary before saving.');
@@ -684,10 +962,14 @@ export default function ScheduleScreen() {
   });
 
   const selectedSessionNoteBooking =
-    bookings.find((booking) => booking.id === expandedSessionNoteBookingId) ?? null;
+    bookings.find(
+      (booking) => booking.id === expandedSessionNoteBookingId,
+    ) ?? null;
 
   const selectedSessionNoteClientName = selectedSessionNoteBooking?.client
-    ? `${selectedSessionNoteBooking.client.first_name ?? ''} ${selectedSessionNoteBooking.client.last_name ?? ''}`.trim()
+    ? `${selectedSessionNoteBooking.client.first_name ?? ''} ${
+        selectedSessionNoteBooking.client.last_name ?? ''
+      }`.trim()
     : 'Client';
 
   return (
@@ -747,7 +1029,9 @@ export default function ScheduleScreen() {
                   paddingVertical: spacing.md,
                   borderRadius: 12,
                   borderWidth: 1,
-                  borderColor: selected ? colors.brand.red : colors.border.default,
+                  borderColor: selected
+                    ? colors.brand.red
+                    : colors.border.default,
                   backgroundColor: selected
                     ? colors.brand.red
                     : colors.background.secondary,
@@ -781,8 +1065,8 @@ export default function ScheduleScreen() {
             </AppText>
 
             <AppText variant="body" color={colors.text.secondary}>
-              Select the days you can train clients, then set your start and finish times.
-              Your changes are saved to your trainer profile.
+              Select the days you can train clients, then set your start and
+              finish times. Your changes are saved to your trainer profile.
             </AppText>
 
             {isLoading ? (
@@ -790,7 +1074,8 @@ export default function ScheduleScreen() {
             ) : (
               availabilityOptions.map((day) => {
                 const selected = availableDays.includes(day);
-                const window = weeklySchedule[day] ?? createDefaultTimeWindow();
+                const window =
+                  weeklySchedule[day] ?? createDefaultTimeWindow();
 
                 return (
                   <View key={day} style={{ gap: spacing.sm }}>
@@ -809,26 +1094,36 @@ export default function ScheduleScreen() {
                         paddingHorizontal: spacing.md,
                         borderRadius: 12,
                         borderWidth: 1,
-                        borderColor: selected ? colors.brand.red : colors.border.default,
+                        borderColor: selected
+                          ? colors.brand.red
+                          : colors.border.default,
                         backgroundColor: selected
                           ? colors.background.primary
                           : colors.background.secondary,
                         flexDirection: 'row',
                         alignItems: 'center',
                         justifyContent: 'space-between',
-                        opacity: isSavingAvailability ? 0.6 : pressed ? 0.8 : 1,
+                        opacity: isSavingAvailability
+                          ? 0.6
+                          : pressed
+                            ? 0.8
+                            : 1,
                       })}
                     >
                       <AppText
                         variant="body"
-                        color={selected ? colors.brand.red : colors.text.primary}
+                        color={
+                          selected ? colors.brand.red : colors.text.primary
+                        }
                       >
                         {day}
                       </AppText>
 
                       <AppText
                         variant="button"
-                        color={selected ? colors.brand.red : colors.text.tertiary}
+                        color={
+                          selected ? colors.brand.red : colors.text.tertiary
+                        }
                       >
                         {selected ? '✓' : '+'}
                       </AppText>
@@ -846,7 +1141,10 @@ export default function ScheduleScreen() {
                           gap: spacing.md,
                         }}
                       >
-                        <AppText variant="caption" color={colors.text.secondary}>
+                        <AppText
+                          variant="caption"
+                          color={colors.text.secondary}
+                        >
                           TRAINING HOURS
                         </AppText>
 
@@ -867,7 +1165,9 @@ export default function ScheduleScreen() {
                                 disabled: isSavingAvailability,
                               }}
                               disabled={isSavingAvailability}
-                              onPress={() => setActiveTimePicker({ day, field })}
+                              onPress={() =>
+                                setActiveTimePicker({ day, field })
+                              }
                               style={({ pressed }) => ({
                                 flex: 1,
                                 minHeight: 64,
@@ -884,11 +1184,19 @@ export default function ScheduleScreen() {
                                 opacity: pressed ? 0.75 : 1,
                               })}
                             >
-                              <AppText variant="caption" color={colors.text.secondary}>
-                                {field === 'start' ? 'START TIME' : 'END TIME'}
+                              <AppText
+                                variant="caption"
+                                color={colors.text.secondary}
+                              >
+                                {field === 'start'
+                                  ? 'START TIME'
+                                  : 'END TIME'}
                               </AppText>
 
-                              <AppText variant="h3" color={colors.text.primary}>
+                              <AppText
+                                variant="h3"
+                                color={colors.text.primary}
+                              >
                                 {formatTimeLabel(window[field])}
                               </AppText>
                             </Pressable>
@@ -899,7 +1207,9 @@ export default function ScheduleScreen() {
                         {activeTimePicker?.day === day ? (
                           <View style={{ alignItems: 'center' }}>
                             <DateTimePicker
-                              value={timeToDate(window[activeTimePicker.field])}
+                              value={timeToDate(
+                                window[activeTimePicker.field],
+                              )}
                               mode="time"
                               display="spinner"
                               onChange={handleTimePickerChange}
@@ -942,10 +1252,17 @@ export default function ScheduleScreen() {
             <Pressable
               accessibilityRole="button"
               accessibilityState={{
-                disabled: isLoading || isSavingAvailability || availableDays.length === 0,
+                disabled:
+                  isLoading ||
+                  isSavingAvailability ||
+                  availableDays.length === 0,
                 busy: isSavingAvailability,
               }}
-              disabled={isLoading || isSavingAvailability || availableDays.length === 0}
+              disabled={
+                isLoading ||
+                isSavingAvailability ||
+                availableDays.length === 0
+              }
               onPress={() => void saveAvailability()}
               style={({ pressed }) => ({
                 minHeight: 54,
@@ -954,7 +1271,9 @@ export default function ScheduleScreen() {
                 borderRadius: 14,
                 backgroundColor: colors.brand.red,
                 opacity:
-                  isLoading || isSavingAvailability || availableDays.length === 0
+                  isLoading ||
+                  isSavingAvailability ||
+                  availableDays.length === 0
                     ? 0.6
                     : pressed
                       ? 0.8
@@ -981,7 +1300,11 @@ export default function ScheduleScreen() {
                   const savedWindow = savedWeeklySchedule[day];
 
                   return (
-                    <AppText key={day} variant="bodySmall" color={colors.text.secondary}>
+                    <AppText
+                      key={day}
+                      variant="bodySmall"
+                      color={colors.text.secondary}
+                    >
                       {day}:{' '}
                       {savedWindow
                         ? `${formatTimeLabel(
@@ -1058,7 +1381,9 @@ export default function ScheduleScreen() {
             }}
           >
             <AppText variant="h3" color={colors.text.primary}>
-              {activeView === 'History' ? 'NO SESSION HISTORY' : 'NO UPCOMING SESSIONS'}
+              {activeView === 'History'
+                ? 'NO SESSION HISTORY'
+                : 'NO UPCOMING SESSIONS'}
             </AppText>
 
             <AppText
@@ -1080,13 +1405,27 @@ export default function ScheduleScreen() {
             </AppText>
 
             {visibleBookings.map((booking) => {
-              const clientName = [booking.client?.first_name, booking.client?.last_name]
+              const clientName = [
+                booking.client?.first_name,
+                booking.client?.last_name,
+              ]
                 .filter(Boolean)
                 .join(' ')
                 .trim();
 
-              const isPending = booking.status === 'pending';
-              const isUpdating = updatingBookingId === booking.id;
+              const canCancel =
+                booking.status === 'confirmed' &&
+                new Date(booking.scheduled_start).getTime() > now.getTime();
+
+              const canComplete =
+                booking.status === 'confirmed' &&
+                new Date(booking.scheduled_end).getTime() <= now.getTime();
+
+              // Keep pending swipe actions and add cancellation for upcoming
+              // confirmed sessions. Completed sessions retain their Complete action.
+              const canSwipe =
+                activeView === 'Upcoming' &&
+                (booking.status === 'pending' || canCancel || canComplete);
 
               const statusColors: Record<BookingStatus, string> = {
                 pending: '#D97706',
@@ -1099,237 +1438,208 @@ export default function ScheduleScreen() {
               const statusColor = statusColors[booking.status];
 
               return (
-                <View
+                <Swipeable
                   key={booking.id}
-                  style={{
-                    padding: spacing.lg,
-                    borderRadius: 18,
-                    borderWidth: 1,
-                    borderColor: colors.border.default,
-                    borderLeftWidth: 4,
-                    borderLeftColor: statusColor,
-                    backgroundColor: colors.background.secondary,
-                    gap: spacing.md,
+                  renderRightActions={() =>
+                    renderBookingSwipeActions(booking)
+                  }
+                  enabled={canSwipe && updatingBookingId === null}
+                  friction={2}
+                  rightThreshold={45}
+                  overshootRight={false}
+                  containerStyle={{
+                    overflow: 'visible',
                   }}
                 >
-                  {/* Client and status */}
                   <View
                     style={{
-                      flexDirection: 'row',
-                      alignItems: 'flex-start',
-                      justifyContent: 'space-between',
-                      gap: spacing.sm,
+                      padding: spacing.lg,
+                      borderRadius: 18,
+                      borderWidth: 1,
+                      borderColor: colors.border.default,
+                      borderLeftWidth: 4,
+                      borderLeftColor: statusColor,
+                      backgroundColor: colors.background.secondary,
+                      gap: spacing.md,
                     }}
                   >
-                    <View style={{ flex: 1, gap: spacing.xs }}>
-                      <AppText variant="caption" color={colors.brand.red}>
-                        TRAINR CLIENT
-                      </AppText>
-
-                      <AppText variant="h3" color={colors.text.primary}>
-                        {clientName || 'TRAINR Client'}
-                      </AppText>
-                    </View>
-
-                    <View
-                      style={{
-                        paddingHorizontal: spacing.sm,
-                        paddingVertical: spacing.xs,
-                        borderRadius: 8,
-                        borderWidth: 1,
-                        borderColor: statusColor,
-                        backgroundColor: colors.background.primary,
-                      }}
-                    >
-                      <AppText variant="caption" color={statusColor}>
-                        {STATUS_LABELS[booking.status].toUpperCase()}
-                      </AppText>
-                    </View>
-                  </View>
-
-                  {/* Session date and time in trainer timezone */}
-                  <View
-                    style={{
-                      padding: spacing.md,
-                      borderRadius: 12,
-                      backgroundColor: colors.background.primary,
-                      gap: spacing.xs,
-                    }}
-                  >
-                    <AppText variant="body" color={colors.text.primary}>
-                      {formatDate(booking.scheduled_start, trainerTimezone)}
-                    </AppText>
-
+                    {/* Client and status */}
                     <View
                       style={{
                         flexDirection: 'row',
-                        alignItems: 'center',
-                        flexWrap: 'wrap',
-                        gap: spacing.sm,
-                      }}
-                    >
-                      <AppText variant="h3" color={colors.brand.red}>
-                        {formatTime(booking.scheduled_start, trainerTimezone)}
-                      </AppText>
-
-                      <AppText variant="body" color={colors.text.tertiary}>
-                        –
-                      </AppText>
-
-                      <AppText variant="h3" color={colors.text.primary}>
-                        {formatTime(booking.scheduled_end, trainerTimezone)}
-                      </AppText>
-                    </View>
-                  </View>
-
-                  {/* Session fee */}
-                  <View
-                    style={{
-                      paddingTop: spacing.sm,
-                      borderTopWidth: 1,
-                      borderTopColor: colors.border.default,
-                      gap: spacing.xs,
-                    }}
-                  >
-                    <AppText variant="caption" color={colors.text.secondary}>
-                      SESSION FEE
-                    </AppText>
-
-                    <AppText variant="h3" color={colors.brand.red}>
-                      {formatMoney(Number(booking.session_rate), booking.currency)}
-                    </AppText>
-                  </View>
-
-                  {booking.notes ? (
-                    <AppText variant="body" color={colors.text.secondary}>
-                      Notes: {booking.notes}
-                    </AppText>
-                  ) : null}
-
-                  {/* Private trainer session notes */}
-                  {booking.status === 'completed' && activeView === 'History' ? (
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel="Add or edit private session notes"
-                      onPress={() => void toggleSessionNoteEditor(booking)}
-                      style={({ pressed }) => ({
-                        minHeight: 48,
-                        flexDirection: 'row',
-                        alignItems: 'center',
+                        alignItems: 'flex-start',
                         justifyContent: 'space-between',
-                        paddingHorizontal: spacing.md,
-                        borderRadius: 12,
-                        borderWidth: 1,
-                        borderColor: colors.border.default,
-                        backgroundColor: colors.background.primary,
-                        opacity: pressed ? 0.75 : 1,
-                      })}
-                    >
-                      <AppText variant="button" color={colors.brand.red}>
-                        Session notes
-                      </AppText>
-                      <AppText variant="caption" color={colors.text.secondary}>
-                        Add / Edit
-                      </AppText>
-                    </Pressable>
-                  ) : null}
-
-                  {/* Pending booking actions */}
-                  {isPending && activeView === 'Upcoming' ? (
-                    <View
-                      style={{
-                        flexDirection: 'row',
                         gap: spacing.sm,
                       }}
                     >
+                      <View style={{ flex: 1, gap: spacing.xs }}>
+                        <AppText variant="caption" color={colors.brand.red}>
+                          TRAINR CLIENT
+                        </AppText>
+
+                        <AppText variant="h3" color={colors.text.primary}>
+                          {clientName || 'TRAINR Client'}
+                        </AppText>
+                      </View>
+
+                      <View
+                        style={{
+                          paddingHorizontal: spacing.sm,
+                          paddingVertical: spacing.xs,
+                          borderRadius: 8,
+                          borderWidth: 1,
+                          borderColor: statusColor,
+                          backgroundColor: colors.background.primary,
+                        }}
+                      >
+                        <AppText variant="caption" color={statusColor}>
+                          {STATUS_LABELS[booking.status].toUpperCase()}
+                        </AppText>
+                      </View>
+                    </View>
+
+                    {/* Session date and time in trainer timezone */}
+                    <View
+                      style={{
+                        padding: spacing.md,
+                        borderRadius: 12,
+                        backgroundColor: colors.background.primary,
+                        gap: spacing.xs,
+                      }}
+                    >
+                      <AppText variant="body" color={colors.text.primary}>
+                        {formatDate(
+                          booking.scheduled_start,
+                          trainerTimezone,
+                        )}
+                      </AppText>
+
+                      <View
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          flexWrap: 'wrap',
+                          gap: spacing.sm,
+                        }}
+                      >
+                        <AppText variant="h3" color={colors.brand.red}>
+                          {formatTime(
+                            booking.scheduled_start,
+                            trainerTimezone,
+                          )}
+                        </AppText>
+
+                        <AppText
+                          variant="body"
+                          color={colors.text.tertiary}
+                        >
+                          –
+                        </AppText>
+
+                        <AppText variant="h3" color={colors.text.primary}>
+                          {formatTime(
+                            booking.scheduled_end,
+                            trainerTimezone,
+                          )}
+                        </AppText>
+                      </View>
+                    </View>
+
+                    {/* Session fee */}
+                    <View
+                      style={{
+                        paddingTop: spacing.sm,
+                        borderTopWidth: 1,
+                        borderTopColor: colors.border.default,
+                        gap: spacing.xs,
+                      }}
+                    >
+                      <AppText
+                        variant="caption"
+                        color={colors.text.secondary}
+                      >
+                        SESSION FEE
+                      </AppText>
+
+                      <AppText variant="h3" color={colors.brand.red}>
+                        {formatMoney(
+                          Number(booking.session_rate),
+                          booking.currency,
+                        )}
+                      </AppText>
+                    </View>
+
+                    {booking.notes ? (
+                      <AppText variant="body" color={colors.text.secondary}>
+                        Notes: {booking.notes}
+                      </AppText>
+                    ) : null}
+
+                    {/* Private trainer session notes */}
+                    {booking.status === 'completed' &&
+                    activeView === 'History' ? (
                       <Pressable
                         accessibilityRole="button"
-                        accessibilityLabel="Decline booking"
-                        disabled={isUpdating}
-                        onPress={() => void updateBookingStatus(booking, 'declined')}
+                        accessibilityLabel="Add or edit private session notes"
+                        onPress={() =>
+                          void toggleSessionNoteEditor(booking)
+                        }
                         style={({ pressed }) => ({
-                          flex: 1,
                           minHeight: 48,
+                          flexDirection: 'row',
                           alignItems: 'center',
-                          justifyContent: 'center',
+                          justifyContent: 'space-between',
+                          paddingHorizontal: spacing.md,
                           borderRadius: 12,
                           borderWidth: 1,
                           borderColor: colors.border.default,
-                          opacity: isUpdating ? 0.6 : pressed ? 0.8 : 1,
+                          backgroundColor: colors.background.primary,
+                          opacity: pressed ? 0.75 : 1,
                         })}
                       >
-                        <AppText variant="button" color={colors.text.primary}>
-                          Decline
+                        <AppText
+                          variant="button"
+                          color={colors.brand.red}
+                        >
+                          Session notes
+                        </AppText>
+
+                        <AppText
+                          variant="caption"
+                          color={colors.text.secondary}
+                        >
+                          Add / Edit
                         </AppText>
                       </Pressable>
+                    ) : null}
 
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel="Confirm booking"
-                        disabled={isUpdating}
-                        onPress={() => void updateBookingStatus(booking, 'confirmed')}
-                        style={({ pressed }) => ({
-                          flex: 1,
-                          minHeight: 48,
+                    {/* Swipe hint */}
+                    {canSwipe ? (
+                      <View
+                        style={{
+                          flexDirection: 'row',
                           alignItems: 'center',
                           justifyContent: 'center',
-                          borderRadius: 12,
-                          backgroundColor: colors.brand.red,
-                          opacity: isUpdating ? 0.6 : pressed ? 0.8 : 1,
-                        })}
+                          gap: spacing.xs,
+                          paddingTop: spacing.xs,
+                        }}
                       >
-                        {isUpdating ? (
-                          <ActivityIndicator color="#FFFFFF" />
-                        ) : (
-                          <AppText variant="button" color="#FFFFFF">
-                            Confirm
-                          </AppText>
-                        )}
-                      </Pressable>
-                    </View>
-                  ) : null}
+                        <MaterialCommunityIcons
+                          name="gesture-swipe-left"
+                          size={17}
+                          color={colors.text.secondary}
+                        />
 
-                  {/* Complete confirmed sessions after their scheduled end time */}
-                  {booking.status === 'confirmed' &&
-                  activeView === 'Upcoming' &&
-                  new Date(booking.scheduled_end).getTime() <= now.getTime() ? (
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel="Mark session as completed"
-                      disabled={isUpdating}
-                      onPress={() => {
-                        Alert.alert(
-                          'Complete session?',
-                          'Confirm that this training session has taken place.',
-                          [
-                            { text: 'Cancel', style: 'cancel' },
-                            {
-                              text: 'Complete session',
-                              onPress: () =>
-                                void updateBookingStatus(booking, 'completed'),
-                            },
-                          ],
-                        );
-                      }}
-                      style={({ pressed }) => ({
-                        minHeight: 48,
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        borderRadius: 12,
-                        backgroundColor: colors.brand.red,
-                        opacity: isUpdating ? 0.6 : pressed ? 0.8 : 1,
-                      })}
-                    >
-                      {isUpdating ? (
-                        <ActivityIndicator color="#FFFFFF" />
-                      ) : (
-                        <AppText variant="button" color="#FFFFFF">
-                          Complete session
+                        <AppText
+                          variant="caption"
+                          color={colors.text.secondary}
+                        >
+                          Swipe left to manage this session
                         </AppText>
-                      )}
-                    </Pressable>
-                  ) : null}
-                </View>
+                      </View>
+                    ) : null}
+                  </View>
+                </Swipeable>
               );
             })}
           </View>
@@ -1370,7 +1680,10 @@ export default function ScheduleScreen() {
         title={sessionNote ? 'Edit session notes' : 'Add session notes'}
         subtitle={
           selectedSessionNoteBooking
-            ? `${selectedSessionNoteClientName} · ${formatDate(selectedSessionNoteBooking.scheduled_start, trainerTimezone)}`
+            ? `${selectedSessionNoteClientName} · ${formatDate(
+                selectedSessionNoteBooking.scheduled_start,
+                trainerTimezone,
+              )}`
             : 'Private coaching record'
         }
         scrollable
@@ -1391,7 +1704,9 @@ export default function ScheduleScreen() {
                 }
               }}
             >
-              {sessionNote ? 'Update session notes' : 'Save session notes'}
+              {sessionNote
+                ? 'Update session notes'
+                : 'Save session notes'}
             </Button>
 
             <Button
@@ -1417,8 +1732,10 @@ export default function ScheduleScreen() {
             <AppText variant="label" color={colors.text.primary}>
               PRIVATE COACHING NOTES
             </AppText>
+
             <AppText variant="caption" color={colors.text.secondary}>
-              Only you can access these notes. They are not shared with the client.
+              Only you can access these notes. They are not shared with the
+              client.
             </AppText>
           </View>
 
@@ -1432,7 +1749,11 @@ export default function ScheduleScreen() {
               }}
             >
               <ActivityIndicator color={colors.brand.red} />
-              <AppText variant="caption" color={colors.text.secondary}>
+
+              <AppText
+                variant="caption"
+                color={colors.text.secondary}
+              >
                 Loading session notes...
               </AppText>
             </View>
@@ -1441,11 +1762,14 @@ export default function ScheduleScreen() {
               <AppText variant="body" color={colors.brand.red}>
                 {sessionNoteError}
               </AppText>
+
               {selectedSessionNoteBooking ? (
                 <Button
                   fullWidth
                   variant="outline"
-                  onPress={() => void loadSessionNote(selectedSessionNoteBooking)}
+                  onPress={() =>
+                    void loadSessionNote(selectedSessionNoteBooking)
+                  }
                 >
                   Retry loading notes
                 </Button>
@@ -1457,6 +1781,7 @@ export default function ScheduleScreen() {
                 <AppText variant="label" color={colors.text.primary}>
                   Session summary *
                 </AppText>
+
                 <TextInput
                   value={sessionSummary}
                   onChangeText={(value) => {
@@ -1486,6 +1811,7 @@ export default function ScheduleScreen() {
                 <AppText variant="label" color={colors.text.primary}>
                   Observations
                 </AppText>
+
                 <TextInput
                   value={sessionObservations}
                   onChangeText={setSessionObservations}
@@ -1512,6 +1838,7 @@ export default function ScheduleScreen() {
                 <AppText variant="label" color={colors.text.primary}>
                   Recommendations
                 </AppText>
+
                 <TextInput
                   value={sessionRecommendations}
                   onChangeText={setSessionRecommendations}

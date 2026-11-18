@@ -140,6 +140,11 @@ export default function HomeTabScreen() {
   const { colors, spacing, mode } = useTrainrTheme();
   const { user } = useAuth();
 
+  const firstName =
+    typeof user?.user_metadata?.first_name === 'string'
+      ? user.user_metadata.first_name.trim()
+      : 'TRAINR';
+
   const [weightRecords, setWeightRecords] = useState<FitnessProgress[]>([]);
   const [isLoadingWeight, setIsLoadingWeight] = useState(true);
   const [weightError, setWeightError] = useState<string | null>(null);
@@ -264,12 +269,12 @@ export default function HomeTabScreen() {
             YOUR NEXT CHAPTER
           </AppText>
 
-          <AppText variant="displayLarge" color={colors.text.primary}>
-            WELCOME
+          <AppText variant="displayMedium" color={colors.text.primary}>
+            WELCOME BACK
           </AppText>
 
-          <AppText variant="displayLarge" color={colors.brand.red}>
-            BACK.
+          <AppText variant="displayMedium" color={colors.brand.red}>
+            {firstName.toUpperCase()}.
           </AppText>
 
           <AppText
