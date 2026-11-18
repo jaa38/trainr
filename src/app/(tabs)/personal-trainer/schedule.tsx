@@ -17,14 +17,14 @@ import { BottomSheet } from '@/components/BottomSheet';
 import { Button } from '@/components/Button';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/providers/AuthProvider';
+import { useTrainrTheme } from '@/theme';
+import { formatCurrency } from '@/utils/formatCurrency';
 import {
   createTrainerSessionNote,
   getTrainerSessionNote,
   updateTrainerSessionNote,
   type TrainerSessionNote,
 } from '@/services/trainer-session-notes';
-import { useTrainrTheme } from '@/theme';
-import { formatCurrency } from '@/utils/formatCurrency';
 
 type ScheduleView = 'Upcoming' | 'Availability' | 'History';
 
@@ -168,9 +168,8 @@ export default function ScheduleScreen() {
   const [availabilityError, setAvailabilityError] = useState<string | null>(null);
   const [updatingBookingId, setUpdatingBookingId] = useState<string | null>(null);
 
-  const [expandedSessionNoteBookingId, setExpandedSessionNoteBookingId] = useState<
-    string | null
-  >(null);
+  const [expandedSessionNoteBookingId, setExpandedSessionNoteBookingId] =
+    useState<string | null>(null);
   const [sessionNote, setSessionNote] = useState<TrainerSessionNote | null>(null);
   const [sessionSummary, setSessionSummary] = useState('');
   const [sessionObservations, setSessionObservations] = useState('');
@@ -618,8 +617,11 @@ export default function ScheduleScreen() {
   }
 
   async function saveSessionNote(booking: Booking) {
-    if (booking.status !== 'completed' || isSavingSessionNote || !hasLoadedSessionNote)
-      return;
+    if (
+      booking.status !== 'completed' ||
+      isSavingSessionNote ||
+      !hasLoadedSessionNote
+    ) return;
 
     if (!sessionSummary.trim()) {
       setSessionNoteError('Please enter a session summary before saving.');
@@ -1379,7 +1381,9 @@ export default function ScheduleScreen() {
               fullWidth
               loading={isSavingSessionNote}
               disabled={
-                !hasLoadedSessionNote || !sessionSummary.trim() || isLoadingSessionNote
+                !hasLoadedSessionNote ||
+                !sessionSummary.trim() ||
+                isLoadingSessionNote
               }
               onPress={() => {
                 if (selectedSessionNoteBooking) {

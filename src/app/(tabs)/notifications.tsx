@@ -1,3 +1,4 @@
+
 import { useFocusEffect, useRouter, type Href } from 'expo-router';
 import { ArrowLeft, Bell, CheckCheck, Inbox } from 'lucide-react-native';
 import { useCallback, useState } from 'react';
@@ -14,7 +15,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppText } from '@/components/AppText';
 import { Button } from '@/components/Button';
 import { useAuth } from '@/providers/AuthProvider';
-import { AppNotification, NotificationPage, getNotifications, getUnreadNotificationCount, markAllNotificationsAsRead, markNotificationAsRead } from '@/services/notifications/notification-history';
+import {
+  AppNotification,
+  NotificationPage,
+  getNotifications,
+  getUnreadNotificationCount,
+  markAllNotificationsAsRead,
+  markNotificationAsRead,
+} from '@/services/notifications/notification-history';
 import { resolveNotificationRoute } from '@/services/notifications/notification-navigation';
 import { useTrainrTheme } from '@/theme';
 
@@ -130,34 +138,31 @@ export default function NotificationsScreen() {
     }
   }, [isLoadingMore, nextPage]);
 
-  const handleMarkAsRead = useCallback(
-    async (notification: AppNotification) => {
-      if (notification.is_read) {
-        return;
-      }
+  const handleMarkAsRead = useCallback(async (notification: AppNotification) => {
+    if (notification.is_read) {
+      return;
+    }
 
-      try {
-        await markNotificationAsRead(notification.id);
+    try {
+      await markNotificationAsRead(notification.id);
 
-        setNotifications((current) =>
-          current.map((item) =>
-            item.id === notification.id
-              ? { ...item, is_read: true, read_at: new Date().toISOString() }
-              : item,
-          ),
-        );
+      setNotifications((current) =>
+        current.map((item) =>
+          item.id === notification.id
+            ? { ...item, is_read: true, read_at: new Date().toISOString() }
+            : item,
+        ),
+      );
 
-        setUnreadCount((current) => Math.max(0, current - 1));
-      } catch (error) {
-        console.error('[Notifications] Unable to mark notification as read:', error);
-        Alert.alert(
-          'Update failed',
-          'We could not update this notification. Please try again.',
-        );
-      }
-    },
-    [],
-  );
+      setUnreadCount((current) => Math.max(0, current - 1));
+    } catch (error) {
+      console.error('[Notifications] Unable to mark notification as read:', error);
+      Alert.alert(
+        'Update failed',
+        'We could not update this notification. Please try again.',
+      );
+    }
+  }, []);
 
   const handleOpenNotification = useCallback(
     async (notification: AppNotification) => {
@@ -237,7 +242,7 @@ export default function NotificationsScreen() {
       <Pressable
         key={notification.id}
         accessibilityRole="button"
-        accessibilityLabel={`${notification.title}. ${notification.body}. ${unread ? 'Unread' : 'Read'}.`}
+        accessibilityLabel={`${notification.title}. ${notification.body.trim().replace(/[.!?]+$/, '')}. ${unread ? 'Unread' : 'Read'}.`}
         accessibilityState={{ selected: unread }}
         onPress={() => void handleOpenNotification(notification)}
         style={({ pressed }) => ({
@@ -353,6 +358,7 @@ export default function NotificationsScreen() {
       </View>
 
       <ScrollView
+        testID="notifications-scroll-view"
         contentContainerStyle={{
           flexGrow: 1,
           paddingBottom: spacing.xxl,
@@ -391,7 +397,9 @@ export default function NotificationsScreen() {
               <AppText variant="bodySmall" color={colors.text.secondary}>
                 {unreadCount === 0
                   ? 'You are all caught up.'
-                  : `${unreadCount} unread ${unreadCount === 1 ? 'notification' : 'notifications'}`}
+                  : `${unreadCount} unread ${
+                      unreadCount === 1 ? 'notification' : 'notifications'
+                    }`}
               </AppText>
             </View>
 
@@ -400,9 +408,7 @@ export default function NotificationsScreen() {
                 variant="ghost"
                 size="small"
                 onPress={() => void handleMarkAllAsRead()}
-                leftIcon={
-                  <CheckCheck size={16} color={colors.brand.red} />
-                }
+                leftIcon={<CheckCheck size={16} color={colors.brand.red} />}
               >
                 Mark all read
               </Button>
@@ -436,7 +442,11 @@ export default function NotificationsScreen() {
               gap: spacing.md,
             }}
           >
-            <AppText variant="bodyMedium" color={colors.text.primary} align="center">
+            <AppText
+              variant="bodyMedium"
+              color={colors.text.primary}
+              align="center"
+            >
               {errorMessage}
             </AppText>
 

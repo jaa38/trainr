@@ -447,7 +447,7 @@ export default function HomeTabScreen() {
         </View>
 
         {/* Fitness Feature Card */}
-        <View
+        {/* <View
           style={{
             padding: spacing.lg,
             borderRadius: 20,
@@ -493,7 +493,7 @@ export default function HomeTabScreen() {
               KEEP MOVING
             </AppText>
           </View>
-        </View>
+        </View> */}
 
         {/* Sign Out Section */}
         <View

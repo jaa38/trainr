@@ -1,5 +1,5 @@
-import { useCallback, useState } from 'react';
 import { useFocusEffect, useRouter } from 'expo-router';
+import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -17,6 +17,8 @@ import {
   type TrainerDashboardData,
 } from '@/services/trainer-dashboard';
 import { useTrainrTheme } from '@/theme';
+
+import { ArrowRight } from 'lucide-react-native';
 
 const EMPTY_DASHBOARD: TrainerDashboardData = {
   metrics: {
@@ -68,8 +70,7 @@ export default function PersonalTrainerHomeScreen() {
   const router = useRouter();
   const { colors, spacing, mode } = useTrainrTheme();
 
-  const [dashboard, setDashboard] =
-    useState<TrainerDashboardData>(EMPTY_DASHBOARD);
+  const [dashboard, setDashboard] = useState<TrainerDashboardData>(EMPTY_DASHBOARD);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -172,11 +173,7 @@ export default function PersonalTrainerHomeScreen() {
         </AppText>
 
         {action && onPress ? (
-          <Pressable
-            accessibilityRole="button"
-            onPress={onPress}
-            hitSlop={8}
-          >
+          <Pressable accessibilityRole="button" onPress={onPress} hitSlop={8}>
             <AppText variant="caption" color={colors.brand.red}>
               {action}
             </AppText>
@@ -243,8 +240,8 @@ export default function PersonalTrainerHomeScreen() {
 
             <Image
               source={appIcon}
-            accessibilityLabel="TRAINR app icon"
-            resizeMode="contain"
+              accessibilityLabel="TRAINR app icon"
+              resizeMode="contain"
               style={{ width: 52, height: 52, borderRadius: 12 }}
             />
           </View>
@@ -263,8 +260,8 @@ export default function PersonalTrainerHomeScreen() {
             YOUR DASHBOARD.
           </AppText>
           <AppText variant="body" color={colors.text.secondary}>
-            Manage your clients, organise your sessions and track training
-            progress from one place.
+            Manage your clients, organise your sessions and track training progress from
+            one place.
           </AppText>
         </View>
 
@@ -347,9 +344,7 @@ export default function PersonalTrainerHomeScreen() {
           <SectionHeading
             title="UPCOMING SESSIONS"
             action="View schedule"
-            onPress={() =>
-              navigateTo('/(tabs)/personal-trainer/schedule')
-            }
+            onPress={() => navigateTo('/(tabs)/personal-trainer/schedule')}
           />
 
           {dashboard.upcomingSessions.length === 0 ? (
@@ -377,9 +372,7 @@ export default function PersonalTrainerHomeScreen() {
                   key={session.id}
                   accessibilityRole="button"
                   accessibilityLabel={`View schedule for ${session.client_name}`}
-                  onPress={() =>
-                    navigateTo('/(tabs)/personal-trainer/schedule')
-                  }
+                  onPress={() => navigateTo('/(tabs)/personal-trainer/schedule')}
                   style={({ pressed }) => ({
                     flexDirection: 'row',
                     alignItems: 'center',
@@ -397,25 +390,16 @@ export default function PersonalTrainerHomeScreen() {
                       {session.client_name}
                     </AppText>
                     <AppText variant="caption" color={colors.text.secondary}>
-                      {formatSessionDate(
-                        session.scheduled_start,
-                        dashboard.timezone,
-                      )}
+                      {formatSessionDate(session.scheduled_start, dashboard.timezone)}
                     </AppText>
                   </View>
 
                   <View style={{ alignItems: 'flex-end', gap: spacing.xs }}>
                     <AppText variant="bodyMedium" color={colors.brand.red}>
-                      {formatSessionTime(
-                        session.scheduled_start,
-                        dashboard.timezone,
-                      )}
+                      {formatSessionTime(session.scheduled_start, dashboard.timezone)}
                     </AppText>
                     <AppText variant="caption" color={colors.text.tertiary}>
-                      {formatSessionTime(
-                        session.scheduled_end,
-                        dashboard.timezone,
-                      )}
+                      {formatSessionTime(session.scheduled_end, dashboard.timezone)}
                     </AppText>
                   </View>
                 </Pressable>
@@ -429,9 +413,7 @@ export default function PersonalTrainerHomeScreen() {
           <SectionHeading
             title="RECENT WORKOUTS"
             action="View clients"
-            onPress={() =>
-              navigateTo('/(tabs)/personal-trainer/clients')
-            }
+            onPress={() => navigateTo('/(tabs)/personal-trainer/clients')}
           />
 
           {dashboard.recentWorkouts.length === 0 ? (
@@ -471,10 +453,7 @@ export default function PersonalTrainerHomeScreen() {
                     </AppText>
                   )}
                   <AppText variant="caption" color={colors.text.secondary}>
-                    {formatActivityDate(
-                      workout.started_at,
-                      dashboard.timezone,
-                    )}
+                    {formatActivityDate(workout.started_at, dashboard.timezone)}
                     {workout.duration_minutes
                       ? ` · ${workout.duration_minutes} minutes`
                       : ''}
@@ -503,8 +482,7 @@ export default function PersonalTrainerHomeScreen() {
               }}
             >
               <AppText variant="bodySmall" color={colors.text.secondary}>
-                Recent fitness measurements from your confirmed clients will
-                appear here.
+                Recent fitness measurements from your confirmed clients will appear here.
               </AppText>
             </View>
           ) : (
@@ -566,41 +544,38 @@ export default function PersonalTrainerHomeScreen() {
               <Pressable
                 key={action.route}
                 accessibilityRole="button"
+                accessibilityLabel={`Navigate to ${action.label.toLowerCase()}`}
                 onPress={() => navigateTo(action.route)}
                 style={({ pressed }) => ({
+                  minHeight: 68,
+                  flexDirection: 'row',
+                  alignItems: 'center',
                   padding: spacing.lg,
-                  borderRadius: 14,
+                  gap: spacing.md,
+                  borderRadius: 16,
                   borderWidth: 1,
                   borderColor: colors.border.default,
                   backgroundColor: colors.background.secondary,
-                  flexDirection: 'row',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
                   opacity: pressed ? 0.75 : 1,
                 })}
               >
                 <View style={{ flex: 1, gap: spacing.xs }}>
-                  <AppText variant="bodyMedium" color={colors.text.primary}>
+                  <AppText variant="h3" color={colors.text.primary}>
                     {action.label}
                   </AppText>
-                  <AppText variant="caption" color={colors.text.secondary}>
+
+                  <AppText variant="bodySmall" color={colors.text.secondary}>
                     {action.description}
                   </AppText>
                 </View>
-                <AppText variant="h3" color={colors.brand.red}>
-                  ↗
-                </AppText>
+
+                <ArrowRight size={20} color={colors.text.secondary} />
               </Pressable>
             ))}
           </View>
         </View>
 
-
-        <AppText
-          variant="caption"
-          color={colors.text.tertiary}
-          align="center"
-        >
+        <AppText variant="caption" color={colors.text.tertiary} align="center">
           TRAINR · TRAIN SMARTER. PERFORM BETTER.
         </AppText>
       </ScrollView>

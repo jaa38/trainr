@@ -1,8 +1,8 @@
-import { supabase } from '@/lib/supabase';
-import { getNotificationDeviceId } from '../notifications/notification-permissions';
-import { removeCurrentDevicePushToken } from '../notifications/notification-cleanup';
+import { supabase } from "@/lib/supabase";
+import { removeCurrentDevicePushToken } from "../notifications/notification-cleanup";
+import { getNotificationDeviceId } from "../notifications/notification-permissions";
 
-jest.mock('@/lib/supabase', () => ({
+jest.mock("@/lib/supabase", () => ({
   supabase: {
     auth: {
       getUser: jest.fn(),
@@ -11,7 +11,7 @@ jest.mock('@/lib/supabase', () => ({
   },
 }));
 
-jest.mock('../notifications/notification-permissions', () => ({
+jest.mock("../notifications/notification-permissions", () => ({
   getNotificationDeviceId: jest.fn(),
 }));
 
@@ -21,8 +21,8 @@ const mockedGetNotificationDeviceId = jest.mocked(
   getNotificationDeviceId,
 );
 
-const expectedUserId = 'user-123';
-const deviceId = 'device-456';
+const expectedUserId = "user-123";
+const deviceId = "device-456";
 
 function mockAuthenticatedUser(userId: string) {
   mockedGetUser.mockResolvedValue({
@@ -31,8 +31,8 @@ function mockAuthenticatedUser(userId: string) {
         id: userId,
         app_metadata: {},
         user_metadata: {},
-        aud: 'authenticated',
-        created_at: '2026-01-01T00:00:00.000Z',
+        aud: "authenticated",
+        created_at: "2026-01-01T00:00:00.000Z",
       },
     },
     error: null,
@@ -56,7 +56,7 @@ function mockDeleteQuery(response: { error: unknown }) {
   return query;
 }
 
-describe('removeCurrentDevicePushToken', () => {
+describe("removeCurrentDevicePushToken", () => {
   beforeEach(() => {
     jest.clearAllMocks();
 
@@ -64,28 +64,28 @@ describe('removeCurrentDevicePushToken', () => {
     mockAuthenticatedUser(expectedUserId);
   });
 
-  it('deletes only the authenticated user’s current device registration', async () => {
+  it("deletes only the authenticated user’s current device registration", async () => {
     const query = mockDeleteQuery({ error: null });
 
     await expect(
       removeCurrentDevicePushToken(expectedUserId),
     ).resolves.toBeUndefined();
 
-    expect(mockedFrom).toHaveBeenCalledWith('device_push_tokens');
+    expect(mockedFrom).toHaveBeenCalledWith("device_push_tokens");
     expect(query.delete).toHaveBeenCalledTimes(1);
     expect(query.eq).toHaveBeenNthCalledWith(
       1,
-      'user_id',
+      "user_id",
       expectedUserId,
     );
     expect(query.eq).toHaveBeenNthCalledWith(
       2,
-      'device_id',
+      "device_id",
       deviceId,
     );
   });
 
-  it('skips deletion when the device identifier is unavailable', async () => {
+  it("skips deletion when the device identifier is unavailable", async () => {
     mockedGetNotificationDeviceId.mockResolvedValue(null);
 
     await expect(
@@ -96,25 +96,38 @@ describe('removeCurrentDevicePushToken', () => {
     expect(mockedFrom).not.toHaveBeenCalled();
   });
 
-  it('aborts cleanup when the authenticated user does not match', async () => {
-    mockAuthenticatedUser('different-user');
+  it("aborts cleanup when the authenticated user does not match", async () => {
+    mockAuthenticatedUser("different-user");
 
     await expect(
       removeCurrentDevicePushToken(expectedUserId),
     ).rejects.toThrow(
-      'Authenticated user does not match the expected user. Token cleanup aborted.',
+      "Authenticated user does not match the expected user. Token cleanup aborted.",
     );
 
     expect(mockedFrom).not.toHaveBeenCalled();
   });
 
-  it('propagates Supabase deletion errors', async () => {
-    const deletionError = new Error('Permission denied');
+  it("propagates Supabase deletion errors", async () => {
+    const deletionError = new Error("Permission denied");
 
     mockDeleteQuery({ error: deletionError });
 
     await expect(
       removeCurrentDevicePushToken(expectedUserId),
-    ).rejects.toThrow('Permission denied');
+    ).rejects.toThrow("Permission denied");
+  });
+
+  it("propagates authentication errors and skips deletion", async () => {
+    mockedGetUser.mockResolvedValue({
+      data: { user: null },
+      error: new Error("Authentication unavailable"),
+    } as never);
+
+    await expect(
+      removeCurrentDevicePushToken(expectedUserId),
+    ).rejects.toThrow("Authentication unavailable");
+
+    expect(mockedFrom).not.toHaveBeenCalled();
   });
 });

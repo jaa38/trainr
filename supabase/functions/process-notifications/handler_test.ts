@@ -19,12 +19,32 @@ function createNotification(overrides = {}) {
   };
 }
 
+type DeliveryStatus =
+  | "pending"
+  | "accepted"
+  | "retryable_failure"
+  | "permanent_failure"
+  | "invalid";
+
+type DeliveryRecord = {
+  id: string;
+  notification_id: string;
+  device_push_token_id: string | null;
+  status: DeliveryStatus;
+  attempt_count: number;
+  expo_ticket_id: string | null;
+  last_error: string | null;
+  last_attempt_at: string | null;
+  accepted_at: string | null;
+};
+
 function createDependencies(options: {
   notifications?: unknown[];
   preferences?: Record<string, unknown> | null;
   payment?: { status: string; superseded_by: string | null } | null;
   paymentError?: string;
   tokens?: { id: string; expo_push_token: string }[];
+  deliveryRecords?: DeliveryRecord[];
   rpcError?: string;
   completionRpcError?: string;
   lockRenewalResult?: boolean;
@@ -32,6 +52,8 @@ function createDependencies(options: {
   lockRenewalErrorOnFirstCall?: string;
   historyError?: string;
   fetchResponse?: Response;
+  fetchResponses?: Response[];
+  fetchError?: string;
 } = {}) {
   const calls: { name: string; args: unknown }[] = [];
   const updates: { table: string; values: unknown }[] = [];
@@ -43,6 +65,41 @@ function createDependencies(options: {
   }[] = [];
 
   const fetchCalls: { url: string; messages: unknown[] }[] = [];
+
+  // Persistent in-memory representation of notification_deliveries.
+  const deliveryRecords: DeliveryRecord[] = [
+    ...(options.deliveryRecords ?? []).map((record) => ({ ...record })),
+  ];
+
+  let fetchResponseIndex = 0;
+  let nextDeliveryId = 1;
+
+  const matchesFilters = (
+    record: Record<string, unknown>,
+    filters: {
+      column: string;
+      operator: string;
+      value: unknown;
+    }[],
+  ) => {
+    return filters.every(({ column, operator, value }) => {
+      const actual = record[column];
+
+      switch (operator) {
+        case "eq":
+          return actual === value;
+        case "in":
+          return Array.isArray(value) && value.includes(actual);
+        case "is":
+          return actual === value;
+        case "not":
+          if (value === "is.null") return actual !== null;
+          return true;
+        default:
+          return true;
+      }
+    });
+  };
 
   const client = {
     rpc: async (name: string, args: unknown) => {
@@ -105,29 +162,72 @@ function createDependencies(options: {
 
     from: (table: string) => {
       let operation = "select";
+      let operationValues: Record<string, unknown> = {};
+      let upsertOptions: Record<string, unknown> = {};
+      let hasSelectAfterMutation = false;
+
+      const filters: {
+        column: string;
+        operator: string;
+        value: unknown;
+      }[] = [];
 
       const query: any = {
-        select: () => query,
+        select: () => {
+          if (operation === "update" || operation === "upsert") {
+            hasSelectAfterMutation = true;
+          }
+          return query;
+        },
 
         update: (values: unknown) => {
           operation = "update";
+          operationValues = values as Record<string, unknown>;
           updates.push({ table, values });
           return query;
         },
 
-        upsert: (values: unknown, upsertOptions: unknown) => {
+        upsert: (values: unknown, suppliedOptions: unknown) => {
           operation = "upsert";
+          operationValues = values as Record<string, unknown>;
+          upsertOptions = (suppliedOptions ?? {}) as Record<string, unknown>;
 
-          historyWrites.push({
-            table,
-            values,
-            options: upsertOptions,
-          });
+          // Only count notification-history writes. Delivery records are
+          // tracked separately in the in-memory deliveryRecords collection.
+          if (table === "notifications") {
+            historyWrites.push({
+              table,
+              values,
+              options: suppliedOptions,
+            });
+          }
 
           return query;
         },
 
-        eq: () => query,
+        eq: (column: string, value: unknown) => {
+          filters.push({ column, operator: "eq", value });
+          return query;
+        },
+
+        in: (column: string, value: unknown[]) => {
+          filters.push({ column, operator: "in", value });
+          return query;
+        },
+
+        is: (column: string, value: unknown) => {
+          filters.push({ column, operator: "is", value });
+          return query;
+        },
+
+        not: (column: string, operator: string, value: unknown) => {
+          filters.push({
+            column,
+            operator: "not",
+            value: `${operator}.${String(value)}`,
+          });
+          return query;
+        },
 
         maybeSingle: async () => {
           if (table === "booking_payments") {
@@ -149,24 +249,97 @@ function createDependencies(options: {
           resolve: (value: unknown) => unknown,
           reject: (reason: unknown) => unknown,
         ) => {
-          if (operation === "upsert" && table === "notifications") {
-            return Promise.resolve({
-              data: null,
-              error: options.historyError
-                ? { message: options.historyError }
-                : null,
-            }).then(resolve, reject);
-          }
+          const execute = () => {
+            if (operation === "upsert" && table === "notifications") {
+              return {
+                data: null,
+                error: options.historyError
+                  ? { message: options.historyError }
+                  : null,
+              };
+            }
 
-          const data = table === "device_push_tokens" &&
-              operation === "select"
-            ? options.tokens ?? []
-            : null;
+            if (table === "notification_deliveries") {
+              if (operation === "upsert") {
+                const incoming = Array.isArray(operationValues)
+                  ? operationValues
+                  : [operationValues];
 
-          return Promise.resolve({
-            data,
-            error: null,
-          }).then(resolve, reject);
+                for (const item of incoming) {
+                  const record = item as Partial<DeliveryRecord>;
+
+                  const existing = deliveryRecords.find(
+                    (delivery) =>
+                      delivery.notification_id === record.notification_id &&
+                      delivery.device_push_token_id ===
+                        record.device_push_token_id,
+                  );
+
+                  if (existing) {
+                    if (upsertOptions.ignoreDuplicates !== true) {
+                      Object.assign(existing, record);
+                    }
+                    continue;
+                  }
+
+                  deliveryRecords.push({
+                    id: record.id ?? `delivery-${nextDeliveryId++}`,
+                    notification_id: record.notification_id!,
+                    device_push_token_id: record.device_push_token_id ?? null,
+                    status: record.status ?? "pending",
+                    attempt_count: record.attempt_count ?? 0,
+                    expo_ticket_id: record.expo_ticket_id ?? null,
+                    last_error: record.last_error ?? null,
+                    last_attempt_at: record.last_attempt_at ?? null,
+                    accepted_at: record.accepted_at ?? null,
+                  });
+                }
+
+                return { data: null, error: null };
+              }
+
+              if (operation === "update") {
+                const matching = deliveryRecords.filter((record) =>
+                  matchesFilters(
+                    record as unknown as Record<string, unknown>,
+                    filters,
+                  )
+                );
+
+                for (const record of matching) {
+                  Object.assign(record, operationValues);
+                }
+
+                return {
+                  data: hasSelectAfterMutation ? matching : null,
+                  error: null,
+                };
+              }
+
+              const matching = deliveryRecords.filter((record) =>
+                matchesFilters(
+                  record as unknown as Record<string, unknown>,
+                  filters,
+                )
+              );
+
+              return {
+                data: matching.map((record) => ({ ...record })),
+                error: null,
+              };
+            }
+
+            if (table === "device_push_tokens" && operation === "select") {
+              return {
+                data: options.tokens ?? [],
+                error: null,
+              };
+            }
+
+            return { data: null, error: null };
+          };
+
+          return Promise.resolve(execute()).then(resolve, reject);
         },
       };
 
@@ -193,6 +366,18 @@ function createDependencies(options: {
         url: String(input),
         messages,
       });
+
+      if (options.fetchError) {
+        throw new Error(options.fetchError);
+      }
+
+      const sequentialResponse = options.fetchResponses?.[
+        fetchResponseIndex++
+      ];
+
+      if (sequentialResponse) {
+        return sequentialResponse;
+      }
 
       if (options.fetchResponse) {
         return options.fetchResponse;
@@ -225,6 +410,7 @@ function createDependencies(options: {
     updates,
     historyWrites,
     fetchCalls,
+    deliveryRecords,
   };
 }
 
@@ -1108,6 +1294,189 @@ Deno.test(
 );
 
 Deno.test(
+  "marks MessageTooBig Expo errors as permanent failures",
+  async () => {
+    const { dependencies, calls } = createDependencies({
+      notifications: [createNotification()],
+      tokens: [
+        {
+          id: "token-1",
+          expo_push_token: "ExponentPushToken[test-device]",
+        },
+      ],
+      fetchResponse: new Response(
+        JSON.stringify({
+          data: [
+            {
+              status: "error",
+              message: "Message payload is too large.",
+              details: {
+                error: "MessageTooBig",
+              },
+            },
+          ],
+        }),
+        {
+          status: 200,
+          headers: {
+            "Content-Type": "application/json",
+          },
+        },
+      ),
+    });
+
+    const response = await handleNotificationWorkerRequest(
+      createRequest(),
+      dependencies,
+    );
+
+    assertEquals(response.status, 200);
+
+    const result = await response.json();
+    assertEquals(result.failed, 1);
+
+    const completion = calls.find(
+      (call) => call.name === "complete_notification_attempt",
+    );
+
+    const args = completion?.args as Record<string, unknown>;
+
+    assertEquals(args.p_outcome, "permanent_failure");
+    assertEquals(args.p_error, "MessageTooBig");
+  },
+);
+
+Deno.test(
+  "retries when Expo returns a mismatched ticket count",
+  async () => {
+    const { dependencies, calls } = createDependencies({
+      notifications: [createNotification()],
+      tokens: [
+        {
+          id: "token-1",
+          expo_push_token: "ExponentPushToken[test-device]",
+        },
+      ],
+      fetchResponse: new Response(
+        JSON.stringify({ data: [] }),
+        {
+          status: 200,
+          headers: {
+            "Content-Type": "application/json",
+          },
+        },
+      ),
+    });
+
+    const response = await handleNotificationWorkerRequest(
+      createRequest(),
+      dependencies,
+    );
+
+    assertEquals(response.status, 200);
+
+    const result = await response.json();
+    assertEquals(result.failed, 1);
+
+    const completion = calls.find(
+      (call) => call.name === "complete_notification_attempt",
+    );
+
+    const args = completion?.args as Record<string, unknown>;
+
+    assertEquals(args.p_outcome, "retryable_failure");
+    assertStringIncludes(
+      String(args.p_error),
+      "unexpected number of push tickets",
+    );
+  },
+);
+
+Deno.test(
+  "retries when Expo returns malformed JSON",
+  async () => {
+    const { dependencies, calls } = createDependencies({
+      notifications: [createNotification()],
+      tokens: [
+        {
+          id: "token-1",
+          expo_push_token: "ExponentPushToken[test-device]",
+        },
+      ],
+      fetchResponse: new Response(
+        "{invalid-json",
+        {
+          status: 200,
+          headers: {
+            "Content-Type": "application/json",
+          },
+        },
+      ),
+    });
+
+    const response = await handleNotificationWorkerRequest(
+      createRequest(),
+      dependencies,
+    );
+
+    assertEquals(response.status, 200);
+
+    const result = await response.json();
+    assertEquals(result.failed, 1);
+
+    const completion = calls.find(
+      (call) => call.name === "complete_notification_attempt",
+    );
+
+    const args = completion?.args as Record<string, unknown>;
+
+    assertEquals(args.p_outcome, "retryable_failure");
+    assertStringIncludes(
+      String(args.p_error),
+      "JSON",
+    );
+  },
+);
+
+Deno.test(
+  "retries when the Expo network request fails",
+  async () => {
+    const { dependencies, calls } = createDependencies({
+      notifications: [createNotification()],
+      tokens: [
+        {
+          id: "token-1",
+          expo_push_token: "ExponentPushToken[test-device]",
+        },
+      ],
+      fetchError: "Network request failed",
+    });
+
+    const response = await handleNotificationWorkerRequest(
+      createRequest(),
+      dependencies,
+    );
+
+    assertEquals(response.status, 200);
+
+    const result = await response.json();
+    assertEquals(result.failed, 1);
+
+    const completion = calls.find(
+      (call) => call.name === "complete_notification_attempt",
+    );
+
+    const args = completion?.args as Record<string, unknown>;
+
+    assertEquals(args.p_outcome, "retryable_failure");
+    assertStringIncludes(
+      String(args.p_error),
+      "Network request failed",
+    );
+  },
+);
+
+Deno.test(
   "retries partial delivery when one device accepts and another fails temporarily",
   async () => {
     const { dependencies, calls } = createDependencies({
@@ -1166,6 +1535,151 @@ Deno.test(
     const args = completion?.args as Record<string, unknown>;
 
     assertEquals(args.p_outcome, "retryable_failure");
+  },
+);
+
+Deno.test(
+  "does not resend to a device that already accepted a notification",
+  async () => {
+    const expoResponse = (data: unknown[]) =>
+      new Response(
+        JSON.stringify({ data }),
+        {
+          status: 200,
+          headers: {
+            "Content-Type": "application/json",
+          },
+        },
+      );
+
+    const {
+      dependencies,
+      calls,
+      fetchCalls,
+      deliveryRecords,
+    } = createDependencies({
+      notifications: [createNotification()],
+      tokens: [
+        {
+          id: "token-1",
+          expo_push_token: "ExponentPushToken[device-one]",
+        },
+        {
+          id: "token-2",
+          expo_push_token: "ExponentPushToken[device-two]",
+        },
+      ],
+      fetchResponses: [
+        // First attempt: device one accepted, device two temporarily failed.
+        expoResponse([
+          {
+            status: "ok",
+            id: "expo-ticket-device-one",
+          },
+          {
+            status: "error",
+            message: "Rate limit exceeded.",
+            details: {
+              error: "MessageRateExceeded",
+            },
+          },
+        ]),
+
+        // Second attempt: only device two should be sent.
+        expoResponse([
+          {
+            status: "ok",
+            id: "expo-ticket-device-two",
+          },
+        ]),
+      ],
+    });
+
+    // First worker invocation.
+    const firstResponse = await handleNotificationWorkerRequest(
+      createRequest(),
+      dependencies,
+    );
+
+    assertEquals(firstResponse.status, 200);
+
+    const firstResult = await firstResponse.json();
+
+    assertEquals(firstResult.claimed, 1);
+    assertEquals(firstResult.failed, 1);
+    assertEquals(firstResult.sent, 0);
+
+    // Second worker invocation: retry the same notification.
+    const secondResponse = await handleNotificationWorkerRequest(
+      createRequest(),
+      dependencies,
+    );
+
+    assertEquals(secondResponse.status, 200);
+
+    const secondResult = await secondResponse.json();
+
+    assertEquals(secondResult.claimed, 1);
+    assertEquals(secondResult.sent, 1);
+    assertEquals(secondResult.failed, 0);
+
+    // Two Expo requests should have occurred.
+    assertEquals(fetchCalls.length, 2);
+
+    const firstAttemptRecipients = fetchCalls[0].messages.map(
+      (message) => (message as { to: string }).to,
+    );
+
+    const secondAttemptRecipients = fetchCalls[1].messages.map(
+      (message) => (message as { to: string }).to,
+    );
+
+    assertEquals(firstAttemptRecipients, [
+      "ExponentPushToken[device-one]",
+      "ExponentPushToken[device-two]",
+    ]);
+
+    // Device one must not receive the same notification again.
+    assertEquals(secondAttemptRecipients, [
+      "ExponentPushToken[device-two]",
+    ]);
+
+    // Both device deliveries should eventually be accepted.
+    assertEquals(
+      deliveryRecords.map((record) => ({
+        device: record.device_push_token_id,
+        status: record.status,
+        attempt_count: record.attempt_count,
+      })),
+      [
+        {
+          device: "token-1",
+          status: "accepted",
+          attempt_count: 1,
+        },
+        {
+          device: "token-2",
+          status: "accepted",
+          attempt_count: 2,
+        },
+      ],
+    );
+
+    const completions = calls.filter(
+      (call) => call.name === "complete_notification_attempt",
+    );
+
+    assertEquals(completions.length, 2);
+
+    assertEquals(
+      (completions[0].args as Record<string, unknown>).p_outcome,
+      "retryable_failure",
+    );
+
+    assertEquals(
+      (completions[1].args as Record<string, unknown>).p_outcome,
+      "accepted",
+    );
   },
 );
 

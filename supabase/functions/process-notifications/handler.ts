@@ -36,6 +36,25 @@ type PushToken = {
   expo_push_token: string;
 };
 
+type DeliveryStatus =
+  | "pending"
+  | "accepted"
+  | "retryable_failure"
+  | "permanent_failure"
+  | "invalid";
+
+type DeliveryRecord = {
+  id: string;
+  notification_id: string;
+  device_push_token_id: string | null;
+  status: DeliveryStatus;
+  attempt_count: number;
+  expo_ticket_id: string | null;
+  last_error: string | null;
+  last_attempt_at: string | null;
+  accepted_at: string | null;
+};
+
 type NotificationCopy = {
   title: string;
   body: string;
@@ -68,7 +87,10 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-const preferenceByEvent: Record<NotificationEvent, NotificationPreference> = {
+const preferenceByEvent: Record<
+  NotificationEvent,
+  NotificationPreference
+> = {
   booking_requested: "booking_updates",
   booking_confirmed: "booking_updates",
   booking_declined: "booking_updates",
@@ -289,6 +311,7 @@ async function processNotification(
     error?: string,
   ): Promise<void> => {
     completionAttempted = true;
+
     return completeAttempt(
       client,
       notification,
@@ -308,12 +331,14 @@ async function processNotification(
         undefined,
         `Unsupported notification event: ${notification.event_type}`,
       );
+
       return "failed";
     }
 
     // Validate delayed payment failures before creating history or sending push.
     if (notification.event_type === "payment_failed") {
       const paymentId = notification.payload?.payment_id;
+
       const isValidPaymentId = typeof paymentId === "string" &&
         /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
           .test(paymentId);
@@ -325,6 +350,7 @@ async function processNotification(
           workerId,
           "invalid payment",
         );
+
         return "skipped";
       }
 
@@ -352,11 +378,12 @@ async function processNotification(
           workerId,
           "obsolete payment failure",
         );
+
         return "skipped";
       }
     }
 
-    // Generate the notification copy once for both history and push.
+    // Generate the notification copy once for history and push.
     const copy = getNotificationCopy(
       notification.event_type,
       notification.payload ?? {},
@@ -409,9 +436,11 @@ async function processNotification(
         workerId,
         "opted-out",
       );
+
       return "skipped";
     }
 
+    // Retrieve active device tokens.
     const { data: tokens, error: tokenError } = await client
       .from("device_push_tokens")
       .select("id, expo_push_token")
@@ -430,19 +459,136 @@ async function processNotification(
         undefined,
         "No active push tokens are registered for this recipient.",
       );
+
       return "failed";
     }
 
-    let acceptedTicketId: string | undefined;
-    let permanentError: string | undefined;
-    let retryableError: string | undefined;
-    let invalidTokenCount = 0;
-
     const tokenList = tokens as PushToken[];
 
+    // Initialise delivery records without overwriting previous outcomes.
+    const { error: deliveryUpsertError } = await client
+      .from("notification_deliveries")
+      .upsert(
+        tokenList.map((token) => ({
+          notification_id: notification.id,
+          device_push_token_id: token.id,
+          status: "pending",
+        })),
+        {
+          onConflict: "notification_id,device_push_token_id",
+          ignoreDuplicates: true,
+        },
+      );
+
+    if (deliveryUpsertError) {
+      throw new Error(
+        `Could not initialise notification deliveries: ${deliveryUpsertError.message}`,
+      );
+    }
+
+    // Retrieve the existing per-device delivery states.
+    const { data: existingDeliveries, error: deliveryReadError } = await client
+      .from("notification_deliveries")
+      .select(
+        "id, notification_id, device_push_token_id, status, attempt_count, expo_ticket_id, last_error, last_attempt_at, accepted_at",
+      )
+      .eq("notification_id", notification.id);
+
+    if (deliveryReadError) {
+      throw new Error(
+        `Could not retrieve notification deliveries: ${deliveryReadError.message}`,
+      );
+    }
+
+    const deliveryRecords = (existingDeliveries ?? []) as DeliveryRecord[];
+
+    const deliveryByTokenId = new Map<string, DeliveryRecord>();
+
+    for (const delivery of deliveryRecords) {
+      if (delivery.device_push_token_id !== null) {
+        deliveryByTokenId.set(
+          delivery.device_push_token_id,
+          delivery,
+        );
+      }
+    }
+
+    // Restrict processing to active tokens belonging to this recipient.
+    // Existing delivery records for deleted or inactive devices are not
+    // allowed to keep an event retrying indefinitely.
+    const activeTokenIds = new Set(tokenList.map((token) => token.id));
+
+    const eligibleTokens = tokenList.filter((token) => {
+      const delivery = deliveryByTokenId.get(token.id);
+
+      if (!delivery) {
+        return false;
+      }
+
+      return delivery.status === "pending" ||
+        delivery.status === "retryable_failure";
+    });
+
+    const acceptedRecords = deliveryRecords.filter(
+      (record) =>
+        record.status === "accepted" &&
+        record.device_push_token_id !== null &&
+        activeTokenIds.has(record.device_push_token_id),
+    );
+
+    let acceptedTicketId: string | undefined = acceptedRecords.find((record) =>
+      record.expo_ticket_id !== null
+    )
+      ?.expo_ticket_id ?? undefined;
+
+    const updateDelivery = async (
+      token: PushToken,
+      values: Partial<DeliveryRecord>,
+    ): Promise<void> => {
+      const { error } = await client
+        .from("notification_deliveries")
+        .update(values)
+        .eq("notification_id", notification.id)
+        .eq("device_push_token_id", token.id);
+
+      if (error) {
+        throw new Error(
+          `Could not update delivery for device ${token.id}: ${error.message}`,
+        );
+      }
+
+      const existing = deliveryByTokenId.get(token.id);
+
+      if (existing) {
+        Object.assign(existing, values);
+      }
+    };
+
     // Expo accepts a maximum of 100 messages per request.
-    for (let offset = 0; offset < tokenList.length; offset += 100) {
-      const tokenBatch = tokenList.slice(offset, offset + 100);
+    for (
+      let offset = 0;
+      offset < eligibleTokens.length;
+      offset += 100
+    ) {
+      const tokenBatch = eligibleTokens.slice(offset, offset + 100);
+
+      // Persist the attempt before making the external request.
+      for (const token of tokenBatch) {
+        const delivery = deliveryByTokenId.get(token.id);
+
+        if (!delivery) {
+          throw new Error(
+            `Missing delivery record for device ${token.id}.`,
+          );
+        }
+
+        await updateDelivery(token, {
+          status: "pending",
+          attempt_count: delivery.attempt_count + 1,
+          last_attempt_at: new Date().toISOString(),
+          last_error: null,
+        });
+      }
 
       const messages = tokenBatch.map((token) => ({
         to: token.expo_push_token,
@@ -458,27 +604,67 @@ async function processNotification(
         },
       }));
 
-      const response = await fetchImpl(EXPO_PUSH_URL, {
-        method: "POST",
-        headers: {
-          Accept: "application/json",
-          "Accept-Encoding": "gzip, deflate",
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(messages),
-      });
+      let response: Response;
 
-      if (!response.ok) {
-        const responseText = await response.text();
+      try {
+        response = await fetchImpl(EXPO_PUSH_URL, {
+          method: "POST",
+          headers: {
+            Accept: "application/json",
+            "Accept-Encoding": "gzip, deflate",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(messages),
+        });
+      } catch (error) {
+        const message = error instanceof Error
+          ? error.message
+          : "Expo network request failed.";
 
-        retryableError ??= `Expo API returned HTTP ${response.status}: ${
-          responseText.slice(0, 500)
-        }`;
+        for (const token of tokenBatch) {
+          await updateDelivery(token, {
+            status: "retryable_failure",
+            last_error: message,
+          });
+        }
 
         continue;
       }
 
-      const result = await response.json();
+      if (!response.ok) {
+        const responseText = await response.text();
+
+        const message = `Expo API returned HTTP ${response.status}: ${
+          responseText.slice(0, 500)
+        }`;
+
+        for (const token of tokenBatch) {
+          await updateDelivery(token, {
+            status: "retryable_failure",
+            last_error: message,
+          });
+        }
+
+        continue;
+      }
+
+      let result: { data?: unknown };
+
+      try {
+        result = await response.json();
+      } catch {
+        const message = "Expo returned malformed JSON.";
+
+        for (const token of tokenBatch) {
+          await updateDelivery(token, {
+            status: "retryable_failure",
+            last_error: message,
+          });
+        }
+
+        continue;
+      }
+
       const tickets = Array.isArray(result?.data)
         ? result.data
         : result?.data
@@ -486,69 +672,146 @@ async function processNotification(
         : [];
 
       if (tickets.length !== messages.length) {
-        retryableError ??=
-          "Expo returned an unexpected number of push tickets.";
+        const message = "Expo returned an unexpected number of push tickets.";
+
+        for (const token of tokenBatch) {
+          await updateDelivery(token, {
+            status: "retryable_failure",
+            last_error: message,
+          });
+        }
+
         continue;
       }
 
       // Expo tickets correspond to messages in the same batch and order.
       for (let index = 0; index < tickets.length; index += 1) {
-        const ticket = tickets[index];
+        const ticket = tickets[index] as {
+          status?: string;
+          id?: string;
+          message?: string;
+          details?: {
+            error?: string;
+          };
+        };
+
         const token = tokenBatch[index];
 
-        if (ticket?.status === "ok" && typeof ticket.id === "string") {
+        if (
+          ticket?.status === "ok" &&
+          typeof ticket.id === "string"
+        ) {
+          await updateDelivery(token, {
+            status: "accepted",
+            expo_ticket_id: ticket.id,
+            accepted_at: new Date().toISOString(),
+            last_error: null,
+          });
+
           acceptedTicketId ??= ticket.id;
+
           continue;
         }
 
-        const expoError = ticket?.details?.error ?? ticket?.message ??
+        const expoError = ticket?.details?.error ??
+          ticket?.message ??
           "Unknown Expo error";
 
         if (expoError === "DeviceNotRegistered") {
           await deactivateInvalidToken(client, token);
-          invalidTokenCount += 1;
+
+          await updateDelivery(token, {
+            status: "invalid",
+            last_error: String(expoError),
+          });
+
           continue;
         }
 
         if (permanentExpoErrors.has(expoError)) {
-          permanentError ??= String(expoError);
-        } else {
-          retryableError ??= String(expoError);
+          await updateDelivery(token, {
+            status: "permanent_failure",
+            last_error: String(expoError),
+          });
+
+          continue;
         }
+
+        await updateDelivery(token, {
+          status: "retryable_failure",
+          last_error: String(expoError),
+        });
       }
     }
 
-    if (acceptedTicketId && !retryableError) {
+    // Determine the overall result from the final active-device states.
+    const activeDeliveries = tokenList.map((token) =>
+      deliveryByTokenId.get(token.id)
+    ).filter((record): record is DeliveryRecord => record !== undefined);
+
+    const hasRetryableDeliveries = activeDeliveries.some(
+      (record) =>
+        record.status === "pending" ||
+        record.status === "retryable_failure",
+    );
+
+    const hasAcceptedDeliveries = activeDeliveries.some(
+      (record) => record.status === "accepted",
+    );
+
+    const hasPermanentOrInvalidDeliveries = activeDeliveries.some(
+      (record) =>
+        record.status === "permanent_failure" ||
+        record.status === "invalid",
+    );
+
+    // Preserve the original per-device Expo errors for the outbox record
+    // and completion RPC instead of replacing them with generic messages.
+    const deliveryErrors = activeDeliveries
+      .map((record) => record.last_error)
+      .filter((message): message is string =>
+        typeof message === "string" && message.length > 0
+      );
+
+    const deliveryErrorMessage = deliveryErrors.length > 0
+      ? [...new Set(deliveryErrors)].join("; ")
+      : undefined;
+
+    if (hasRetryableDeliveries) {
+      await completeOnce(
+        "retryable_failure",
+        acceptedTicketId,
+        deliveryErrorMessage ??
+          "One or more device deliveries require another attempt.",
+      );
+
+      return "failed";
+    }
+
+    if (hasAcceptedDeliveries) {
       await completeOnce(
         "accepted",
         acceptedTicketId,
       );
+
       return "sent";
     }
 
-    if (!acceptedTicketId && invalidTokenCount === tokens.length) {
+    if (hasPermanentOrInvalidDeliveries) {
       await completeOnce(
         "permanent_failure",
         undefined,
-        "All registered push tokens were reported as unregistered by Expo.",
+        deliveryErrorMessage ??
+          "No registered device accepted the notification.",
       );
-      return "failed";
-    }
 
-    if (permanentError && !retryableError && !acceptedTicketId) {
-      await completeOnce(
-        "permanent_failure",
-        undefined,
-        permanentError,
-      );
       return "failed";
     }
 
     await completeOnce(
       "retryable_failure",
       undefined,
-      retryableError ?? permanentError ??
-        "Expo did not accept any push messages.",
+      "No eligible device deliveries were available.",
     );
 
     return "failed";
@@ -586,7 +849,11 @@ export async function handleNotificationWorkerRequest(
   const expectedSecret = dependencies.getExpectedSecret();
   const providedSecret = request.headers.get("x-notification-worker-secret");
 
-  if (!expectedSecret || !providedSecret || providedSecret !== expectedSecret) {
+  if (
+    !expectedSecret ||
+    !providedSecret ||
+    providedSecret !== expectedSecret
+  ) {
     return jsonResponse({ error: "Unauthorized." }, 401);
   }
 
@@ -594,11 +861,18 @@ export async function handleNotificationWorkerRequest(
   const serviceRoleKey = dependencies.getServiceRoleKey();
 
   if (!supabaseUrl || !serviceRoleKey) {
-    return jsonResponse({ error: "Worker configuration is incomplete." }, 500);
+    return jsonResponse(
+      { error: "Worker configuration is incomplete." },
+      500,
+    );
   }
 
   try {
-    const client = dependencies.createClient(supabaseUrl, serviceRoleKey);
+    const client = dependencies.createClient(
+      supabaseUrl,
+      serviceRoleKey,
+    );
+
     const workerId = dependencies.randomUUID();
     const fetchImpl = dependencies.fetchImpl ?? fetch;
 
@@ -628,7 +902,9 @@ export async function handleNotificationWorkerRequest(
     }
 
     if (!Array.isArray(notifications)) {
-      throw new Error("Notification claim RPC returned an invalid response.");
+      throw new Error(
+        "Notification claim RPC returned an invalid response.",
+      );
     }
 
     const summary = {
@@ -654,6 +930,7 @@ export async function handleNotificationWorkerRequest(
         }
 
         summary.failed += 1;
+
         dependencies.logError(
           `Could not renew lock for notification ${notification.id}.`,
           error,
@@ -661,9 +938,16 @@ export async function handleNotificationWorkerRequest(
       }
     }
 
-    return jsonResponse({ success: true, workerId, ...summary });
+    return jsonResponse({
+      success: true,
+      workerId,
+      ...summary,
+    });
   } catch (error) {
-    dependencies.logError("Notification worker failed.", error);
+    dependencies.logError(
+      "Notification worker failed.",
+      error,
+    );
 
     return jsonResponse(
       {

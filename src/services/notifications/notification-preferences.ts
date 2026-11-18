@@ -1,3 +1,4 @@
+
 import { supabase } from '@/lib/supabase';
 
 export interface NotificationPreferences {
@@ -89,6 +90,7 @@ export async function getNotificationPreferences(
 
 /**
  * Updates one notification category without changing other preferences.
+ * Ensures the user's preference row exists before updating it.
  */
 export async function updateNotificationPreference(
   userId: string,
@@ -98,6 +100,9 @@ export async function updateNotificationPreference(
   if (!userId?.trim()) {
     throw new Error('A valid user ID is required.');
   }
+
+  // Ensure the preference row exists without overwriting saved settings.
+  await ensureNotificationPreferences(userId);
 
   const { error } = await supabase
     .from('notification_preferences')

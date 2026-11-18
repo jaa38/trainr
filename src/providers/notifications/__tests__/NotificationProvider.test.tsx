@@ -2,7 +2,7 @@ import * as Notifications from 'expo-notifications';
 
 import type { User } from '@supabase/supabase-js';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
-import { Pressable, Text, View } from 'react-native';
+import { AppState, type AppStateStatus, Pressable, Text, View } from 'react-native';
 
 import { useAuth } from '@/providers/AuthProvider';
 import {
@@ -18,6 +18,25 @@ import { registerDevicePushToken } from '@/services/notifications/notification-r
 
 // Controls whether the test represents a physical device or simulator.
 let mockIsPhysicalDevice = true;
+
+// Captures the AppState listener so tests can simulate foreground events.
+let mockAppStateListener: ((state: AppStateStatus) => void) | undefined;
+
+const mockAppStateSubscriptionRemove = jest.fn();
+
+// Mock AppState once for the entire test file.
+// Every subscription receives a valid remove() method.
+const mockAddAppStateListener = jest
+  .spyOn(AppState, 'addEventListener')
+  .mockImplementation((event, listener) => {
+    if (event === 'change') {
+      mockAppStateListener = listener;
+    }
+
+    return {
+      remove: mockAppStateSubscriptionRemove,
+    } as ReturnType<typeof AppState.addEventListener>;
+  });
 
 jest.mock('expo-device', () => ({
   get isDevice() {
@@ -184,8 +203,10 @@ describe('NotificationProvider', () => {
   beforeEach(() => {
     jest.clearAllMocks();
 
-    // Physical device is the default for existing registration tests.
     mockIsPhysicalDevice = true;
+
+    // Reset the captured callback without removing the shared mock.
+    mockAppStateListener = undefined;
 
     mockUseAuth.mockReturnValue({
       user: createMockUser(),
@@ -312,17 +333,14 @@ describe('NotificationProvider', () => {
       expect(getByTestId('permission').props.children).toBe('denied');
     });
 
-    // The OS reports that permission has not yet been granted.
     mockGetOSPermissionStatus.mockResolvedValueOnce(
       mockPermissionDenied as Notifications.NotificationPermissionsStatus,
     );
 
-    // The user grants permission through the OS prompt.
     mockRequestOSPermission.mockResolvedValueOnce(
       mockPermissionGranted as Notifications.NotificationPermissionsStatus,
     );
 
-    // The provider refreshes the permission status after the request.
     mockGetPermissionStatus.mockResolvedValue(
       mockPermissionGranted as Awaited<
         ReturnType<typeof getNotificationPermissionStatus>
@@ -372,6 +390,49 @@ describe('NotificationProvider', () => {
     });
   });
 
+  it('retries automatic registration when the app returns to the foreground after a failure', async () => {
+    mockGetPermissionStatus.mockResolvedValue(
+      mockPermissionGranted as Awaited<
+        ReturnType<typeof getNotificationPermissionStatus>
+      >,
+    );
+
+    mockGetDeviceIfPermitted.mockResolvedValue(
+      mockDevice as Awaited<ReturnType<typeof getPushNotificationDeviceIfPermitted>>,
+    );
+
+    mockRegisterDevice
+      .mockRejectedValueOnce(new Error('Temporary registration failure'))
+      .mockResolvedValueOnce(
+        mockRegisteredToken as Awaited<ReturnType<typeof registerDevicePushToken>>,
+      );
+
+    const { getByTestId, unmount } = await renderNotificationProvider();
+
+    await waitFor(() => {
+      expect(getByTestId('error').props.children).toBe('Temporary registration failure');
+    });
+
+    expect(mockRegisterDevice).toHaveBeenCalledTimes(1);
+    expect(mockAppStateListener).toBeDefined();
+
+    // Simulate the app returning to the foreground.
+    await act(async () => {
+      mockAppStateListener?.('active');
+    });
+
+    await waitFor(() => {
+      expect(mockRegisterDevice).toHaveBeenCalledTimes(2);
+      expect(getByTestId('registered').props.children).toBe('true');
+    });
+
+    expect(getByTestId('error').props.children).toBe('no-error');
+
+    await act(async () => {
+      unmount();
+    });
+  });
+
   it('exposes a live notification response to consumers', async () => {
     const response = createMockNotificationResponse('live-response');
 
@@ -406,7 +467,6 @@ describe('NotificationProvider', () => {
 
   it('does not let a late cold-start response overwrite a newer live response', async () => {
     const coldStartResponse = createMockNotificationResponse('stale-cold-start');
-
     const liveResponse = createMockNotificationResponse('new-live-response');
 
     let resolveColdStart!: (response: Notifications.NotificationResponse | null) => void;
