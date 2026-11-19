@@ -14,9 +14,9 @@ import {
     View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Button } from '@/components/Button';
 
 import { AppText } from '@/components/AppText';
+import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { useAuth } from '@/providers/AuthProvider';
 import {
@@ -43,6 +43,8 @@ export default function WorkoutHistoryScreen() {
     const [isLoading, setIsLoading] = useState(true);
     const [isClearing, setIsClearing] = useState(false);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+    const borderColor = colors.border.default;
 
     // Load workout history
     const loadHistory = useCallback(async () => {
@@ -72,7 +74,7 @@ export default function WorkoutHistoryScreen() {
         } finally {
             setIsLoading(false);
         }
-    }, [user?.id]);
+    }, [user]);
 
     // Refresh history whenever the screen regains focus
     useFocusEffect(
@@ -162,14 +164,14 @@ export default function WorkoutHistoryScreen() {
             0,
         );
 
-    const borderColor = colors.border.default;
-
     // Workout history card
     const renderWorkoutCard = (workout: WorkoutLog) => {
         const isCompleted = workout.completed_at !== null;
 
         const workoutName =
             workout.exercise_logs[0]?.day_name ?? 'Workout session';
+
+        const exerciseCount = totalExercises(workout);
 
         return (
             <Pressable
@@ -179,6 +181,9 @@ export default function WorkoutHistoryScreen() {
                     `${isCompleted ? 'View' : 'Resume'} ${workoutName} workout`
                 }
                 onPress={() => openWorkout(workout)}
+                style={({ pressed }) => ({
+                    opacity: pressed ? 0.85 : 1,
+                })}
             >
                 <Card
                     variant="outlined"
@@ -191,54 +196,64 @@ export default function WorkoutHistoryScreen() {
                     <View
                         style={{
                             flexDirection: 'row',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
+                            alignItems: 'flex-start',
+                            gap: spacing.md,
+                        }}
+                    >
+                        {/* Workout Icon */}
+                        <View
+                            style={{
+                                width: 64,
+                                height: 64,
+                                borderRadius: 18,
+                                backgroundColor: colors.background.secondary,
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                flexShrink: 0,
+                            }}
+                        >
+                            <Dumbbell
+                                size={30}
+                                color={colors.brand.red}
+                            />
+                        </View>
+
+                        {/* Workout Name and Date */}
+                        <View
+                            style={{
+                                flex: 1,
+                                minWidth: 0,
+                                justifyContent: 'center',
+                                gap: spacing.xs,
+                                paddingTop: spacing.xs,
+                            }}
+                        >
+                            <AppText
+                                variant="h3"
+                                color={colors.text.primary}
+                            >
+                                {workoutName}
+                            </AppText>
+
+                            <AppText
+                                variant="bodySmall"
+                                color={colors.text.tertiary}
+                            >
+                                {formatWorkoutDate(workout.started_at)}
+                            </AppText>
+                        </View>
+                    </View>
+
+                    {/* Workout Status */}
+                    <View
+                        style={{
+                            flexDirection: 'row',
+                            justifyContent: 'flex-start',
                         }}
                     >
                         <View
                             style={{
-                                flexDirection: 'row',
-                                alignItems: 'center',
-                                gap: spacing.sm,
-                            }}
-                        >
-                            <View
-                                style={{
-                                    width: 42,
-                                    height: 42,
-                                    borderRadius: 12,
-                                    backgroundColor: colors.background.secondary,
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                }}
-                            >
-                                <Dumbbell
-                                    size={20}
-                                    color={colors.brand.red}
-                                />
-                            </View>
-
-                            <View style={{ gap: 2 }}>
-                                <AppText
-                                    variant="h3"
-                                    color={colors.text.primary}
-                                >
-                                    {workoutName}
-                                </AppText>
-
-                                <AppText
-                                    variant="caption"
-                                    color={colors.text.tertiary}
-                                >
-                                    {formatWorkoutDate(workout.started_at)}
-                                </AppText>
-                            </View>
-                        </View>
-
-                        {/* Workout Status */}
-                        <View
-                            style={{
-                                paddingHorizontal: spacing.sm,
+                                paddingHorizontal: spacing.md,
                                 paddingVertical: spacing.xs,
                                 borderRadius: 999,
                                 backgroundColor: isCompleted
@@ -266,10 +281,12 @@ export default function WorkoutHistoryScreen() {
                         style={{
                             flexDirection: 'row',
                             alignItems: 'center',
-                            gap: spacing.lg,
                             flexWrap: 'wrap',
+                            columnGap: spacing.lg,
+                            rowGap: spacing.md,
                         }}
                     >
+                        {/* Exercise Count */}
                         <View
                             style={{
                                 flexDirection: 'row',
@@ -278,18 +295,20 @@ export default function WorkoutHistoryScreen() {
                             }}
                         >
                             <Dumbbell
-                                size={15}
+                                size={18}
                                 color={colors.text.tertiary}
                             />
 
                             <AppText
-                                variant="caption"
+                                variant="bodySmall"
                                 color={colors.text.secondary}
                             >
-                                {totalExercises(workout)} exercises
+                                {exerciseCount}{' '}
+                                {exerciseCount === 1 ? 'exercise' : 'exercises'}
                             </AppText>
                         </View>
 
+                        {/* Workout Duration */}
                         <View
                             style={{
                                 flexDirection: 'row',
@@ -298,12 +317,12 @@ export default function WorkoutHistoryScreen() {
                             }}
                         >
                             <Clock
-                                size={15}
+                                size={18}
                                 color={colors.text.tertiary}
                             />
 
                             <AppText
-                                variant="caption"
+                                variant="bodySmall"
                                 color={colors.text.secondary}
                             >
                                 {workout.duration_minutes !== null
@@ -312,11 +331,13 @@ export default function WorkoutHistoryScreen() {
                             </AppText>
                         </View>
 
+                        {/* Total Sets */}
                         <AppText
-                            variant="caption"
+                            variant="bodySmall"
                             color={colors.text.secondary}
                         >
-                            {totalSets(workout)} sets
+                            {totalSets(workout)}{' '}
+                            {totalSets(workout) === 1 ? 'set' : 'sets'}
                         </AppText>
                     </View>
 
@@ -341,7 +362,7 @@ export default function WorkoutHistoryScreen() {
                         </AppText>
 
                         <ArrowRight
-                            size={18}
+                            size={22}
                             color={colors.brand.red}
                         />
                     </View>
@@ -616,7 +637,7 @@ export default function WorkoutHistoryScreen() {
                     }}
                 >
                     <Button
-                        variant='primary'
+                        variant="primary"
                         size="large"
                         fullWidth
                         loading={isClearing}

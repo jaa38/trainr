@@ -30,12 +30,7 @@ import { formatCurrency } from '@/utils/formatCurrency';
 
 type ScheduleView = 'Upcoming' | 'Availability' | 'History';
 
-type BookingStatus =
-  | 'pending'
-  | 'confirmed'
-  | 'declined'
-  | 'cancelled'
-  | 'completed';
+type BookingStatus = 'pending' | 'confirmed' | 'declined' | 'cancelled' | 'completed';
 
 type Booking = {
   id: string;
@@ -75,11 +70,7 @@ type DailyTimeWindow = {
 
 type WeeklySchedule = Partial<Record<AvailableDay, DailyTimeWindow>>;
 
-const HISTORY_STATUSES: BookingStatus[] = [
-  'declined',
-  'cancelled',
-  'completed',
-];
+const HISTORY_STATUSES: BookingStatus[] = ['declined', 'cancelled', 'completed'];
 
 const STATUS_LABELS: Record<BookingStatus, string> = {
   pending: 'Pending',
@@ -164,8 +155,7 @@ export default function ScheduleScreen() {
   const [savedDays, setSavedDays] = useState<AvailableDay[]>([]);
 
   const [weeklySchedule, setWeeklySchedule] = useState<WeeklySchedule>({});
-  const [savedWeeklySchedule, setSavedWeeklySchedule] =
-    useState<WeeklySchedule>({});
+  const [savedWeeklySchedule, setSavedWeeklySchedule] = useState<WeeklySchedule>({});
 
   const [activeTimePicker, setActiveTimePicker] = useState<{
     day: AvailableDay;
@@ -177,27 +167,20 @@ export default function ScheduleScreen() {
   const [isSavingAvailability, setIsSavingAvailability] = useState(false);
 
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [availabilityError, setAvailabilityError] = useState<string | null>(
-    null,
-  );
-  const [updatingBookingId, setUpdatingBookingId] = useState<string | null>(
-    null,
-  );
+  const [availabilityError, setAvailabilityError] = useState<string | null>(null);
+  const [updatingBookingId, setUpdatingBookingId] = useState<string | null>(null);
 
-  const [expandedSessionNoteBookingId, setExpandedSessionNoteBookingId] =
-    useState<string | null>(null);
-  const [sessionNote, setSessionNote] = useState<TrainerSessionNote | null>(
-    null,
-  );
+  const [expandedSessionNoteBookingId, setExpandedSessionNoteBookingId] = useState<
+    string | null
+  >(null);
+  const [sessionNote, setSessionNote] = useState<TrainerSessionNote | null>(null);
   const [sessionSummary, setSessionSummary] = useState('');
   const [sessionObservations, setSessionObservations] = useState('');
   const [sessionRecommendations, setSessionRecommendations] = useState('');
   const [isLoadingSessionNote, setIsLoadingSessionNote] = useState(false);
   const [hasLoadedSessionNote, setHasLoadedSessionNote] = useState(false);
   const [isSavingSessionNote, setIsSavingSessionNote] = useState(false);
-  const [sessionNoteError, setSessionNoteError] = useState<string | null>(
-    null,
-  );
+  const [sessionNoteError, setSessionNoteError] = useState<string | null>(null);
   const sessionNoteRequestId = useRef(0);
 
   useEffect(() => {
@@ -209,7 +192,7 @@ export default function ScheduleScreen() {
   }, []);
 
   const loadSchedule = useCallback(
-    async (refresh = false) => {
+    async (refresh = false, silent = false) => {
       if (!user) {
         setBookings([]);
         setAvailableDays([]);
@@ -223,7 +206,7 @@ export default function ScheduleScreen() {
 
       if (refresh) {
         setIsRefreshing(true);
-      } else {
+      } else if (!silent) {
         setIsLoading(true);
       }
 
@@ -256,9 +239,7 @@ export default function ScheduleScreen() {
         setTrainerTimezone(trainerProfile?.timezone || DEFAULT_TIMEZONE);
 
         const rows = bookingRows ?? [];
-        const clientIds = [
-          ...new Set(rows.map((booking) => booking.gym_goer_id)),
-        ];
+        const clientIds = [...new Set(rows.map((booking) => booking.gym_goer_id))];
 
         const { data: clientProfiles, error: profilesError } = clientIds.length
           ? await supabase
@@ -286,7 +267,6 @@ export default function ScheduleScreen() {
 
         setBookings(bookingsWithClients);
 
-        // Load available days and the existing daily training hours.
         const availability = trainerProfile?.availability;
         let loadedDays: AvailableDay[] = [];
         let loadedSchedule: WeeklySchedule = {};
@@ -312,10 +292,7 @@ export default function ScheduleScreen() {
             typeof availability.schedule === 'object' &&
             !Array.isArray(availability.schedule)
           ) {
-            const storedSchedule = availability.schedule as Record<
-              string,
-              unknown
-            >;
+            const storedSchedule = availability.schedule as Record<string, unknown>;
 
             for (const day of availabilityOptions) {
               const window = storedSchedule[day];
@@ -348,8 +325,10 @@ export default function ScheduleScreen() {
         console.error('[Trainer Schedule] Unable to load schedule:', error);
         setErrorMessage('We couldn’t load your sessions. Please try again.');
       } finally {
-        setIsLoading(false);
-        setIsRefreshing(false);
+        if (!silent) {
+          setIsLoading(false);
+          setIsRefreshing(false);
+        }
       }
     },
     [user],
@@ -375,11 +354,7 @@ export default function ScheduleScreen() {
     setAvailabilityError(null);
   }
 
-  function updateDailyTime(
-    day: AvailableDay,
-    field: 'start' | 'end',
-    value: string,
-  ) {
+  function updateDailyTime(day: AvailableDay, field: 'start' | 'end', value: string) {
     setWeeklySchedule((current) => ({
       ...current,
       [day]: {
@@ -391,10 +366,7 @@ export default function ScheduleScreen() {
     setAvailabilityError(null);
   }
 
-  function handleTimePickerChange(
-    event: { type: string },
-    selectedDate?: Date,
-  ) {
+  function handleTimePickerChange(event: { type: string }, selectedDate?: Date) {
     if (event.type === 'dismissed' || !selectedDate || !activeTimePicker) {
       setActiveTimePicker(null);
       return;
@@ -417,7 +389,6 @@ export default function ScheduleScreen() {
       return;
     }
 
-    // Validate each enabled day's time window.
     for (const day of availableDays) {
       const window = weeklySchedule[day] ?? createDefaultTimeWindow();
 
@@ -427,9 +398,7 @@ export default function ScheduleScreen() {
       }
 
       if (window.end <= window.start) {
-        setAvailabilityError(
-          `${day}: the end time must be later than the start time.`,
-        );
+        setAvailabilityError(`${day}: the end time must be later than the start time.`);
         return;
       }
     }
@@ -443,7 +412,6 @@ export default function ScheduleScreen() {
         availableDays.includes(day),
       );
 
-      // Read the latest stored value so other availability fields are preserved.
       const { data: trainerProfile, error: loadError } = await supabase
         .from('trainer_profiles')
         .select('availability')
@@ -469,7 +437,6 @@ export default function ScheduleScreen() {
           ? existingObject.schedule
           : {};
 
-      // Merge edited hours with the saved schedule. Unedited days are retained.
       const updatedSchedule = {
         ...existingSchedule,
         ...weeklySchedule,
@@ -502,9 +469,7 @@ export default function ScheduleScreen() {
     } catch (error) {
       console.error('[Trainer Schedule] Unable to save availability:', error);
 
-      setAvailabilityError(
-        'Unable to save your availability. Please try again.',
-      );
+      setAvailabilityError('Unable to save your availability. Please try again.');
     } finally {
       setIsSavingAvailability(false);
     }
@@ -514,7 +479,7 @@ export default function ScheduleScreen() {
     booking: Booking,
     status: 'confirmed' | 'declined' | 'cancelled' | 'completed',
   ) {
-    if (!user) return;
+    if (!user || updatingBookingId !== null) return;
 
     if (status === 'completed') {
       if (booking.status !== 'confirmed') {
@@ -584,11 +549,11 @@ export default function ScheduleScreen() {
           'The booking may have changed. Refresh your schedule and try again.',
         );
 
-        await loadSchedule(true);
+        await loadSchedule(false, true);
         return;
       }
 
-      await loadSchedule(true);
+      await loadSchedule(false, true);
 
       Alert.alert(
         status === 'confirmed'
@@ -607,10 +572,7 @@ export default function ScheduleScreen() {
               : 'The session is now marked as completed. The gym-goer can leave a review.',
       );
     } catch (error) {
-      console.error(
-        `[Trainer Schedule] Unable to ${action} booking:`,
-        error,
-      );
+      console.error(`[Trainer Schedule] Unable to ${action} booking:`, error);
 
       Alert.alert(
         'Unable to update booking',
@@ -622,10 +584,7 @@ export default function ScheduleScreen() {
   }
 
   function confirmSessionCancellation(booking: Booking) {
-    const clientName = [
-      booking.client?.first_name,
-      booking.client?.last_name,
-    ]
+    const clientName = [booking.client?.first_name, booking.client?.last_name]
       .filter(Boolean)
       .join(' ')
       .trim();
@@ -649,19 +608,16 @@ export default function ScheduleScreen() {
     );
   }
 
-  // Swipe actions for trainer bookings.
-  function renderBookingSwipeActions(booking: Booking) {
+  // Swipe actions now receive the Swipeable close method.
+  function renderBookingSwipeActions(booking: Booking, closeSwipeable: () => void) {
     const isPending = booking.status === 'pending';
-
     const isConfirmed = booking.status === 'confirmed';
 
     const canCancel =
-      isConfirmed &&
-      new Date(booking.scheduled_start).getTime() > now.getTime();
+      isConfirmed && new Date(booking.scheduled_start).getTime() > now.getTime();
 
     const canComplete =
-      isConfirmed &&
-      new Date(booking.scheduled_end).getTime() <= now.getTime();
+      isConfirmed && new Date(booking.scheduled_end).getTime() <= now.getTime();
 
     const isUpdating = updatingBookingId === booking.id;
 
@@ -679,7 +635,10 @@ export default function ScheduleScreen() {
             accessibilityRole="button"
             accessibilityLabel="Decline booking"
             disabled={isUpdating}
-            onPress={() => void updateBookingStatus(booking, 'declined')}
+            onPress={() => {
+              closeSwipeable();
+              void updateBookingStatus(booking, 'declined');
+            }}
             style={{
               width: 112,
               alignItems: 'center',
@@ -688,15 +647,11 @@ export default function ScheduleScreen() {
               gap: spacing.sm,
             }}
           >
-            {isUpdating ? (
-              <ActivityIndicator color={colors.text.primary} />
-            ) : (
-              <MaterialCommunityIcons
-                name="calendar-remove"
-                size={28}
-                color={colors.text.primary}
-              />
-            )}
+            <MaterialCommunityIcons
+              name="calendar-remove"
+              size={28}
+              color={colors.text.primary}
+            />
 
             <AppText variant="button" color={colors.text.primary}>
               Decline
@@ -707,7 +662,10 @@ export default function ScheduleScreen() {
             accessibilityRole="button"
             accessibilityLabel="Confirm booking"
             disabled={isUpdating}
-            onPress={() => void updateBookingStatus(booking, 'confirmed')}
+            onPress={() => {
+              closeSwipeable();
+              void updateBookingStatus(booking, 'confirmed');
+            }}
             style={{
               width: 112,
               alignItems: 'center',
@@ -716,15 +674,7 @@ export default function ScheduleScreen() {
               gap: spacing.sm,
             }}
           >
-            {isUpdating ? (
-              <ActivityIndicator color="#FFFFFF" />
-            ) : (
-              <MaterialCommunityIcons
-                name="calendar-check"
-                size={28}
-                color="#FFFFFF"
-              />
-            )}
+            <MaterialCommunityIcons name="calendar-check" size={28} color="#FFFFFF" />
 
             <AppText variant="button" color="#FFFFFF">
               Confirm
@@ -747,7 +697,10 @@ export default function ScheduleScreen() {
             accessibilityRole="button"
             accessibilityLabel="Cancel confirmed session"
             disabled={isUpdating}
-            onPress={() => confirmSessionCancellation(booking)}
+            onPress={() => {
+              closeSwipeable();
+              confirmSessionCancellation(booking);
+            }}
             style={{
               width: 120,
               flex: 1,
@@ -757,15 +710,7 @@ export default function ScheduleScreen() {
               gap: spacing.sm,
             }}
           >
-            {isUpdating ? (
-              <ActivityIndicator color="#FFFFFF" />
-            ) : (
-              <MaterialCommunityIcons
-                name="calendar-remove"
-                size={28}
-                color="#FFFFFF"
-              />
-            )}
+            <MaterialCommunityIcons name="calendar-remove" size={28} color="#FFFFFF" />
 
             <AppText variant="button" color="#FFFFFF">
               Cancel
@@ -789,6 +734,8 @@ export default function ScheduleScreen() {
             accessibilityLabel="Complete session"
             disabled={isUpdating}
             onPress={() => {
+              closeSwipeable();
+
               Alert.alert(
                 'Complete session?',
                 'Confirm that this training session has taken place.',
@@ -796,8 +743,7 @@ export default function ScheduleScreen() {
                   { text: 'Cancel', style: 'cancel' },
                   {
                     text: 'Complete session',
-                    onPress: () =>
-                      void updateBookingStatus(booking, 'completed'),
+                    onPress: () => void updateBookingStatus(booking, 'completed'),
                   },
                 ],
               );
@@ -811,15 +757,11 @@ export default function ScheduleScreen() {
               gap: spacing.sm,
             }}
           >
-            {isUpdating ? (
-              <ActivityIndicator color="#FFFFFF" />
-            ) : (
-              <MaterialCommunityIcons
-                name="check-circle-outline"
-                size={28}
-                color="#FFFFFF"
-              />
-            )}
+            <MaterialCommunityIcons
+              name="check-circle-outline"
+              size={28}
+              color="#FFFFFF"
+            />
 
             <AppText variant="button" color="#FFFFFF">
               Complete
@@ -893,11 +835,7 @@ export default function ScheduleScreen() {
   }
 
   async function saveSessionNote(booking: Booking) {
-    if (
-      booking.status !== 'completed' ||
-      isSavingSessionNote ||
-      !hasLoadedSessionNote
-    ) {
+    if (booking.status !== 'completed' || isSavingSessionNote || !hasLoadedSessionNote) {
       return;
     }
 
@@ -962,9 +900,7 @@ export default function ScheduleScreen() {
   });
 
   const selectedSessionNoteBooking =
-    bookings.find(
-      (booking) => booking.id === expandedSessionNoteBookingId,
-    ) ?? null;
+    bookings.find((booking) => booking.id === expandedSessionNoteBookingId) ?? null;
 
   const selectedSessionNoteClientName = selectedSessionNoteBooking?.client
     ? `${selectedSessionNoteBooking.client.first_name ?? ''} ${
@@ -1029,9 +965,7 @@ export default function ScheduleScreen() {
                   paddingVertical: spacing.md,
                   borderRadius: 12,
                   borderWidth: 1,
-                  borderColor: selected
-                    ? colors.brand.red
-                    : colors.border.default,
+                  borderColor: selected ? colors.brand.red : colors.border.default,
                   backgroundColor: selected
                     ? colors.brand.red
                     : colors.background.secondary,
@@ -1065,8 +999,8 @@ export default function ScheduleScreen() {
             </AppText>
 
             <AppText variant="body" color={colors.text.secondary}>
-              Select the days you can train clients, then set your start and
-              finish times. Your changes are saved to your trainer profile.
+              Select the days you can train clients, then set your start and finish times.
+              Your changes are saved to your trainer profile.
             </AppText>
 
             {isLoading ? (
@@ -1074,12 +1008,10 @@ export default function ScheduleScreen() {
             ) : (
               availabilityOptions.map((day) => {
                 const selected = availableDays.includes(day);
-                const window =
-                  weeklySchedule[day] ?? createDefaultTimeWindow();
+                const window = weeklySchedule[day] ?? createDefaultTimeWindow();
 
                 return (
                   <View key={day} style={{ gap: spacing.sm }}>
-                    {/* Day selection */}
                     <Pressable
                       accessibilityRole="checkbox"
                       accessibilityLabel={day}
@@ -1094,42 +1026,31 @@ export default function ScheduleScreen() {
                         paddingHorizontal: spacing.md,
                         borderRadius: 12,
                         borderWidth: 1,
-                        borderColor: selected
-                          ? colors.brand.red
-                          : colors.border.default,
+                        borderColor: selected ? colors.brand.red : colors.border.default,
                         backgroundColor: selected
                           ? colors.background.primary
                           : colors.background.secondary,
                         flexDirection: 'row',
                         alignItems: 'center',
                         justifyContent: 'space-between',
-                        opacity: isSavingAvailability
-                          ? 0.6
-                          : pressed
-                            ? 0.8
-                            : 1,
+                        opacity: isSavingAvailability ? 0.6 : pressed ? 0.8 : 1,
                       })}
                     >
                       <AppText
                         variant="body"
-                        color={
-                          selected ? colors.brand.red : colors.text.primary
-                        }
+                        color={selected ? colors.brand.red : colors.text.primary}
                       >
                         {day}
                       </AppText>
 
                       <AppText
                         variant="button"
-                        color={
-                          selected ? colors.brand.red : colors.text.tertiary
-                        }
+                        color={selected ? colors.brand.red : colors.text.tertiary}
                       >
                         {selected ? '✓' : '+'}
                       </AppText>
                     </Pressable>
 
-                    {/* Start and end time controls */}
                     {selected ? (
                       <View
                         style={{
@@ -1141,10 +1062,7 @@ export default function ScheduleScreen() {
                           gap: spacing.md,
                         }}
                       >
-                        <AppText
-                          variant="caption"
-                          color={colors.text.secondary}
-                        >
+                        <AppText variant="caption" color={colors.text.secondary}>
                           TRAINING HOURS
                         </AppText>
 
@@ -1165,9 +1083,7 @@ export default function ScheduleScreen() {
                                 disabled: isSavingAvailability,
                               }}
                               disabled={isSavingAvailability}
-                              onPress={() =>
-                                setActiveTimePicker({ day, field })
-                              }
+                              onPress={() => setActiveTimePicker({ day, field })}
                               style={({ pressed }) => ({
                                 flex: 1,
                                 minHeight: 64,
@@ -1184,32 +1100,21 @@ export default function ScheduleScreen() {
                                 opacity: pressed ? 0.75 : 1,
                               })}
                             >
-                              <AppText
-                                variant="caption"
-                                color={colors.text.secondary}
-                              >
-                                {field === 'start'
-                                  ? 'START TIME'
-                                  : 'END TIME'}
+                              <AppText variant="caption" color={colors.text.secondary}>
+                                {field === 'start' ? 'START TIME' : 'END TIME'}
                               </AppText>
 
-                              <AppText
-                                variant="h3"
-                                color={colors.text.primary}
-                              >
+                              <AppText variant="h3" color={colors.text.primary}>
                                 {formatTimeLabel(window[field])}
                               </AppText>
                             </Pressable>
                           ))}
                         </View>
 
-                        {/* Native time picker */}
                         {activeTimePicker?.day === day ? (
                           <View style={{ alignItems: 'center' }}>
                             <DateTimePicker
-                              value={timeToDate(
-                                window[activeTimePicker.field],
-                              )}
+                              value={timeToDate(window[activeTimePicker.field])}
                               mode="time"
                               display="spinner"
                               onChange={handleTimePickerChange}
@@ -1248,21 +1153,13 @@ export default function ScheduleScreen() {
               </AppText>
             ) : null}
 
-            {/* Save availability */}
             <Pressable
               accessibilityRole="button"
               accessibilityState={{
-                disabled:
-                  isLoading ||
-                  isSavingAvailability ||
-                  availableDays.length === 0,
+                disabled: isLoading || isSavingAvailability || availableDays.length === 0,
                 busy: isSavingAvailability,
               }}
-              disabled={
-                isLoading ||
-                isSavingAvailability ||
-                availableDays.length === 0
-              }
+              disabled={isLoading || isSavingAvailability || availableDays.length === 0}
               onPress={() => void saveAvailability()}
               style={({ pressed }) => ({
                 minHeight: 54,
@@ -1271,9 +1168,7 @@ export default function ScheduleScreen() {
                 borderRadius: 14,
                 backgroundColor: colors.brand.red,
                 opacity:
-                  isLoading ||
-                  isSavingAvailability ||
-                  availableDays.length === 0
+                  isLoading || isSavingAvailability || availableDays.length === 0
                     ? 0.6
                     : pressed
                       ? 0.8
@@ -1289,7 +1184,6 @@ export default function ScheduleScreen() {
               )}
             </Pressable>
 
-            {/* Last successfully saved availability */}
             {savedDays.length > 0 ? (
               <View style={{ gap: spacing.sm }}>
                 <AppText variant="bodySmall" color={colors.text.secondary}>
@@ -1300,11 +1194,7 @@ export default function ScheduleScreen() {
                   const savedWindow = savedWeeklySchedule[day];
 
                   return (
-                    <AppText
-                      key={day}
-                      variant="bodySmall"
-                      color={colors.text.secondary}
-                    >
+                    <AppText key={day} variant="bodySmall" color={colors.text.secondary}>
                       {day}:{' '}
                       {savedWindow
                         ? `${formatTimeLabel(
@@ -1318,7 +1208,6 @@ export default function ScheduleScreen() {
             ) : null}
           </View>
         ) : isLoading ? (
-          /* Loading state */
           <View
             style={{
               padding: spacing.xxl,
@@ -1333,7 +1222,6 @@ export default function ScheduleScreen() {
             </AppText>
           </View>
         ) : errorMessage ? (
-          /* Error state */
           <View
             style={{
               padding: spacing.xl,
@@ -1368,7 +1256,6 @@ export default function ScheduleScreen() {
             </Pressable>
           </View>
         ) : visibleBookings.length === 0 ? (
-          /* Empty state */
           <View
             style={{
               padding: spacing.xl,
@@ -1381,9 +1268,7 @@ export default function ScheduleScreen() {
             }}
           >
             <AppText variant="h3" color={colors.text.primary}>
-              {activeView === 'History'
-                ? 'NO SESSION HISTORY'
-                : 'NO UPCOMING SESSIONS'}
+              {activeView === 'History' ? 'NO SESSION HISTORY' : 'NO UPCOMING SESSIONS'}
             </AppText>
 
             <AppText
@@ -1397,7 +1282,6 @@ export default function ScheduleScreen() {
             </AppText>
           </View>
         ) : (
-          /* Booking cards */
           <View style={{ gap: spacing.md }}>
             <AppText variant="h2" color={colors.text.primary}>
               {activeView === 'History' ? 'SESSION HISTORY' : 'YOUR SESSIONS'} (
@@ -1405,10 +1289,7 @@ export default function ScheduleScreen() {
             </AppText>
 
             {visibleBookings.map((booking) => {
-              const clientName = [
-                booking.client?.first_name,
-                booking.client?.last_name,
-              ]
+              const clientName = [booking.client?.first_name, booking.client?.last_name]
                 .filter(Boolean)
                 .join(' ')
                 .trim();
@@ -1421,8 +1302,6 @@ export default function ScheduleScreen() {
                 booking.status === 'confirmed' &&
                 new Date(booking.scheduled_end).getTime() <= now.getTime();
 
-              // Keep pending swipe actions and add cancellation for upcoming
-              // confirmed sessions. Completed sessions retain their Complete action.
               const canSwipe =
                 activeView === 'Upcoming' &&
                 (booking.status === 'pending' || canCancel || canComplete);
@@ -1440,8 +1319,8 @@ export default function ScheduleScreen() {
               return (
                 <Swipeable
                   key={booking.id}
-                  renderRightActions={() =>
-                    renderBookingSwipeActions(booking)
+                  renderRightActions={(_, __, swipeableMethods) =>
+                    renderBookingSwipeActions(booking, swipeableMethods.close)
                   }
                   enabled={canSwipe && updatingBookingId === null}
                   friction={2}
@@ -1463,7 +1342,6 @@ export default function ScheduleScreen() {
                       gap: spacing.md,
                     }}
                   >
-                    {/* Client and status */}
                     <View
                       style={{
                         flexDirection: 'row',
@@ -1498,7 +1376,6 @@ export default function ScheduleScreen() {
                       </View>
                     </View>
 
-                    {/* Session date and time in trainer timezone */}
                     <View
                       style={{
                         padding: spacing.md,
@@ -1508,10 +1385,7 @@ export default function ScheduleScreen() {
                       }}
                     >
                       <AppText variant="body" color={colors.text.primary}>
-                        {formatDate(
-                          booking.scheduled_start,
-                          trainerTimezone,
-                        )}
+                        {formatDate(booking.scheduled_start, trainerTimezone)}
                       </AppText>
 
                       <View
@@ -1523,29 +1397,19 @@ export default function ScheduleScreen() {
                         }}
                       >
                         <AppText variant="h3" color={colors.brand.red}>
-                          {formatTime(
-                            booking.scheduled_start,
-                            trainerTimezone,
-                          )}
+                          {formatTime(booking.scheduled_start, trainerTimezone)}
                         </AppText>
 
-                        <AppText
-                          variant="body"
-                          color={colors.text.tertiary}
-                        >
+                        <AppText variant="body" color={colors.text.tertiary}>
                           –
                         </AppText>
 
                         <AppText variant="h3" color={colors.text.primary}>
-                          {formatTime(
-                            booking.scheduled_end,
-                            trainerTimezone,
-                          )}
+                          {formatTime(booking.scheduled_end, trainerTimezone)}
                         </AppText>
                       </View>
                     </View>
 
-                    {/* Session fee */}
                     <View
                       style={{
                         paddingTop: spacing.sm,
@@ -1554,18 +1418,12 @@ export default function ScheduleScreen() {
                         gap: spacing.xs,
                       }}
                     >
-                      <AppText
-                        variant="caption"
-                        color={colors.text.secondary}
-                      >
+                      <AppText variant="caption" color={colors.text.secondary}>
                         SESSION FEE
                       </AppText>
 
                       <AppText variant="h3" color={colors.brand.red}>
-                        {formatMoney(
-                          Number(booking.session_rate),
-                          booking.currency,
-                        )}
+                        {formatMoney(Number(booking.session_rate), booking.currency)}
                       </AppText>
                     </View>
 
@@ -1575,15 +1433,11 @@ export default function ScheduleScreen() {
                       </AppText>
                     ) : null}
 
-                    {/* Private trainer session notes */}
-                    {booking.status === 'completed' &&
-                    activeView === 'History' ? (
+                    {booking.status === 'completed' && activeView === 'History' ? (
                       <Pressable
                         accessibilityRole="button"
                         accessibilityLabel="Add or edit private session notes"
-                        onPress={() =>
-                          void toggleSessionNoteEditor(booking)
-                        }
+                        onPress={() => void toggleSessionNoteEditor(booking)}
                         style={({ pressed }) => ({
                           minHeight: 48,
                           flexDirection: 'row',
@@ -1597,23 +1451,16 @@ export default function ScheduleScreen() {
                           opacity: pressed ? 0.75 : 1,
                         })}
                       >
-                        <AppText
-                          variant="button"
-                          color={colors.brand.red}
-                        >
+                        <AppText variant="button" color={colors.brand.red}>
                           Session notes
                         </AppText>
 
-                        <AppText
-                          variant="caption"
-                          color={colors.text.secondary}
-                        >
+                        <AppText variant="caption" color={colors.text.secondary}>
                           Add / Edit
                         </AppText>
                       </Pressable>
                     ) : null}
 
-                    {/* Swipe hint */}
                     {canSwipe ? (
                       <View
                         style={{
@@ -1630,10 +1477,7 @@ export default function ScheduleScreen() {
                           color={colors.text.secondary}
                         />
 
-                        <AppText
-                          variant="caption"
-                          color={colors.text.secondary}
-                        >
+                        <AppText variant="caption" color={colors.text.secondary}>
                           Swipe left to manage this session
                         </AppText>
                       </View>
@@ -1694,9 +1538,7 @@ export default function ScheduleScreen() {
               fullWidth
               loading={isSavingSessionNote}
               disabled={
-                !hasLoadedSessionNote ||
-                !sessionSummary.trim() ||
-                isLoadingSessionNote
+                !hasLoadedSessionNote || !sessionSummary.trim() || isLoadingSessionNote
               }
               onPress={() => {
                 if (selectedSessionNoteBooking) {
@@ -1704,9 +1546,7 @@ export default function ScheduleScreen() {
                 }
               }}
             >
-              {sessionNote
-                ? 'Update session notes'
-                : 'Save session notes'}
+              {sessionNote ? 'Update session notes' : 'Save session notes'}
             </Button>
 
             <Button
@@ -1734,8 +1574,7 @@ export default function ScheduleScreen() {
             </AppText>
 
             <AppText variant="caption" color={colors.text.secondary}>
-              Only you can access these notes. They are not shared with the
-              client.
+              Only you can access these notes. They are not shared with the client.
             </AppText>
           </View>
 
@@ -1750,10 +1589,7 @@ export default function ScheduleScreen() {
             >
               <ActivityIndicator color={colors.brand.red} />
 
-              <AppText
-                variant="caption"
-                color={colors.text.secondary}
-              >
+              <AppText variant="caption" color={colors.text.secondary}>
                 Loading session notes...
               </AppText>
             </View>
@@ -1767,9 +1603,7 @@ export default function ScheduleScreen() {
                 <Button
                   fullWidth
                   variant="outline"
-                  onPress={() =>
-                    void loadSessionNote(selectedSessionNoteBooking)
-                  }
+                  onPress={() => void loadSessionNote(selectedSessionNoteBooking)}
                 >
                   Retry loading notes
                 </Button>

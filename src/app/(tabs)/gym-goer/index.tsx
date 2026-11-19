@@ -1,7 +1,7 @@
 import { router, useFocusEffect } from 'expo-router';
 import { ArrowRight, Minus, Scale, TrendingDown, TrendingUp } from 'lucide-react-native';
 import { useCallback, useMemo, useState } from 'react';
-import { Image, Pressable, ScrollView, View } from 'react-native';
+import { Image, Pressable, RefreshControl, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Circle, Line, Path } from 'react-native-svg';
 
@@ -147,31 +147,40 @@ export default function HomeTabScreen() {
 
   const [weightRecords, setWeightRecords] = useState<FitnessProgress[]>([]);
   const [isLoadingWeight, setIsLoadingWeight] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [weightError, setWeightError] = useState<string | null>(null);
 
-  const loadWeightProgress = useCallback(async () => {
-    if (!user?.id) {
-      setWeightRecords([]);
-      setIsLoadingWeight(false);
-      return;
-    }
+  const loadWeightProgress = useCallback(
+    async (showLoading = true) => {
+      if (!user?.id) {
+        setWeightRecords([]);
+        setIsLoadingWeight(false);
+        return;
+      }
 
-    setIsLoadingWeight(true);
-    setWeightError(null);
+      if (showLoading) {
+        setIsLoadingWeight(true);
+      }
 
-    try {
-      const result = await getBodyWeightHistory();
-      setWeightRecords(result);
-    } catch (error) {
-      console.error('[Home] Unable to load weight progress:', error);
+      setWeightError(null);
 
-      setWeightError(
-        error instanceof Error ? error.message : 'Unable to load your weight progress.',
-      );
-    } finally {
-      setIsLoadingWeight(false);
-    }
-  }, [user?.id]);
+      try {
+        const result = await getBodyWeightHistory();
+        setWeightRecords(result);
+      } catch (error) {
+        console.error('[Home] Unable to load weight progress:', error);
+
+        setWeightError(
+          error instanceof Error ? error.message : 'Unable to load your weight progress.',
+        );
+      } finally {
+        if (showLoading) {
+          setIsLoadingWeight(false);
+        }
+      }
+    },
+    [user?.id],
+  );
 
   // Refresh progress whenever the Home screen regains focus.
   useFocusEffect(
@@ -179,6 +188,19 @@ export default function HomeTabScreen() {
       void loadWeightProgress();
     }, [loadWeightProgress]),
   );
+
+  // Pull-to-refresh starts from the Welcome Section.
+  const handleRefresh = useCallback(async () => {
+    if (isRefreshing) return;
+
+    setIsRefreshing(true);
+
+    try {
+      await loadWeightProgress(false);
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [isRefreshing, loadWeightProgress]);
 
   const currentWeight = weightRecords[0] ?? null;
   const previousWeight = weightRecords[1] ?? null;
@@ -201,56 +223,67 @@ export default function HomeTabScreen() {
         backgroundColor: colors.background.primary,
       }}
     >
+      {/* Brand Header - outside the refreshable ScrollView */}
+      <View
+        style={{
+          paddingHorizontal: spacing.lg,
+          paddingTop: spacing.lg,
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginBottom: spacing.xxl,
+        }}
+      >
+        <View style={{ gap: spacing.xs }}>
+          <AppText variant="h1" color={colors.text.primary}>
+            TRAINR
+          </AppText>
+
+          <AppText
+            variant="caption"
+            color={colors.text.tertiary}
+            style={{
+              letterSpacing: 1.2,
+              textTransform: 'uppercase',
+            }}
+          >
+            YOUR FITNESS. YOUR JOURNEY.
+          </AppText>
+        </View>
+
+        <NotificationBell />
+
+        {/* Theme-aware App Icon */}
+        <Image
+          source={appIcon}
+          accessibilityLabel="TRAINR app icon"
+          resizeMode="contain"
+          style={{
+            width: 64,
+            height: 64,
+            borderRadius: 14,
+          }}
+        />
+      </View>
+
+      {/* Refreshable Content - starts at Welcome Section */}
       <ScrollView
         contentContainerStyle={{
           flexGrow: 1,
           paddingHorizontal: spacing.lg,
-          paddingTop: spacing.lg,
           paddingBottom: spacing.xxl,
         }}
         showsVerticalScrollIndicator={false}
-      >
-        {/* Brand Header */}
-        <View
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            marginBottom: spacing.xxxl,
-          }}
-        >
-          <View style={{ gap: spacing.xs }}>
-            <AppText variant="h1" color={colors.text.primary}>
-              TRAINR
-            </AppText>
-
-            <AppText
-              variant="caption"
-              color={colors.text.tertiary}
-              style={{
-                letterSpacing: 1.2,
-                textTransform: 'uppercase',
-              }}
-            >
-              YOUR FITNESS. YOUR JOURNEY.
-            </AppText>
-          </View>
-
-          <NotificationBell />
-
-          {/* Theme-aware App Icon */}
-          <Image
-            source={appIcon}
-            accessibilityLabel="TRAINR app icon"
-            resizeMode="contain"
-            style={{
-              width: 64,
-              height: 64,
-              borderRadius: 14,
-            }}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            tintColor={colors.brand.red}
+            colors={[colors.brand.red]}
+            progressBackgroundColor={colors.background.secondary}
           />
-        </View>
-
+        }
+      >
         {/* Welcome Section */}
         <View
           style={{

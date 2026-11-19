@@ -4,6 +4,7 @@ import { useCallback, useState } from 'react';
 import {
   Alert,
   Pressable,
+  RefreshControl,
   ScrollView,
   View,
   useWindowDimensions,
@@ -23,7 +24,6 @@ import {
   getExploreWorkoutPlans,
   type ExploreWorkoutPlan,
 } from '@/services/explore-workouts';
-
 
 type WorkoutCategory = 'All' | 'Strength' | 'Cardio' | 'Mobility';
 
@@ -68,12 +68,7 @@ type TrainingDay = {
   exercises: PublishedExercise[];
 };
 
-const categories: WorkoutCategory[] = [
-  'All',
-  'Strength',
-  'Cardio',
-  'Mobility',
-];
+const categories: WorkoutCategory[] = ['All', 'Strength', 'Cardio', 'Mobility'];
 
 function getPublishedSnapshot(
   assignment: WorkoutAssignment,
@@ -92,13 +87,9 @@ function getPublishedSnapshot(
   return snapshot as unknown as PublishedPlanSnapshot;
 }
 
-function groupExercisesByDay(
-  exercises: PublishedExercise[],
-): TrainingDay[] {
+function groupExercisesByDay(exercises: PublishedExercise[]): TrainingDay[] {
   const days = exercises.reduce<TrainingDay[]>((result, exercise) => {
-    let day = result.find(
-      (item) => item.dayNumber === exercise.day_number,
-    );
+    let day = result.find((item) => item.dayNumber === exercise.day_number);
 
     if (!day) {
       day = {
@@ -116,9 +107,7 @@ function groupExercisesByDay(
   }, []);
 
   days.forEach((day) => {
-    day.exercises.sort(
-      (a, b) => a.exercise_order - b.exercise_order,
-    );
+    day.exercises.sort((a, b) => a.exercise_order - b.exercise_order);
   });
 
   return days.sort((a, b) => a.dayNumber - b.dayNumber);
@@ -132,124 +121,128 @@ export default function WorkoutsScreen() {
   const dayCardWidth = screenWidth - spacing.lg * 2;
   const dayCardHeight = Math.max(420, Math.min(screenHeight * 0.58, 620));
 
-  const [selectedCategory, setSelectedCategory] =
-    useState<WorkoutCategory>('All');
+  const [selectedCategory, setSelectedCategory] = useState<WorkoutCategory>('All');
 
-  const [selectedWorkout, setSelectedWorkout] =
-    useState<string | null>(null);
+  const [selectedWorkout, setSelectedWorkout] = useState<string | null>(null);
 
-  const [assignments, setAssignments] =
-    useState<WorkoutAssignment[]>([]);
+  const [assignments, setAssignments] = useState<WorkoutAssignment[]>([]);
 
-  const [selectedAssignmentId, setSelectedAssignmentId] =
-    useState<string | null>(null);
+  const [selectedAssignmentId, setSelectedAssignmentId] = useState<string | null>(null);
 
-  const [startingWorkoutKey, setStartingWorkoutKey] =
-    useState<string | null>(null);
+  const [startingWorkoutKey, setStartingWorkoutKey] = useState<string | null>(null);
 
-  const [isLoadingAssignments, setIsLoadingAssignments] =
-    useState(true);
+  const [isLoadingAssignments, setIsLoadingAssignments] = useState(true);
 
-  const [assignmentError, setAssignmentError] =
-    useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const [exploreWorkouts, setExploreWorkouts] =
-    useState<ExploreWorkoutPlan[]>([]);
+  const [assignmentError, setAssignmentError] = useState<string | null>(null);
 
-  const [isLoadingExploreWorkouts, setIsLoadingExploreWorkouts] =
-    useState(true);
+  const [exploreWorkouts, setExploreWorkouts] = useState<ExploreWorkoutPlan[]>([]);
 
-  const [exploreWorkoutsError, setExploreWorkoutsError] =
-    useState<string | null>(null);
+  const [isLoadingExploreWorkouts, setIsLoadingExploreWorkouts] = useState(true);
 
-  const filteredExploreWorkouts = exploreWorkouts.filter(
-    (workout) => {
-      if (selectedCategory === 'All') {
-        return true;
+  const [exploreWorkoutsError, setExploreWorkoutsError] = useState<string | null>(null);
+
+  const filteredExploreWorkouts = exploreWorkouts.filter((workout) => {
+    if (selectedCategory === 'All') {
+      return true;
+    }
+
+    return workout.exercises.some(
+      (item) => item.exercise.category?.toLowerCase() === selectedCategory.toLowerCase(),
+    );
+  });
+
+  const [expandedExercises, setExpandedExercises] = useState<string[]>([]);
+
+  const [selectedTrainingDays, setSelectedTrainingDays] = useState<
+    Record<string, number>
+  >({});
+
+  const loadAssignments = useCallback(
+    async (showLoading = true) => {
+      if (!user?.id || profile?.role !== 'gym_goer') {
+        setAssignments([]);
+        setSelectedAssignmentId(null);
+        setIsLoadingAssignments(false);
+        return;
       }
 
-      return workout.exercises.some(
-        (item) =>
-          item.exercise.category?.toLowerCase() ===
-          selectedCategory.toLowerCase(),
-      );
+      if (showLoading) {
+        setIsLoadingAssignments(true);
+      }
+      setAssignmentError(null);
+
+      try {
+        const result = await getClientWorkoutAssignments(user.id);
+
+        const activeAssignments = result.filter(
+          (assignment) => assignment.status === 'active',
+        );
+
+        setAssignments(activeAssignments);
+        setSelectedAssignmentId((current) =>
+          activeAssignments.some((assignment) => assignment.id === current)
+            ? current
+            : (activeAssignments[0]?.id ?? null),
+        );
+      } catch (error) {
+        console.error('[Workouts] Unable to load assigned programmes:', error);
+
+        setAssignmentError(
+          error instanceof Error
+            ? error.message
+            : 'Unable to load your training programmes.',
+        );
+      } finally {
+        if (showLoading) {
+          setIsLoadingAssignments(false);
+        }
+      }
     },
+    [user, profile?.role],
   );
 
-  const [expandedExercises, setExpandedExercises] =
-    useState<string[]>([]);
+  const loadExploreWorkouts = useCallback(
+    async (showLoading = true) => {
+      if (!user?.id || profile?.role !== 'gym_goer') {
+        setExploreWorkouts([]);
+        setIsLoadingExploreWorkouts(false);
+        return;
+      }
 
-  const [selectedTrainingDays, setSelectedTrainingDays] =
-    useState<Record<string, number>>({});
+      if (showLoading) {
+        setIsLoadingExploreWorkouts(true);
+      }
+      setExploreWorkoutsError(null);
 
-  const loadAssignments = useCallback(async () => {
-    if (!user?.id || profile?.role !== 'gym_goer') {
-      setAssignments([]);
-      setSelectedAssignmentId(null);
-      setIsLoadingAssignments(false);
-      return;
-    }
+      try {
+        const result = await getExploreWorkoutPlans();
+        setExploreWorkouts(result);
+      } catch (error) {
+        console.error('[Workouts] Unable to load Explore Workouts:', error);
 
-    setIsLoadingAssignments(true);
-    setAssignmentError(null);
+        setExploreWorkoutsError(
+          error instanceof Error ? error.message : 'Unable to load published workouts.',
+        );
+      } finally {
+        if (showLoading) {
+          setIsLoadingExploreWorkouts(false);
+        }
+      }
+    },
+    [user?.id, profile?.role],
+  );
 
-    try {
-      const result = await getClientWorkoutAssignments(user.id);
-
-      const activeAssignments = result.filter(
-        (assignment) => assignment.status === 'active',
-      );
-
-      setAssignments(activeAssignments);
-      setSelectedAssignmentId((current) =>
-        activeAssignments.some((assignment) => assignment.id === current)
-          ? current
-          : activeAssignments[0]?.id ?? null,
-      );
-    } catch (error) {
-      console.error(
-        '[Workouts] Unable to load assigned programmes:',
-        error,
-      );
-
-      setAssignmentError(
-        error instanceof Error
-          ? error.message
-          : 'Unable to load your training programmes.',
-      );
-    } finally {
-      setIsLoadingAssignments(false);
-    }
-  }, [user?.id, profile?.role]);
-
-  const loadExploreWorkouts = useCallback(async () => {
-    if (!user?.id || profile?.role !== 'gym_goer') {
-      setExploreWorkouts([]);
-      setIsLoadingExploreWorkouts(false);
-      return;
-    }
-
-    setIsLoadingExploreWorkouts(true);
-    setExploreWorkoutsError(null);
+  const handleRefresh = useCallback(async () => {
+    setIsRefreshing(true);
 
     try {
-      const result = await getExploreWorkoutPlans();
-      setExploreWorkouts(result);
-    } catch (error) {
-      console.error(
-        '[Workouts] Unable to load Explore Workouts:',
-        error,
-      );
-
-      setExploreWorkoutsError(
-        error instanceof Error
-          ? error.message
-          : 'Unable to load published workouts.',
-      );
+      await Promise.all([loadAssignments(false), loadExploreWorkouts(false)]);
     } finally {
-      setIsLoadingExploreWorkouts(false);
+      setIsRefreshing(false);
     }
-  }, [user?.id, profile?.role]);
+  }, [loadAssignments, loadExploreWorkouts]);
 
   useFocusEffect(
     useCallback(() => {
@@ -258,15 +251,9 @@ export default function WorkoutsScreen() {
     }, [loadAssignments, loadExploreWorkouts]),
   );
 
-  const handleStartWorkout = async (
-    assignment: WorkoutAssignment,
-    day: TrainingDay,
-  ) => {
+  const handleStartWorkout = async (assignment: WorkoutAssignment, day: TrainingDay) => {
     if (!user?.id) {
-      Alert.alert(
-        'Authentication required',
-        'Please sign in to start your workout.',
-      );
+      Alert.alert('Authentication required', 'Please sign in to start your workout.');
       return;
     }
 
@@ -288,8 +275,7 @@ export default function WorkoutsScreen() {
       });
 
       router.push({
-        pathname:
-          '/(tabs)/gym-goer-workout/session/[assignmentId]',
+        pathname: '/(tabs)/gym-goer-workout/session/[assignmentId]',
         params: {
           assignmentId: log.id,
         },
@@ -326,31 +312,45 @@ export default function WorkoutsScreen() {
         backgroundColor: colors.background.primary,
       }}
     >
+      {/* Page Header */}
+      <View
+        style={{
+          paddingHorizontal: spacing.lg,
+          paddingTop: spacing.md,
+          paddingBottom: spacing.xl,
+          gap: spacing.xs,
+        }}
+      >
+        <AppText variant="caption" color={colors.brand.red}>
+          YOUR TRAINING
+        </AppText>
+
+        <AppText variant="displayLarge" color={colors.text.primary}>
+          WORKOUTS.
+        </AppText>
+
+        <AppText variant="bodySmall" color={colors.text.secondary}>
+          Train with purpose. Build consistency. Track your progress.
+        </AppText>
+      </View>
+
       <ScrollView
         contentContainerStyle={{
           paddingHorizontal: spacing.lg,
-          paddingTop: spacing.md,
           paddingBottom: spacing.xxl,
           gap: spacing.xl,
         }}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            tintColor={colors.brand.red}
+            colors={[colors.brand.red]}
+            progressBackgroundColor={colors.background.secondary}
+          />
+        }
       >
-
-        {/* Page Header */}
-        <View style={{ gap: spacing.xs }}>
-          <AppText variant="caption" color={colors.brand.red}>
-            YOUR TRAINING
-          </AppText>
-
-          <AppText variant="displayLarge" color={colors.text.primary}>
-            WORKOUTS.
-          </AppText>
-
-          <AppText variant="bodySmall" color={colors.text.secondary}>
-            Train with purpose. Build consistency. Track your progress.
-          </AppText>
-        </View>
-
         {/* My Training Plan */}
         <View style={{ gap: spacing.lg }}>
           <View
@@ -413,8 +413,8 @@ export default function WorkoutsScreen() {
               </AppText>
 
               <AppText variant="bodySmall" color={colors.text.secondary}>
-                Your trainer's personalised workout programmes will appear
-                here when assigned to you.
+                Your trainer&apos;s personalised workout programmes will appear here when
+                assigned to you.
               </AppText>
             </Card>
           ) : (
@@ -456,9 +456,7 @@ export default function WorkoutsScreen() {
                           padding: spacing.md,
                           borderRadius: 16,
                           borderWidth: selected ? 2 : 1,
-                          borderColor: selected
-                            ? colors.brand.red
-                            : borderColor,
+                          borderColor: selected ? colors.brand.red : borderColor,
                           backgroundColor: colors.background.secondary,
                           justifyContent: 'space-between',
                           gap: spacing.sm,
@@ -474,10 +472,7 @@ export default function WorkoutsScreen() {
                               backgroundColor: colors.brand.red,
                             }}
                           />
-                          <AppText
-                            variant="h4"
-                            color={colors.text.primary}
-                          >
+                          <AppText variant="h4" color={colors.text.primary}>
                             {plan?.name ?? 'Workout programme'}
                           </AppText>
                         </View>
@@ -490,10 +485,7 @@ export default function WorkoutsScreen() {
                             gap: spacing.xs,
                           }}
                         >
-                          <AppText
-                            variant="caption"
-                            color={colors.text.tertiary}
-                          >
+                          <AppText variant="caption" color={colors.text.tertiary}>
                             VERSION {assignment.plan_version}
                           </AppText>
                           <AppText
@@ -538,569 +530,493 @@ export default function WorkoutsScreen() {
               {assignments
                 .filter((assignment) => assignment.id === selectedAssignmentId)
                 .map((assignment) => {
-              const plan = getPublishedSnapshot(assignment);
+                  const plan = getPublishedSnapshot(assignment);
 
-              if (!plan) {
-                return (
-                  <Card key={assignment.id} variant="outlined">
-                    <AppText
-                      variant="bodySmall"
-                      color={colors.text.secondary}
-                    >
-                      Unable to display this programme's published snapshot.
-                    </AppText>
-                  </Card>
-                );
-              }
-
-              const trainingDays = groupExercisesByDay(plan.exercises);
-
-              const selectedDayNumber =
-                selectedTrainingDays[assignment.id] ??
-                trainingDays[0]?.dayNumber;
-
-              const selectedDay =
-                trainingDays.find(
-                  (day) => day.dayNumber === selectedDayNumber,
-                ) ?? trainingDays[0];
-
-              return (
-                <View
-                  key={assignment.id}
-                  style={{ gap: spacing.md }}
-                >
-                  {/* Programme Summary */}
-                  <Card
-                    variant="default"
-                    style={{
-                      gap: spacing.lg,
-                    }}
-                  >
-                    {/* Programme Name and Status */}
-                    <View style={{ gap: spacing.md }}>
-                      <View
-                        style={{
-                          flexDirection: 'row',
-                          alignItems: 'flex-start',
-                          justifyContent: 'space-between',
-                          gap: spacing.md,
-                        }}
-                      >
-                        <View style={{ flex: 1, gap: spacing.sm }}>
-                          <View
-                            style={{
-                              width: 36,
-                              height: 4,
-                              borderRadius: 2,
-                              backgroundColor: colors.brand.red,
-                            }}
-                          />
-
-                          <AppText
-                            variant="h3"
-                            color={colors.text.primary}
-                          >
-                            {plan.name}
-                          </AppText>
-
-                          <View
-                            style={{
-                              alignSelf: 'flex-start',
-                              paddingHorizontal: spacing.sm,
-                              paddingVertical: spacing.xs,
-                              borderRadius: 8,
-                              backgroundColor: colors.background.secondary,
-                              borderWidth: 1,
-                              borderColor,
-                            }}
-                          >
-                            <AppText
-                              variant="caption"
-                              color={colors.text.tertiary}
-                            >
-                              VERSION {assignment.plan_version}
-                            </AppText>
-                          </View>
-                        </View>
-
-                        <View
-                          style={{
-                            paddingHorizontal: spacing.sm,
-                            paddingVertical: spacing.xs,
-                            borderRadius: 999,
-                            backgroundColor: colors.brand.redLight,
-                          }}
-                        >
-                          <AppText
-                            variant="caption"
-                            color={colors.brand.red}
-                          >
-                            ACTIVE
-                          </AppText>
-                        </View>
-                      </View>
-
-                      {plan.description ? (
-                        <AppText
-                          variant="body"
-                          color={colors.text.secondary}
-                        >
-                          {plan.description}
+                  if (!plan) {
+                    return (
+                      <Card key={assignment.id} variant="outlined">
+                        <AppText variant="bodySmall" color={colors.text.secondary}>
+                          Unable to display this programme&apos;s published snapshot.
                         </AppText>
-                      ) : null}
-                    </View>
+                      </Card>
+                    );
+                  }
 
-                    {/* Programme Statistics */}
-                    <View
-                      style={{
-                        flexDirection: 'row',
-                        flexWrap: 'wrap',
-                        gap: spacing.sm,
-                      }}
-                    >
-                      {[
-                        ...(plan.duration_weeks
-                          ? [`${plan.duration_weeks} weeks`]
-                          : []),
-                        `${plan.exercises.length} exercises`,
-                        `${trainingDays.length} training days`,
-                      ].map((item) => (
-                        <View
-                          key={item}
-                          style={{
-                            paddingHorizontal: spacing.md,
-                            paddingVertical: spacing.sm,
-                            borderRadius: 10,
-                            backgroundColor: colors.background.primary,
-                            borderWidth: 1,
-                            borderColor,
-                          }}
-                        >
-                          <AppText
-                            variant="caption"
-                            color={colors.text.secondary}
-                          >
-                            {item}
-                          </AppText>
-                        </View>
-                      ))}
-                    </View>
+                  const trainingDays = groupExercisesByDay(plan.exercises);
 
-                    {plan.objectives ? (
-                      <View
-                        style={{
-                          paddingTop: spacing.md,
-                          borderTopWidth: 1,
-                          borderTopColor: borderColor,
-                          gap: spacing.sm,
-                        }}
-                      >
-                        <AppText
-                          variant="caption"
-                          color={colors.text.primary}
-                        >
-                          TRAINING OBJECTIVES
-                        </AppText>
+                  const selectedDayNumber =
+                    selectedTrainingDays[assignment.id] ?? trainingDays[0]?.dayNumber;
 
-                        <AppText
-                          variant="bodySmall"
-                          color={colors.text.secondary}
-                        >
-                          {plan.objectives}
-                        </AppText>
-                      </View>
-                    ) : null}
-                  </Card>
+                  const selectedDay =
+                    trainingDays.find((day) => day.dayNumber === selectedDayNumber) ??
+                    trainingDays[0];
 
-                  {/* Programme linked to the selected training plan */}
-                  <View style={{ gap: spacing.xs }}>
-                    <AppText
-                      variant="h2"
-                      color={colors.text.primary}
-                    >
-                      YOUR PROGRAMME
-                    </AppText>
-                    <AppText
-                      variant="caption"
-                      color={colors.text.tertiary}
-                    >
-                      {plan.name}
-                    </AppText>
-                  </View>
-
-                  {/* Swipeable Training Days */}
-                  <ScrollView
-                    horizontal
-                    pagingEnabled
-                    nestedScrollEnabled
-                    decelerationRate="fast"
-                    style={{ width: dayCardWidth }}
-                    onMomentumScrollEnd={(event) => {
-                      const index = Math.round(
-                        event.nativeEvent.contentOffset.x / dayCardWidth,
-                      );
-
-                      const nextSelectedDay = trainingDays[index];
-
-                      if (nextSelectedDay) {
-                        setSelectedTrainingDays((current) => ({
-                          ...current,
-                          [assignment.id]: nextSelectedDay.dayNumber,
-                        }));
-                      }
-                    }}
-                    showsHorizontalScrollIndicator={false}
-                  >
-                    {trainingDays.map((day) => (
+                  return (
+                    <View key={assignment.id} style={{ gap: spacing.md }}>
+                      {/* Programme Summary */}
                       <Card
-                        key={`${assignment.id}-${day.dayNumber}`}
                         variant="default"
                         style={{
-                          width: dayCardWidth,
-                          height: dayCardHeight,
-                          gap: spacing.md,
+                          gap: spacing.lg,
                         }}
                       >
-                        {/* Day Header */}
-                        <View style={{ gap: spacing.xs }}>
+                        {/* Programme Name and Status */}
+                        <View style={{ gap: spacing.md }}>
                           <View
                             style={{
-                              width: 36,
-                              height: 4,
-                              borderRadius: 2,
-                              backgroundColor: colors.brand.red,
+                              flexDirection: 'row',
+                              alignItems: 'flex-start',
+                              justifyContent: 'space-between',
+                              gap: spacing.md,
                             }}
-                          />
-
-                          <AppText
-                            variant="h2"
-                            color={colors.text.primary}
                           >
-                            {day.dayName.toUpperCase()}
-                          </AppText>
-
-                          <AppText
-                            variant="caption"
-                            color={colors.text.tertiary}
-                          >
-                            {day.exercises.length} EXERCISES
-                          </AppText>
-                        </View>
-
-                        {/* Day Exercises */}
-                        <ScrollView
-                          style={{ flex: 1 }}
-                          nestedScrollEnabled
-                          showsVerticalScrollIndicator
-                          contentContainerStyle={{
-                            gap: spacing.md,
-                            paddingBottom: spacing.xs,
-                          }}
-                        >
-                          {day.exercises.map((item, index) => {
-                            const exerciseKey =
-                              `${assignment.id}-${item.id}`;
-
-                            const expanded =
-                              expandedExercises.includes(exerciseKey);
-
-                            const exercise = item.exercise;
-
-                            return (
-                              <Card
-                                key={item.id}
-                                variant="outlined"
+                            <View style={{ flex: 1, gap: spacing.sm }}>
+                              <View
                                 style={{
-                                  backgroundColor:
-                                    colors.background.primary,
-                                  gap: spacing.md,
+                                  width: 36,
+                                  height: 4,
+                                  borderRadius: 2,
+                                  backgroundColor: colors.brand.red,
+                                }}
+                              />
+
+                              <AppText variant="h3" color={colors.text.primary}>
+                                {plan.name}
+                              </AppText>
+
+                              <View
+                                style={{
+                                  alignSelf: 'flex-start',
+                                  paddingHorizontal: spacing.sm,
+                                  paddingVertical: spacing.xs,
+                                  borderRadius: 8,
+                                  backgroundColor: colors.background.secondary,
+                                  borderWidth: 1,
+                                  borderColor,
                                 }}
                               >
-                                {/* Exercise Header */}
-                                <View
-                                  style={{
-                                    flexDirection: 'row',
-                                    alignItems: 'center',
-                                    gap: spacing.md,
-                                  }}
-                                >
-                                  <View
+                                <AppText variant="caption" color={colors.text.tertiary}>
+                                  VERSION {assignment.plan_version}
+                                </AppText>
+                              </View>
+                            </View>
+
+                            <View
+                              style={{
+                                paddingHorizontal: spacing.sm,
+                                paddingVertical: spacing.xs,
+                                borderRadius: 999,
+                                backgroundColor: colors.brand.redLight,
+                              }}
+                            >
+                              <AppText variant="caption" color={colors.brand.red}>
+                                ACTIVE
+                              </AppText>
+                            </View>
+                          </View>
+
+                          {plan.description ? (
+                            <AppText variant="body" color={colors.text.secondary}>
+                              {plan.description}
+                            </AppText>
+                          ) : null}
+                        </View>
+
+                        {/* Programme Statistics */}
+                        <View
+                          style={{
+                            flexDirection: 'row',
+                            flexWrap: 'wrap',
+                            gap: spacing.sm,
+                          }}
+                        >
+                          {[
+                            ...(plan.duration_weeks
+                              ? [`${plan.duration_weeks} weeks`]
+                              : []),
+                            `${plan.exercises.length} exercises`,
+                            `${trainingDays.length} training days`,
+                          ].map((item) => (
+                            <View
+                              key={item}
+                              style={{
+                                paddingHorizontal: spacing.md,
+                                paddingVertical: spacing.sm,
+                                borderRadius: 10,
+                                backgroundColor: colors.background.primary,
+                                borderWidth: 1,
+                                borderColor,
+                              }}
+                            >
+                              <AppText variant="caption" color={colors.text.secondary}>
+                                {item}
+                              </AppText>
+                            </View>
+                          ))}
+                        </View>
+
+                        {plan.objectives ? (
+                          <View
+                            style={{
+                              paddingTop: spacing.md,
+                              borderTopWidth: 1,
+                              borderTopColor: borderColor,
+                              gap: spacing.sm,
+                            }}
+                          >
+                            <AppText variant="caption" color={colors.text.primary}>
+                              TRAINING OBJECTIVES
+                            </AppText>
+
+                            <AppText variant="bodySmall" color={colors.text.secondary}>
+                              {plan.objectives}
+                            </AppText>
+                          </View>
+                        ) : null}
+                      </Card>
+
+                      {/* Programme linked to the selected training plan */}
+                      <View style={{ gap: spacing.xs }}>
+                        <AppText variant="h2" color={colors.text.primary}>
+                          YOUR PROGRAMME
+                        </AppText>
+                        <AppText variant="caption" color={colors.text.tertiary}>
+                          {plan.name}
+                        </AppText>
+                      </View>
+
+                      {/* Swipeable Training Days */}
+                      <ScrollView
+                        horizontal
+                        pagingEnabled
+                        nestedScrollEnabled
+                        decelerationRate="fast"
+                        style={{ width: dayCardWidth }}
+                        onMomentumScrollEnd={(event) => {
+                          const index = Math.round(
+                            event.nativeEvent.contentOffset.x / dayCardWidth,
+                          );
+
+                          const nextSelectedDay = trainingDays[index];
+
+                          if (nextSelectedDay) {
+                            setSelectedTrainingDays((current) => ({
+                              ...current,
+                              [assignment.id]: nextSelectedDay.dayNumber,
+                            }));
+                          }
+                        }}
+                        showsHorizontalScrollIndicator={false}
+                      >
+                        {trainingDays.map((day) => (
+                          <Card
+                            key={`${assignment.id}-${day.dayNumber}`}
+                            variant="default"
+                            style={{
+                              width: dayCardWidth,
+                              height: dayCardHeight,
+                              gap: spacing.md,
+                            }}
+                          >
+                            {/* Day Header */}
+                            <View style={{ gap: spacing.xs }}>
+                              <View
+                                style={{
+                                  width: 36,
+                                  height: 4,
+                                  borderRadius: 2,
+                                  backgroundColor: colors.brand.red,
+                                }}
+                              />
+
+                              <AppText variant="h2" color={colors.text.primary}>
+                                {day.dayName.toUpperCase()}
+                              </AppText>
+
+                              <AppText variant="caption" color={colors.text.tertiary}>
+                                {day.exercises.length} EXERCISES
+                              </AppText>
+                            </View>
+
+                            {/* Day Exercises */}
+                            <ScrollView
+                              style={{ flex: 1 }}
+                              nestedScrollEnabled
+                              showsVerticalScrollIndicator
+                              contentContainerStyle={{
+                                gap: spacing.md,
+                                paddingBottom: spacing.xs,
+                              }}
+                            >
+                              {day.exercises.map((item, index) => {
+                                const exerciseKey = `${assignment.id}-${item.id}`;
+
+                                const expanded = expandedExercises.includes(exerciseKey);
+
+                                const exercise = item.exercise;
+
+                                return (
+                                  <Card
+                                    key={item.id}
+                                    variant="outlined"
                                     style={{
-                                      width: 40,
-                                      height: 40,
-                                      borderRadius: 12,
-                                      backgroundColor: colors.brand.redLight,
-                                      alignItems: 'center',
-                                      justifyContent: 'center',
+                                      backgroundColor: colors.background.primary,
+                                      gap: spacing.md,
                                     }}
                                   >
-                                    <AppText
-                                      variant="button"
-                                      color={colors.brand.red}
-                                    >
-                                      {String(index + 1).padStart(2, '0')}
-                                    </AppText>
-                                  </View>
-
-                                  <View
-                                    style={{
-                                      flex: 1,
-                                      gap: spacing.xs,
-                                    }}
-                                  >
-                                    <AppText
-                                      variant="h4"
-                                      color={colors.text.primary}
-                                    >
-                                      {exercise.name}
-                                    </AppText>
-
-                                    {exercise.muscle_group ? (
-                                      <AppText
-                                        variant="caption"
-                                        color={colors.text.tertiary}
-                                      >
-                                        {exercise.muscle_group}
-                                      </AppText>
-                                    ) : null}
-                                  </View>
-                                </View>
-
-                                {/* Exercise Prescription */}
-                                <View
-                                  style={{
-                                    flexDirection: 'row',
-                                    flexWrap: 'wrap',
-                                    gap: spacing.sm,
-                                  }}
-                                >
-                                  {[
-                                    `${item.sets} sets`,
-                                    `${item.repetitions} reps`,
-                                    ...(item.rest_seconds !== null
-                                      ? [`${item.rest_seconds}s rest`]
-                                      : []),
-                                  ].map((detail) => (
+                                    {/* Exercise Header */}
                                     <View
-                                      key={detail}
                                       style={{
+                                        flexDirection: 'row',
+                                        alignItems: 'center',
+                                        gap: spacing.md,
+                                      }}
+                                    >
+                                      <View
+                                        style={{
+                                          width: 40,
+                                          height: 40,
+                                          borderRadius: 12,
+                                          backgroundColor: colors.brand.redLight,
+                                          alignItems: 'center',
+                                          justifyContent: 'center',
+                                        }}
+                                      >
+                                        <AppText
+                                          variant="button"
+                                          color={colors.brand.red}
+                                        >
+                                          {String(index + 1).padStart(2, '0')}
+                                        </AppText>
+                                      </View>
+
+                                      <View
+                                        style={{
+                                          flex: 1,
+                                          gap: spacing.xs,
+                                        }}
+                                      >
+                                        <AppText variant="h4" color={colors.text.primary}>
+                                          {exercise.name}
+                                        </AppText>
+
+                                        {exercise.muscle_group ? (
+                                          <AppText
+                                            variant="caption"
+                                            color={colors.text.tertiary}
+                                          >
+                                            {exercise.muscle_group}
+                                          </AppText>
+                                        ) : null}
+                                      </View>
+                                    </View>
+
+                                    {/* Exercise Prescription */}
+                                    <View
+                                      style={{
+                                        flexDirection: 'row',
+                                        flexWrap: 'wrap',
+                                        gap: spacing.sm,
+                                      }}
+                                    >
+                                      {[
+                                        `${item.sets} sets`,
+                                        `${item.repetitions} reps`,
+                                        ...(item.rest_seconds !== null
+                                          ? [`${item.rest_seconds}s rest`]
+                                          : []),
+                                      ].map((detail) => (
+                                        <View
+                                          key={detail}
+                                          style={{
+                                            paddingHorizontal: spacing.md,
+                                            paddingVertical: spacing.sm,
+                                            borderRadius: 10,
+                                            backgroundColor: colors.background.secondary,
+                                            borderWidth: 1,
+                                            borderColor,
+                                          }}
+                                        >
+                                          <AppText
+                                            variant="caption"
+                                            color={colors.text.secondary}
+                                          >
+                                            {detail}
+                                          </AppText>
+                                        </View>
+                                      ))}
+                                    </View>
+
+                                    {/* Expanded Details */}
+                                    {expanded ? (
+                                      <View
+                                        style={{
+                                          paddingTop: spacing.sm,
+                                          borderTopWidth: 1,
+                                          borderTopColor: borderColor,
+                                          gap: spacing.md,
+                                        }}
+                                      >
+                                        {exercise.description ? (
+                                          <AppText
+                                            variant="bodySmall"
+                                            color={colors.text.secondary}
+                                          >
+                                            {exercise.description}
+                                          </AppText>
+                                        ) : null}
+
+                                        {exercise.instructions ? (
+                                          <View style={{ gap: spacing.xs }}>
+                                            <AppText
+                                              variant="caption"
+                                              color={colors.text.primary}
+                                            >
+                                              INSTRUCTIONS
+                                            </AppText>
+
+                                            <AppText
+                                              variant="bodySmall"
+                                              color={colors.text.secondary}
+                                            >
+                                              {exercise.instructions}
+                                            </AppText>
+                                          </View>
+                                        ) : null}
+
+                                        {item.notes ? (
+                                          <View style={{ gap: spacing.xs }}>
+                                            <AppText
+                                              variant="caption"
+                                              color={colors.text.primary}
+                                            >
+                                              TRAINER NOTES
+                                            </AppText>
+
+                                            <AppText
+                                              variant="bodySmall"
+                                              color={colors.text.secondary}
+                                            >
+                                              {item.notes}
+                                            </AppText>
+                                          </View>
+                                        ) : null}
+
+                                        {exercise.equipment?.length ? (
+                                          <View style={{ gap: spacing.xs }}>
+                                            <AppText
+                                              variant="caption"
+                                              color={colors.text.primary}
+                                            >
+                                              EQUIPMENT
+                                            </AppText>
+
+                                            <AppText
+                                              variant="bodySmall"
+                                              color={colors.text.secondary}
+                                            >
+                                              {exercise.equipment.join(', ')}
+                                            </AppText>
+                                          </View>
+                                        ) : null}
+                                      </View>
+                                    ) : null}
+
+                                    {/* View Exercise */}
+                                    <Pressable
+                                      accessibilityRole="button"
+                                      accessibilityState={{ expanded }}
+                                      onPress={() => toggleExercise(exerciseKey)}
+                                      style={{
+                                        minHeight: 48,
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
                                         paddingHorizontal: spacing.md,
-                                        paddingVertical: spacing.sm,
-                                        borderRadius: 10,
-                                        backgroundColor:
-                                          colors.background.secondary,
-                                        borderWidth: 1,
+                                        paddingVertical: spacing.md,
+                                        borderRadius: 12,
+                                        backgroundColor: expanded
+                                          ? colors.background.secondary
+                                          : colors.brand.red,
+                                        borderWidth: expanded ? 1 : 0,
                                         borderColor,
                                       }}
                                     >
                                       <AppText
-                                        variant="caption"
-                                        color={colors.text.secondary}
+                                        variant="button"
+                                        color={expanded ? colors.text.primary : '#FFFFFF'}
                                       >
-                                        {detail}
+                                        {expanded ? 'Show less' : 'View exercise'}
                                       </AppText>
-                                    </View>
-                                  ))}
-                                </View>
+                                    </Pressable>
+                                  </Card>
+                                );
+                              })}
+                            </ScrollView>
 
-                                {/* Expanded Details */}
-                                {expanded ? (
-                                  <View
-                                    style={{
-                                      paddingTop: spacing.sm,
-                                      borderTopWidth: 1,
-                                      borderTopColor: borderColor,
-                                      gap: spacing.md,
-                                    }}
-                                  >
-                                    {exercise.description ? (
-                                      <AppText
-                                        variant="bodySmall"
-                                        color={colors.text.secondary}
-                                      >
-                                        {exercise.description}
-                                      </AppText>
-                                    ) : null}
+                            {/* Day Footer */}
+                            <AppText variant="caption" color={colors.text.tertiary}>
+                              DAY {day.dayNumber} OF {trainingDays.length}
+                            </AppText>
+                          </Card>
+                        ))}
+                      </ScrollView>
 
-                                    {exercise.instructions ? (
-                                      <View style={{ gap: spacing.xs }}>
-                                        <AppText
-                                          variant="caption"
-                                          color={colors.text.primary}
-                                        >
-                                          INSTRUCTIONS
-                                        </AppText>
-
-                                        <AppText
-                                          variant="bodySmall"
-                                          color={colors.text.secondary}
-                                        >
-                                          {exercise.instructions}
-                                        </AppText>
-                                      </View>
-                                    ) : null}
-
-                                    {item.notes ? (
-                                      <View style={{ gap: spacing.xs }}>
-                                        <AppText
-                                          variant="caption"
-                                          color={colors.text.primary}
-                                        >
-                                          TRAINER NOTES
-                                        </AppText>
-
-                                        <AppText
-                                          variant="bodySmall"
-                                          color={colors.text.secondary}
-                                        >
-                                          {item.notes}
-                                        </AppText>
-                                      </View>
-                                    ) : null}
-
-                                    {exercise.equipment?.length ? (
-                                      <View style={{ gap: spacing.xs }}>
-                                        <AppText
-                                          variant="caption"
-                                          color={colors.text.primary}
-                                        >
-                                          EQUIPMENT
-                                        </AppText>
-
-                                        <AppText
-                                          variant="bodySmall"
-                                          color={colors.text.secondary}
-                                        >
-                                          {exercise.equipment.join(', ')}
-                                        </AppText>
-                                      </View>
-                                    ) : null}
-                                  </View>
-                                ) : null}
-
-                                {/* View Exercise */}
-                                <Pressable
-                                  accessibilityRole="button"
-                                  accessibilityState={{ expanded }}
-                                  onPress={() =>
-                                    toggleExercise(exerciseKey)
-                                  }
-                                  style={{
-                                    minHeight: 48,
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    paddingHorizontal: spacing.md,
-                                    paddingVertical: spacing.md,
-                                    borderRadius: 12,
-                                    backgroundColor: expanded
-                                      ? colors.background.secondary
-                                      : colors.brand.red,
-                                    borderWidth: expanded ? 1 : 0,
-                                    borderColor,
-                                  }}
-                                >
-                                  <AppText
-                                    variant="button"
-                                    color={
-                                      expanded
-                                        ? colors.text.primary
-                                        : '#FFFFFF'
-                                    }
-                                  >
-                                    {expanded
-                                      ? 'Show less'
-                                      : 'View exercise'}
-                                  </AppText>
-                                </Pressable>
-                              </Card>
-                            );
-                          })}
-                        </ScrollView>
-
-                        {/* Day Footer */}
-                        <AppText
-                          variant="caption"
-                          color={colors.text.tertiary}
+                      {/* Start Selected Workout */}
+                      {selectedDay ? (
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={`Start workout for ${selectedDay.dayName}`}
+                          accessibilityState={{
+                            disabled: startingWorkoutKey !== null,
+                            busy:
+                              startingWorkoutKey ===
+                              `${assignment.id}-${selectedDay.dayNumber}`,
+                          }}
+                          disabled={startingWorkoutKey !== null}
+                          onPress={() => void handleStartWorkout(assignment, selectedDay)}
+                          style={{
+                            minHeight: 56,
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            paddingHorizontal: spacing.md,
+                            paddingVertical: spacing.md,
+                            borderRadius: 12,
+                            backgroundColor: colors.brand.red,
+                            opacity: startingWorkoutKey !== null ? 0.6 : 1,
+                          }}
                         >
-                          DAY {day.dayNumber} OF {trainingDays.length}
-                        </AppText>
+                          <AppText variant="button" color="#FFFFFF">
+                            {startingWorkoutKey ===
+                            `${assignment.id}-${selectedDay.dayNumber}`
+                              ? 'Starting workout...'
+                              : 'Start Workout'}
+                          </AppText>
+                        </Pressable>
+                      ) : null}
 
-
-                      </Card>
-                    ))}
-                  </ScrollView>
-
-                  {/* Start Selected Workout */}
-                  {selectedDay ? (
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel={`Start workout for ${selectedDay.dayName}`}
-                      accessibilityState={{
-                        disabled: startingWorkoutKey !== null,
-                        busy:
-                          startingWorkoutKey ===
-                          `${assignment.id}-${selectedDay.dayNumber}`,
-                      }}
-                      disabled={startingWorkoutKey !== null}
-                      onPress={() =>
-                        void handleStartWorkout(assignment, selectedDay)
-                      }
-                      style={{
-                        minHeight: 56,
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        paddingHorizontal: spacing.md,
-                        paddingVertical: spacing.md,
-                        borderRadius: 12,
-                        backgroundColor: colors.brand.red,
-                        opacity:
-                          startingWorkoutKey !== null ? 0.6 : 1,
-                      }}
-                    >
-                      <AppText
-                        variant="button"
-                        color="#FFFFFF"
-                      >
-                        {startingWorkoutKey ===
-                          `${assignment.id}-${selectedDay.dayNumber}`
-                          ? 'Starting workout...'
-                          : 'Start Workout'}
-                      </AppText>
-                    </Pressable>
-                  ) : null}
-
-                  {/* Swipe Guidance */}
-                  {trainingDays.length > 1 ? (
-                    <View
-                      style={{
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: spacing.sm,
-                      }}
-                    >
-                      <AppText
-                        variant="caption"
-                        color={colors.text.tertiary}
-                      >
-                        <AppText
-                          variant="caption"
-                          color={colors.brand.red}
+                      {/* Swipe Guidance */}
+                      {trainingDays.length > 1 ? (
+                        <View
+                          style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: spacing.sm,
+                          }}
                         >
-                          ←
-                        </AppText>
-                        {'  '}SWIPE TO EXPLORE TRAINING DAYS{'  '}
-                        <AppText
-                          variant="caption"
-                          color={colors.brand.red}
-                        >
-                          →
-                        </AppText>
-                      </AppText>
+                          <AppText variant="caption" color={colors.text.tertiary}>
+                            <AppText variant="caption" color={colors.brand.red}>
+                              ←
+                            </AppText>
+                            {'  '}SWIPE TO EXPLORE TRAINING DAYS{'  '}
+                            <AppText variant="caption" color={colors.brand.red}>
+                              →
+                            </AppText>
+                          </AppText>
+                        </View>
+                      ) : null}
                     </View>
-                  ) : null}
-                </View>
-              );
+                  );
                 })}
             </>
           )}
@@ -1113,10 +1029,7 @@ export default function WorkoutsScreen() {
               EXPLORE WORKOUTS
             </AppText>
 
-            <AppText
-              variant="bodySmall"
-              color={colors.text.tertiary}
-            >
+            <AppText variant="bodySmall" color={colors.text.tertiary}>
               Discover published training programmes from trainers.
             </AppText>
           </View>
@@ -1141,9 +1054,7 @@ export default function WorkoutsScreen() {
                     paddingVertical: spacing.sm,
                     borderRadius: 999,
                     borderWidth: 1,
-                    borderColor: selected
-                      ? colors.brand.red
-                      : borderColor,
+                    borderColor: selected ? colors.brand.red : borderColor,
                     backgroundColor: selected
                       ? colors.brand.red
                       : colors.background.primary,
@@ -1218,11 +1129,7 @@ export default function WorkoutsScreen() {
               ).size;
 
               return (
-                <Card
-                  key={workout.id}
-                  variant="default"
-                  style={{ gap: spacing.md }}
-                >
+                <Card key={workout.id} variant="default" style={{ gap: spacing.md }}>
                   <View
                     style={{
                       width: 32,
@@ -1237,10 +1144,7 @@ export default function WorkoutsScreen() {
                   </AppText>
 
                   {workout.description ? (
-                    <AppText
-                      variant="bodySmall"
-                      color={colors.text.secondary}
-                    >
+                    <AppText variant="bodySmall" color={colors.text.secondary}>
                       {workout.description}
                     </AppText>
                   ) : null}
@@ -1271,33 +1175,23 @@ export default function WorkoutsScreen() {
                     <View style={{ gap: spacing.md }}>
                       {workout.objectives ? (
                         <View style={{ gap: spacing.xs }}>
-                          <AppText
-                            variant="button"
-                            color={colors.text.primary}
-                          >
+                          <AppText variant="button" color={colors.text.primary}>
                             PROGRAMME OBJECTIVES
                           </AppText>
 
-                          <AppText
-                            variant="bodySmall"
-                            color={colors.text.secondary}
-                          >
+                          <AppText variant="bodySmall" color={colors.text.secondary}>
                             {workout.objectives}
                           </AppText>
                         </View>
                       ) : null}
 
                       <View style={{ gap: spacing.md }}>
-                        <AppText
-                          variant="button"
-                          color={colors.text.primary}
-                        >
+                        <AppText variant="button" color={colors.text.primary}>
                           EXERCISE BREAKDOWN
                         </AppText>
 
                         {workout.exercises.map((item, index) => {
-                          const previousExercise =
-                            workout.exercises[index - 1];
+                          const previousExercise = workout.exercises[index - 1];
 
                           const isNewDay =
                             index === 0 ||
@@ -1306,10 +1200,7 @@ export default function WorkoutsScreen() {
                           return (
                             <View key={item.id} style={{ gap: spacing.sm }}>
                               {isNewDay ? (
-                                <AppText
-                                  variant="button"
-                                  color={colors.brand.red}
-                                >
+                                <AppText variant="button" color={colors.brand.red}>
                                   {item.day_name || `DAY ${item.day_number}`}
                                 </AppText>
                               ) : null}
@@ -1324,17 +1215,11 @@ export default function WorkoutsScreen() {
                                   gap: spacing.xs,
                                 }}
                               >
-                                <AppText
-                                  variant="body"
-                                  color={colors.text.primary}
-                                >
+                                <AppText variant="body" color={colors.text.primary}>
                                   {item.exercise.name}
                                 </AppText>
 
-                                <AppText
-                                  variant="caption"
-                                  color={colors.text.secondary}
-                                >
+                                <AppText variant="caption" color={colors.text.secondary}>
                                   {item.sets} sets · {item.repetitions} reps
                                   {item.rest_seconds !== null
                                     ? ` · ${item.rest_seconds}s rest`
@@ -1342,10 +1227,7 @@ export default function WorkoutsScreen() {
                                 </AppText>
 
                                 {item.notes ? (
-                                  <AppText
-                                    variant="caption"
-                                    color={colors.text.tertiary}
-                                  >
+                                  <AppText variant="caption" color={colors.text.tertiary}>
                                     {item.notes}
                                   </AppText>
                                 ) : null}
@@ -1360,11 +1242,7 @@ export default function WorkoutsScreen() {
                   <Pressable
                     accessibilityRole="button"
                     accessibilityState={{ expanded }}
-                    onPress={() =>
-                      setSelectedWorkout(
-                        expanded ? null : workout.id,
-                      )
-                    }
+                    onPress={() => setSelectedWorkout(expanded ? null : workout.id)}
                     style={{
                       alignItems: 'center',
                       padding: spacing.md,
