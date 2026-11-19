@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Pressable, ScrollView, View } from 'react-native';
+import { Pressable, RefreshControl, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Circle, Line, Polyline } from 'react-native-svg';
 
@@ -341,6 +341,7 @@ export default function EarningsScreen() {
   const [transactionStatus, setTransactionStatus] =
     useState<TrainerTransactionStatus | null>(null);
   const [transactionPage, setTransactionPage] = useState(1);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const earningsQuery = useTrainerEarnings(selectedPeriod);
 
@@ -439,6 +440,22 @@ export default function EarningsScreen() {
     void earningsQuery.refetch();
   };
 
+  const handleRefresh = async () => {
+    if (isRefreshing) return;
+
+    setIsRefreshing(true);
+
+    try {
+      if (isOverview) {
+        await earningsQuery.refetch();
+      } else {
+        await transactionsQuery.refetch();
+      }
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
   const handleStatusChange = (status: TrainerTransactionStatus | null) => {
     setTransactionStatus(status);
     setTransactionPage(1);
@@ -479,6 +496,15 @@ export default function EarningsScreen() {
           gap: spacing.xl,
         }}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={() => void handleRefresh()}
+            tintColor={colors.brand.red}
+            colors={[colors.brand.red]}
+            progressBackgroundColor={colors.background.secondary}
+          />
+        }
       >
         {/* HEADER */}
         <View style={{ gap: spacing.sm }}>
