@@ -878,745 +878,766 @@ export default function SessionsScreen() {
         backgroundColor: colors.background.primary,
       }}
     >
-      <ScrollView
-        contentContainerStyle={{
-          padding: spacing.lg,
-          paddingBottom: spacing.xxl,
-          gap: spacing.lg,
-        }}
-        refreshControl={
-          <RefreshControl
-            refreshing={isRefreshing}
-            onRefresh={() => void loadBookings(true)}
-            tintColor={colors.brand.red}
-          />
-        }
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={{ gap: spacing.sm }}>
-          <AppText variant="caption" color={colors.brand.red}>
-            YOUR BOOKINGS
-          </AppText>
-
-          <AppText variant="displayLarge" color={colors.text.primary}>
-            SESSIONS.
-          </AppText>
-
-          <AppText variant="body" color={colors.text.secondary}>
-            Your training appointments, all in one place.
-          </AppText>
-        </View>
-
-        {/* Session tabs */}
+      <View style={{ flex: 1 }}>
+        {/* Fixed page header and session tabs */}
         <View
           style={{
-            flexDirection: 'row',
-            padding: 4,
-            borderRadius: 14,
-            backgroundColor: colors.background.secondary,
-            borderWidth: 1,
-            borderColor: colors.border.default,
+            paddingHorizontal: spacing.lg,
+            paddingTop: spacing.lg,
+            gap: spacing.lg,
           }}
         >
-          {(['Upcoming', 'History', 'Payments'] as const).map((tab) => {
-            const selected = activeTab === tab;
-
-            return (
-              <Pressable
-                key={tab}
-                accessibilityRole="button"
-                accessibilityState={{ selected }}
-                onPress={() => setActiveTab(tab)}
-                style={{
-                  flex: 1,
-                  alignItems: 'center',
-                  padding: spacing.md,
-                  borderRadius: 10,
-                  backgroundColor: selected ? colors.brand.red : 'transparent',
-                }}
-              >
-                <AppText
-                  variant="button"
-                  color={selected ? '#FFFFFF' : colors.text.secondary}
-                >
-                  {tab}
-                </AppText>
-              </Pressable>
-            );
-          })}
-        </View>
-
-        {reviewSuccess ? (
-          <View
-            style={{
-              padding: spacing.md,
-              borderRadius: 12,
-              borderWidth: 1,
-              borderColor: colors.brand.red,
-              gap: spacing.xs,
-            }}
-          >
-            <AppText variant="body" color={colors.text.primary}>
-              {reviewSuccess}
+          {/* Page Header */}
+          <View style={{ gap: spacing.sm }}>
+            <AppText variant="caption" color={colors.brand.red}>
+              YOUR BOOKINGS
             </AppText>
 
-            <Pressable accessibilityRole="button" onPress={() => setReviewSuccess(null)}>
-              <AppText variant="caption" color={colors.brand.red}>
-                Dismiss
-              </AppText>
-            </Pressable>
-          </View>
-        ) : null}
-
-        {isLoading ? (
-          <View
-            style={{
-              padding: spacing.xxl,
-              alignItems: 'center',
-              gap: spacing.md,
-            }}
-          >
-            <ActivityIndicator size="large" color={colors.brand.red} />
+            <AppText variant="displayLarge" color={colors.text.primary}>
+              SESSIONS.
+            </AppText>
 
             <AppText variant="body" color={colors.text.secondary}>
-              Loading your sessions…
+              Your training appointments, all in one place.
             </AppText>
           </View>
-        ) : errorMessage ? (
+
+          {/* Session tabs */}
           <View
             style={{
-              padding: spacing.xl,
-              borderRadius: 20,
+              flexDirection: 'row',
+              padding: 4,
+              borderRadius: 14,
+              backgroundColor: colors.background.secondary,
               borderWidth: 1,
               borderColor: colors.border.default,
-              backgroundColor: colors.background.secondary,
-              gap: spacing.md,
             }}
           >
-            <AppText variant="h3" color={colors.text.primary}>
-              Bookings unavailable
-            </AppText>
+            {(['Upcoming', 'History', 'Payments'] as const).map((tab) => {
+              const selected = activeTab === tab;
 
-            <AppText variant="body" color={colors.text.secondary}>
-              {errorMessage}
-            </AppText>
-
-            <Button variant="primary" fullWidth onPress={() => void loadBookings()}>
-              Try again
-            </Button>
+              return (
+                <Pressable
+                  key={tab}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected }}
+                  onPress={() => setActiveTab(tab)}
+                  style={{
+                    flex: 1,
+                    alignItems: 'center',
+                    padding: spacing.md,
+                    borderRadius: 10,
+                    backgroundColor: selected ? colors.brand.red : 'transparent',
+                  }}
+                >
+                  <AppText
+                    variant="button"
+                    color={selected ? '#FFFFFF' : colors.text.secondary}
+                  >
+                    {tab}
+                  </AppText>
+                </Pressable>
+              );
+            })}
           </View>
-        ) : activeTab === 'Payments' ? (
-          <View style={{ gap: spacing.md }}>
-            <View style={{ gap: spacing.xs }}>
-              <AppText variant="h2" color={colors.text.primary}>
-                TRANSACTION HISTORY
+        </View>
+
+        {/* Refreshable content starts at the bookings section */}
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{
+            padding: spacing.lg,
+            paddingBottom: spacing.xxl,
+            gap: spacing.lg,
+          }}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={() => void loadBookings(true)}
+              tintColor={colors.brand.red}
+            />
+          }
+          showsVerticalScrollIndicator={false}
+        >
+          {reviewSuccess ? (
+            <View
+              style={{
+                padding: spacing.md,
+                borderRadius: 12,
+                borderWidth: 1,
+                borderColor: colors.brand.red,
+                gap: spacing.xs,
+              }}
+            >
+              <AppText variant="body" color={colors.text.primary}>
+                {reviewSuccess}
+              </AppText>
+
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => setReviewSuccess(null)}
+              >
+                <AppText variant="caption" color={colors.brand.red}>
+                  Dismiss
+                </AppText>
+              </Pressable>
+            </View>
+          ) : null}
+
+          {isLoading ? (
+            <View
+              style={{
+                padding: spacing.xxl,
+                alignItems: 'center',
+                gap: spacing.md,
+              }}
+            >
+              <ActivityIndicator size="large" color={colors.brand.red} />
+
+              <AppText variant="body" color={colors.text.secondary}>
+                Loading your sessions…
+              </AppText>
+            </View>
+          ) : errorMessage ? (
+            <View
+              style={{
+                padding: spacing.xl,
+                borderRadius: 20,
+                borderWidth: 1,
+                borderColor: colors.border.default,
+                backgroundColor: colors.background.secondary,
+                gap: spacing.md,
+              }}
+            >
+              <AppText variant="h3" color={colors.text.primary}>
+                Bookings unavailable
               </AppText>
 
               <AppText variant="body" color={colors.text.secondary}>
-                View your payments, transaction references and receipts.
+                {errorMessage}
               </AppText>
-            </View>
 
-            {payments.length === 0 ? (
-              <View
-                style={{
-                  padding: spacing.xl,
-                  alignItems: 'center',
-                  borderRadius: 20,
-                  borderWidth: 1,
-                  borderColor: colors.border.default,
-                  backgroundColor: colors.background.secondary,
-                  gap: spacing.md,
-                }}
-              >
-                <AppText variant="h3" color={colors.text.primary}>
-                  NO TRANSACTIONS YET
+              <Button variant="primary" fullWidth onPress={() => void loadBookings()}>
+                Try again
+              </Button>
+            </View>
+          ) : activeTab === 'Payments' ? (
+            <View style={{ gap: spacing.md }}>
+              <View style={{ gap: spacing.xs }}>
+                <AppText variant="h2" color={colors.text.primary}>
+                  TRANSACTION HISTORY
                 </AppText>
 
-                <AppText variant="body" color={colors.text.secondary} align="center">
-                  Your training session payments will appear here once you make a booking
-                  payment.
+                <AppText variant="body" color={colors.text.secondary}>
+                  View your payments, transaction references and receipts.
                 </AppText>
               </View>
-            ) : (
-              <>
-                <AppText variant="caption" color={colors.text.secondary}>
-                  {payments.length} TRANSACTION
-                  {payments.length === 1 ? '' : 'S'}
-                </AppText>
 
-                {payments.map((payment) => {
-                  const expanded = expandedPaymentId === payment.id;
+              {payments.length === 0 ? (
+                <View
+                  style={{
+                    padding: spacing.xl,
+                    alignItems: 'center',
+                    borderRadius: 20,
+                    borderWidth: 1,
+                    borderColor: colors.border.default,
+                    backgroundColor: colors.background.secondary,
+                    gap: spacing.md,
+                  }}
+                >
+                  <AppText variant="h3" color={colors.text.primary}>
+                    NO TRANSACTIONS YET
+                  </AppText>
 
-                  const booking = bookings.find((item) => item.id === payment.booking_id);
+                  <AppText variant="body" color={colors.text.secondary} align="center">
+                    Your training session payments will appear here once you make a
+                    booking payment.
+                  </AppText>
+                </View>
+              ) : (
+                <>
+                  <AppText variant="caption" color={colors.text.secondary}>
+                    {payments.length} TRANSACTION
+                    {payments.length === 1 ? '' : 'S'}
+                  </AppText>
 
-                  const trainerName = [
-                    booking?.trainer?.first_name,
-                    booking?.trainer?.last_name,
-                  ]
-                    .filter(Boolean)
-                    .join(' ')
-                    .trim();
+                  {payments.map((payment) => {
+                    const expanded = expandedPaymentId === payment.id;
 
-                  const statusColor =
-                    payment.status === 'successful'
-                      ? '#16A34A'
-                      : payment.status === 'failed'
-                        ? colors.brand.red
-                        : colors.text.secondary;
+                    const booking = bookings.find(
+                      (item) => item.id === payment.booking_id,
+                    );
 
-                  return (
+                    const trainerName = [
+                      booking?.trainer?.first_name,
+                      booking?.trainer?.last_name,
+                    ]
+                      .filter(Boolean)
+                      .join(' ')
+                      .trim();
+
+                    const statusColor =
+                      payment.status === 'successful'
+                        ? '#16A34A'
+                        : payment.status === 'failed'
+                          ? colors.brand.red
+                          : colors.text.secondary;
+
+                    return (
+                      <View
+                        key={payment.id}
+                        style={{
+                          padding: spacing.md,
+                          borderRadius: 16,
+                          borderWidth: 1,
+                          borderColor: colors.border.default,
+                          backgroundColor: colors.background.secondary,
+                          gap: spacing.md,
+                        }}
+                      >
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityState={{ expanded }}
+                          accessibilityLabel={`Payment ${formatMoney(
+                            payment.amount,
+                            payment.currency,
+                          )}, ${payment.status}. ${expanded ? 'Hide' : 'View'} details`}
+                          onPress={() =>
+                            setExpandedPaymentId(expanded ? null : payment.id)
+                          }
+                          style={{ gap: spacing.md }}
+                        >
+                          <View
+                            style={{
+                              flexDirection: 'row',
+                              alignItems: 'flex-start',
+                              justifyContent: 'space-between',
+                              gap: spacing.sm,
+                            }}
+                          >
+                            <View style={{ flex: 1, gap: spacing.xs }}>
+                              <AppText variant="caption" color={colors.text.secondary}>
+                                PAYMENT AMOUNT
+                              </AppText>
+
+                              <AppText variant="h2" color={colors.text.primary}>
+                                {formatMoney(payment.amount, payment.currency)}
+                              </AppText>
+                            </View>
+
+                            <View
+                              style={{
+                                paddingHorizontal: spacing.sm,
+                                paddingVertical: spacing.xs,
+                                borderRadius: 20,
+                                backgroundColor: colors.background.primary,
+                              }}
+                            >
+                              <AppText variant="caption" color={statusColor} weight="600">
+                                {payment.status.toUpperCase()}
+                              </AppText>
+                            </View>
+                          </View>
+
+                          <View style={{ gap: spacing.xs }}>
+                            <AppText variant="body" color={colors.text.secondary}>
+                              {formatDate(payment.paid_at ?? payment.created_at)}
+                            </AppText>
+
+                            <AppText variant="caption" color={colors.text.secondary}>
+                              Reference: {payment.provider_reference ?? 'Pending'}
+                            </AppText>
+                          </View>
+
+                          <AppText variant="caption" color={colors.brand.red}>
+                            {expanded ? 'HIDE DETAILS −' : 'VIEW DETAILS +'}
+                          </AppText>
+                        </Pressable>
+
+                        {expanded ? (
+                          <View
+                            style={{
+                              paddingTop: spacing.md,
+                              borderTopWidth: 1,
+                              borderTopColor: colors.border.default,
+                              gap: spacing.sm,
+                            }}
+                          >
+                            <AppText variant="h3" color={colors.text.primary}>
+                              TRANSACTION DETAILS
+                            </AppText>
+
+                            <View style={{ gap: spacing.xs }}>
+                              <AppText variant="caption" color={colors.text.secondary}>
+                                TRANSACTION ID
+                              </AppText>
+
+                              <AppText variant="body" color={colors.text.primary}>
+                                {payment.id}
+                              </AppText>
+                            </View>
+
+                            <View style={{ gap: spacing.xs }}>
+                              <AppText variant="caption" color={colors.text.secondary}>
+                                BOOKING REFERENCE
+                              </AppText>
+
+                              <AppText variant="body" color={colors.text.primary}>
+                                {payment.booking_id}
+                              </AppText>
+                            </View>
+
+                            <View style={{ gap: spacing.xs }}>
+                              <AppText variant="caption" color={colors.text.secondary}>
+                                PAYMENT PROVIDER
+                              </AppText>
+
+                              <AppText variant="body" color={colors.text.primary}>
+                                {payment.provider.toUpperCase()}
+                              </AppText>
+                            </View>
+
+                            {trainerName ? (
+                              <View style={{ gap: spacing.xs }}>
+                                <AppText variant="caption" color={colors.text.secondary}>
+                                  TRAINER
+                                </AppText>
+
+                                <AppText variant="body" color={colors.text.primary}>
+                                  {trainerName}
+                                </AppText>
+                              </View>
+                            ) : null}
+
+                            {payment.paid_at ? (
+                              <View style={{ gap: spacing.xs }}>
+                                <AppText variant="caption" color={colors.text.secondary}>
+                                  VERIFIED PAYMENT DATE
+                                </AppText>
+
+                                <AppText variant="body" color={colors.text.primary}>
+                                  {formatDate(payment.paid_at)}
+                                </AppText>
+                              </View>
+                            ) : null}
+
+                            {payment.status === 'successful' && payment.paid_at ? (
+                              <Button
+                                variant="primary"
+                                fullWidth
+                                onPress={() => void handleShareReceipt(payment)}
+                              >
+                                Share payment receipt
+                              </Button>
+                            ) : null}
+                          </View>
+                        ) : null}
+                      </View>
+                    );
+                  })}
+                </>
+              )}
+            </View>
+          ) : visibleBookings.length === 0 ? (
+            <View
+              style={{
+                padding: spacing.xl,
+                alignItems: 'center',
+                borderRadius: 20,
+                borderWidth: 1,
+                borderColor: colors.border.default,
+                backgroundColor: colors.background.secondary,
+                gap: spacing.md,
+              }}
+            >
+              <AppText variant="h3" color={colors.text.primary}>
+                {activeTab === 'Upcoming' ? 'NO UPCOMING SESSIONS' : 'NO SESSION HISTORY'}
+              </AppText>
+
+              <AppText
+                variant="body"
+                color={colors.text.secondary}
+                style={{ textAlign: 'center', lineHeight: 24 }}
+              >
+                {activeTab === 'Upcoming'
+                  ? 'Your pending requests and confirmed sessions will appear here.'
+                  : 'Declined, cancelled and completed sessions will appear here.'}
+              </AppText>
+            </View>
+          ) : (
+            <View style={{ gap: spacing.md }}>
+              <AppText variant="h2" color={colors.text.primary}>
+                {activeTab === 'Upcoming' ? 'UPCOMING BOOKINGS' : 'SESSION HISTORY'} (
+                {visibleBookings.length})
+              </AppText>
+
+              {visibleBookings.map((booking) => {
+                const trainerName = [
+                  booking.trainer?.first_name,
+                  booking.trainer?.last_name,
+                ]
+                  .filter(Boolean)
+                  .join(' ')
+                  .trim();
+
+                const isReviewed = reviewedBookingIds.has(booking.id);
+                const isReviewFormOpen = reviewBookingId === booking.id;
+                const payment = paymentStatuses.get(booking.id);
+                const isPaid = payment?.status === 'successful';
+
+                const canRetryPayment =
+                  currentTime !== null &&
+                  booking.status === 'confirmed' &&
+                  new Date(booking.scheduled_start).getTime() > currentTime &&
+                  payment?.status === 'failed' &&
+                  Boolean(payment.id);
+
+                const canPay =
+                  currentTime !== null &&
+                  booking.status === 'confirmed' &&
+                  new Date(booking.scheduled_start).getTime() > currentTime &&
+                  !isPaid &&
+                  (!payment || payment.status === 'pending');
+
+                const canManageBooking =
+                  currentTime !== null &&
+                  (booking.status === 'pending' || booking.status === 'confirmed') &&
+                  new Date(booking.scheduled_start).getTime() > currentTime;
+
+                return (
+                  <Swipeable
+                    key={booking.id}
+                    renderRightActions={() => renderBookingSwipeActions(booking)}
+                    enabled={
+                      canManageBooking &&
+                      cancellingBookingId === null &&
+                      processingPaymentBookingId === null
+                    }
+                    friction={2}
+                    rightThreshold={45}
+                    overshootRight={false}
+                    containerStyle={{ overflow: 'visible' }}
+                  >
                     <View
-                      key={payment.id}
                       style={{
-                        padding: spacing.md,
-                        borderRadius: 16,
+                        padding: spacing.lg,
+                        borderRadius: 18,
                         borderWidth: 1,
                         borderColor: colors.border.default,
                         backgroundColor: colors.background.secondary,
                         gap: spacing.md,
                       }}
                     >
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityState={{ expanded }}
-                        accessibilityLabel={`Payment ${formatMoney(
-                          payment.amount,
-                          payment.currency,
-                        )}, ${payment.status}. ${expanded ? 'Hide' : 'View'} details`}
-                        onPress={() => setExpandedPaymentId(expanded ? null : payment.id)}
-                        style={{ gap: spacing.md }}
+                      <View style={{ gap: spacing.xs }}>
+                        <AppText variant="caption" color={colors.brand.red}>
+                          TRAINR COACH
+                        </AppText>
+
+                        <AppText variant="h3" color={colors.text.primary}>
+                          {trainerName || 'TRAINR Coach'}
+                        </AppText>
+
+                        <AppText variant="body" color={colors.text.secondary}>
+                          {formatDate(booking.scheduled_start)}
+                        </AppText>
+
+                        <AppText variant="body" color={colors.text.secondary}>
+                          {formatTime(booking.scheduled_start)} –{' '}
+                          {formatTime(booking.scheduled_end)}
+                        </AppText>
+                      </View>
+
+                      <View
+                        style={{
+                          paddingTop: spacing.md,
+                          borderTopWidth: 1,
+                          borderTopColor: colors.border.default,
+                          gap: spacing.xs,
+                        }}
                       >
-                        <View
-                          style={{
-                            flexDirection: 'row',
-                            alignItems: 'flex-start',
-                            justifyContent: 'space-between',
-                            gap: spacing.sm,
-                          }}
+                        <AppText variant="h3" color={colors.brand.red}>
+                          {formatMoney(Number(booking.session_rate), booking.currency)}
+                        </AppText>
+
+                        <AppText variant="caption" color={colors.text.secondary}>
+                          STATUS: {formatStatus(booking.status).toUpperCase()}
+                        </AppText>
+
+                        {isPaid ? (
+                          <AppText variant="caption" color={colors.text.secondary}>
+                            PAYMENT: PAID
+                          </AppText>
+                        ) : payment?.status === 'pending' ? (
+                          <AppText variant="caption" color={colors.text.secondary}>
+                            PAYMENT: PENDING
+                          </AppText>
+                        ) : payment?.status === 'failed' ? (
+                          <AppText variant="caption" color={colors.text.secondary}>
+                            PAYMENT: FAILED
+                          </AppText>
+                        ) : null}
+                      </View>
+
+                      {booking.notes ? (
+                        <AppText variant="body" color={colors.text.secondary}>
+                          Notes: {booking.notes}
+                        </AppText>
+                      ) : null}
+
+                      {canPay ? (
+                        <Button
+                          variant="primary"
+                          fullWidth
+                          loading={processingPaymentBookingId === booking.id}
+                          disabled={
+                            processingPaymentBookingId !== null ||
+                            cancellingBookingId !== null
+                          }
+                          accessibilityLabel={`Pay ${formatMoney(
+                            Number(booking.session_rate),
+                            booking.currency,
+                          )} for this session`}
+                          onPress={() => void handlePayForBooking(booking)}
                         >
-                          <View style={{ flex: 1, gap: spacing.xs }}>
-                            <AppText variant="caption" color={colors.text.secondary}>
-                              PAYMENT AMOUNT
-                            </AppText>
+                          {payment?.status === 'pending'
+                            ? 'Continue payment'
+                            : 'Pay for session'}
+                        </Button>
+                      ) : null}
 
-                            <AppText variant="h2" color={colors.text.primary}>
-                              {formatMoney(payment.amount, payment.currency)}
-                            </AppText>
-                          </View>
+                      {canRetryPayment && payment ? (
+                        <Button
+                          variant="primary"
+                          fullWidth
+                          loading={processingPaymentBookingId === booking.id}
+                          disabled={
+                            processingPaymentBookingId !== null ||
+                            cancellingBookingId !== null
+                          }
+                          accessibilityLabel={`Retry payment for ${formatMoney(
+                            Number(booking.session_rate),
+                            booking.currency,
+                          )}`}
+                          onPress={() => void handleRetryPayment(booking, payment)}
+                        >
+                          Retry payment
+                        </Button>
+                      ) : null}
 
+                      {booking.status === 'completed' ? (
+                        isReviewed ? (
                           <View
                             style={{
-                              paddingHorizontal: spacing.sm,
-                              paddingVertical: spacing.xs,
-                              borderRadius: 20,
+                              padding: spacing.md,
+                              borderRadius: 12,
                               backgroundColor: colors.background.primary,
                             }}
                           >
-                            <AppText variant="caption" color={statusColor} weight="600">
-                              {payment.status.toUpperCase()}
+                            <AppText variant="button" color={colors.text.secondary}>
+                              ✓ REVIEW SUBMITTED
                             </AppText>
                           </View>
-                        </View>
-
-                        <View style={{ gap: spacing.xs }}>
-                          <AppText variant="body" color={colors.text.secondary}>
-                            {formatDate(payment.paid_at ?? payment.created_at)}
-                          </AppText>
-
-                          <AppText variant="caption" color={colors.text.secondary}>
-                            Reference: {payment.provider_reference ?? 'Pending'}
-                          </AppText>
-                        </View>
-
-                        <AppText variant="caption" color={colors.brand.red}>
-                          {expanded ? 'HIDE DETAILS −' : 'VIEW DETAILS +'}
-                        </AppText>
-                      </Pressable>
-
-                      {expanded ? (
-                        <View
-                          style={{
-                            paddingTop: spacing.md,
-                            borderTopWidth: 1,
-                            borderTopColor: colors.border.default,
-                            gap: spacing.sm,
-                          }}
-                        >
-                          <AppText variant="h3" color={colors.text.primary}>
-                            TRANSACTION DETAILS
-                          </AppText>
-
-                          <View style={{ gap: spacing.xs }}>
-                            <AppText variant="caption" color={colors.text.secondary}>
-                              TRANSACTION ID
-                            </AppText>
-
-                            <AppText variant="body" color={colors.text.primary}>
-                              {payment.id}
-                            </AppText>
-                          </View>
-
-                          <View style={{ gap: spacing.xs }}>
-                            <AppText variant="caption" color={colors.text.secondary}>
-                              BOOKING REFERENCE
-                            </AppText>
-
-                            <AppText variant="body" color={colors.text.primary}>
-                              {payment.booking_id}
-                            </AppText>
-                          </View>
-
-                          <View style={{ gap: spacing.xs }}>
-                            <AppText variant="caption" color={colors.text.secondary}>
-                              PAYMENT PROVIDER
-                            </AppText>
-
-                            <AppText variant="body" color={colors.text.primary}>
-                              {payment.provider.toUpperCase()}
-                            </AppText>
-                          </View>
-
-                          {trainerName ? (
-                            <View style={{ gap: spacing.xs }}>
-                              <AppText variant="caption" color={colors.text.secondary}>
-                                TRAINER
-                              </AppText>
-
-                              <AppText variant="body" color={colors.text.primary}>
-                                {trainerName}
-                              </AppText>
-                            </View>
-                          ) : null}
-
-                          {payment.paid_at ? (
-                            <View style={{ gap: spacing.xs }}>
-                              <AppText variant="caption" color={colors.text.secondary}>
-                                VERIFIED PAYMENT DATE
-                              </AppText>
-
-                              <AppText variant="body" color={colors.text.primary}>
-                                {formatDate(payment.paid_at)}
-                              </AppText>
-                            </View>
-                          ) : null}
-
-                          {payment.status === 'successful' && payment.paid_at ? (
-                            <Button
-                              variant="primary"
-                              fullWidth
-                              onPress={() => void handleShareReceipt(payment)}
-                            >
-                              Share payment receipt
-                            </Button>
-                          ) : null}
-                        </View>
-                      ) : null}
-                    </View>
-                  );
-                })}
-              </>
-            )}
-          </View>
-        ) : visibleBookings.length === 0 ? (
-          <View
-            style={{
-              padding: spacing.xl,
-              alignItems: 'center',
-              borderRadius: 20,
-              borderWidth: 1,
-              borderColor: colors.border.default,
-              backgroundColor: colors.background.secondary,
-              gap: spacing.md,
-            }}
-          >
-            <AppText variant="h3" color={colors.text.primary}>
-              {activeTab === 'Upcoming' ? 'NO UPCOMING SESSIONS' : 'NO SESSION HISTORY'}
-            </AppText>
-
-            <AppText
-              variant="body"
-              color={colors.text.secondary}
-              style={{ textAlign: 'center', lineHeight: 24 }}
-            >
-              {activeTab === 'Upcoming'
-                ? 'Your pending requests and confirmed sessions will appear here.'
-                : 'Declined, cancelled and completed sessions will appear here.'}
-            </AppText>
-          </View>
-        ) : (
-          <View style={{ gap: spacing.md }}>
-            <AppText variant="h2" color={colors.text.primary}>
-              {activeTab === 'Upcoming' ? 'UPCOMING BOOKINGS' : 'SESSION HISTORY'} (
-              {visibleBookings.length})
-            </AppText>
-
-            {visibleBookings.map((booking) => {
-              const trainerName = [
-                booking.trainer?.first_name,
-                booking.trainer?.last_name,
-              ]
-                .filter(Boolean)
-                .join(' ')
-                .trim();
-
-              const isReviewed = reviewedBookingIds.has(booking.id);
-              const isReviewFormOpen = reviewBookingId === booking.id;
-              const payment = paymentStatuses.get(booking.id);
-              const isPaid = payment?.status === 'successful';
-
-              const canRetryPayment =
-                currentTime !== null &&
-                booking.status === 'confirmed' &&
-                new Date(booking.scheduled_start).getTime() > currentTime &&
-                payment?.status === 'failed' &&
-                Boolean(payment.id);
-
-              const canPay =
-                currentTime !== null &&
-                booking.status === 'confirmed' &&
-                new Date(booking.scheduled_start).getTime() > currentTime &&
-                !isPaid &&
-                (!payment || payment.status === 'pending');
-
-              const canManageBooking =
-                currentTime !== null &&
-                (booking.status === 'pending' || booking.status === 'confirmed') &&
-                new Date(booking.scheduled_start).getTime() > currentTime;
-
-              return (
-                <Swipeable
-                  key={booking.id}
-                  renderRightActions={() => renderBookingSwipeActions(booking)}
-                  enabled={
-                    canManageBooking &&
-                    cancellingBookingId === null &&
-                    processingPaymentBookingId === null
-                  }
-                  friction={2}
-                  rightThreshold={45}
-                  overshootRight={false}
-                  containerStyle={{ overflow: 'visible' }}
-                >
-                  <View
-                    style={{
-                      padding: spacing.lg,
-                      borderRadius: 18,
-                      borderWidth: 1,
-                      borderColor: colors.border.default,
-                      backgroundColor: colors.background.secondary,
-                      gap: spacing.md,
-                    }}
-                  >
-                    <View style={{ gap: spacing.xs }}>
-                      <AppText variant="caption" color={colors.brand.red}>
-                        TRAINR COACH
-                      </AppText>
-
-                      <AppText variant="h3" color={colors.text.primary}>
-                        {trainerName || 'TRAINR Coach'}
-                      </AppText>
-
-                      <AppText variant="body" color={colors.text.secondary}>
-                        {formatDate(booking.scheduled_start)}
-                      </AppText>
-
-                      <AppText variant="body" color={colors.text.secondary}>
-                        {formatTime(booking.scheduled_start)} –{' '}
-                        {formatTime(booking.scheduled_end)}
-                      </AppText>
-                    </View>
-
-                    <View
-                      style={{
-                        paddingTop: spacing.md,
-                        borderTopWidth: 1,
-                        borderTopColor: colors.border.default,
-                        gap: spacing.xs,
-                      }}
-                    >
-                      <AppText variant="h3" color={colors.brand.red}>
-                        {formatMoney(Number(booking.session_rate), booking.currency)}
-                      </AppText>
-
-                      <AppText variant="caption" color={colors.text.secondary}>
-                        STATUS: {formatStatus(booking.status).toUpperCase()}
-                      </AppText>
-
-                      {isPaid ? (
-                        <AppText variant="caption" color={colors.text.secondary}>
-                          PAYMENT: PAID
-                        </AppText>
-                      ) : payment?.status === 'pending' ? (
-                        <AppText variant="caption" color={colors.text.secondary}>
-                          PAYMENT: PENDING
-                        </AppText>
-                      ) : payment?.status === 'failed' ? (
-                        <AppText variant="caption" color={colors.text.secondary}>
-                          PAYMENT: FAILED
-                        </AppText>
-                      ) : null}
-                    </View>
-
-                    {booking.notes ? (
-                      <AppText variant="body" color={colors.text.secondary}>
-                        Notes: {booking.notes}
-                      </AppText>
-                    ) : null}
-
-                    {canPay ? (
-                      <Button
-                        variant="primary"
-                        fullWidth
-                        loading={processingPaymentBookingId === booking.id}
-                        disabled={
-                          processingPaymentBookingId !== null ||
-                          cancellingBookingId !== null
-                        }
-                        accessibilityLabel={`Pay ${formatMoney(
-                          Number(booking.session_rate),
-                          booking.currency,
-                        )} for this session`}
-                        onPress={() => void handlePayForBooking(booking)}
-                      >
-                        {payment?.status === 'pending'
-                          ? 'Continue payment'
-                          : 'Pay for session'}
-                      </Button>
-                    ) : null}
-
-                    {canRetryPayment && payment ? (
-                      <Button
-                        variant="primary"
-                        fullWidth
-                        loading={processingPaymentBookingId === booking.id}
-                        disabled={
-                          processingPaymentBookingId !== null ||
-                          cancellingBookingId !== null
-                        }
-                        accessibilityLabel={`Retry payment for ${formatMoney(
-                          Number(booking.session_rate),
-                          booking.currency,
-                        )}`}
-                        onPress={() => void handleRetryPayment(booking, payment)}
-                      >
-                        Retry payment
-                      </Button>
-                    ) : null}
-
-                    {booking.status === 'completed' ? (
-                      isReviewed ? (
-                        <View
-                          style={{
-                            padding: spacing.md,
-                            borderRadius: 12,
-                            backgroundColor: colors.background.primary,
-                          }}
-                        >
-                          <AppText variant="button" color={colors.text.secondary}>
-                            ✓ REVIEW SUBMITTED
-                          </AppText>
-                        </View>
-                      ) : (
-                        <View style={{ gap: spacing.md }}>
-                          {!isReviewFormOpen ? (
-                            <Button
-                              variant="primary"
-                              fullWidth
-                              onPress={() => openReviewForm(booking.id)}
-                            >
-                              Leave a review
-                            </Button>
-                          ) : (
-                            <View
-                              style={{
-                                padding: spacing.md,
-                                borderRadius: 14,
-                                borderWidth: 1,
-                                borderColor: colors.border.default,
-                                gap: spacing.md,
-                              }}
-                            >
-                              <AppText variant="h3" color={colors.text.primary}>
-                                RATE YOUR SESSION
-                              </AppText>
-
-                              <AppText variant="body" color={colors.text.secondary}>
-                                How was your experience with this trainer?
-                              </AppText>
-
-                              <View
-                                accessibilityRole="radiogroup"
-                                style={{
-                                  flexDirection: 'row',
-                                  justifyContent: 'center',
-                                  gap: spacing.sm,
-                                }}
-                              >
-                                {[1, 2, 3, 4, 5].map((star) => {
-                                  const selected = star <= reviewRating;
-
-                                  return (
-                                    <Pressable
-                                      key={star}
-                                      accessibilityRole="radio"
-                                      accessibilityLabel={`${star} ${
-                                        star === 1 ? 'star' : 'stars'
-                                      }`}
-                                      accessibilityState={{
-                                        selected: reviewRating === star,
-                                      }}
-                                      onPress={() => setReviewRating(star)}
-                                      disabled={isSubmittingReview}
-                                      hitSlop={6}
-                                      style={{
-                                        minWidth: 40,
-                                        minHeight: 44,
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                      }}
-                                    >
-                                      <AppText
-                                        variant="h2"
-                                        color={
-                                          selected
-                                            ? colors.brand.red
-                                            : colors.text.secondary
-                                        }
-                                      >
-                                        {selected ? '★' : '☆'}
-                                      </AppText>
-                                    </Pressable>
-                                  );
-                                })}
-                              </View>
-
-                              <AppText
-                                variant="caption"
-                                color={colors.text.secondary}
-                                style={{ textAlign: 'center' }}
-                              >
-                                {reviewRating === 0
-                                  ? 'Select a star rating'
-                                  : `${reviewRating} out of 5 stars`}
-                              </AppText>
-
-                              <TextInput
-                                value={reviewText}
-                                onChangeText={setReviewText}
-                                placeholder="Share your experience (optional)"
-                                placeholderTextColor={colors.text.secondary}
-                                multiline
-                                maxLength={2000}
-                                editable={!isSubmittingReview}
-                                textAlignVertical="top"
-                                accessibilityLabel="Written trainer review"
-                                style={{
-                                  minHeight: 110,
-                                  padding: spacing.md,
-                                  borderRadius: 12,
-                                  borderWidth: 1,
-                                  borderColor: colors.border.default,
-                                  color: colors.text.primary,
-                                  backgroundColor: colors.background.primary,
-                                  fontSize: 15,
-                                  lineHeight: 22,
-                                }}
-                              />
-
-                              <AppText
-                                variant="caption"
-                                color={colors.text.secondary}
-                                style={{ textAlign: 'right' }}
-                              >
-                                {reviewText.length}/2000
-                              </AppText>
-
-                              {reviewError ? (
-                                <AppText variant="body" color={colors.brand.red}>
-                                  {reviewError}
-                                </AppText>
-                              ) : null}
-
+                        ) : (
+                          <View style={{ gap: spacing.md }}>
+                            {!isReviewFormOpen ? (
                               <Button
                                 variant="primary"
                                 fullWidth
-                                loading={isSubmittingReview}
-                                disabled={isSubmittingReview}
-                                onPress={() => void handleSubmitReview(booking)}
+                                onPress={() => openReviewForm(booking.id)}
                               >
-                                Submit review
+                                Leave a review
                               </Button>
+                            ) : (
+                              <View
+                                style={{
+                                  padding: spacing.md,
+                                  borderRadius: 14,
+                                  borderWidth: 1,
+                                  borderColor: colors.border.default,
+                                  gap: spacing.md,
+                                }}
+                              >
+                                <AppText variant="h3" color={colors.text.primary}>
+                                  RATE YOUR SESSION
+                                </AppText>
 
-                              <Button
-                                variant="ghost"
-                                fullWidth
-                                disabled={isSubmittingReview}
-                                onPress={closeReviewForm}
-                              >
-                                Cancel
-                              </Button>
-                            </View>
-                          )}
+                                <AppText variant="body" color={colors.text.secondary}>
+                                  How was your experience with this trainer?
+                                </AppText>
+
+                                <View
+                                  accessibilityRole="radiogroup"
+                                  style={{
+                                    flexDirection: 'row',
+                                    justifyContent: 'center',
+                                    gap: spacing.sm,
+                                  }}
+                                >
+                                  {[1, 2, 3, 4, 5].map((star) => {
+                                    const selected = star <= reviewRating;
+
+                                    return (
+                                      <Pressable
+                                        key={star}
+                                        accessibilityRole="radio"
+                                        accessibilityLabel={`${star} ${
+                                          star === 1 ? 'star' : 'stars'
+                                        }`}
+                                        accessibilityState={{
+                                          selected: reviewRating === star,
+                                        }}
+                                        onPress={() => setReviewRating(star)}
+                                        disabled={isSubmittingReview}
+                                        hitSlop={6}
+                                        style={{
+                                          minWidth: 40,
+                                          minHeight: 44,
+                                          alignItems: 'center',
+                                          justifyContent: 'center',
+                                        }}
+                                      >
+                                        <AppText
+                                          variant="h2"
+                                          color={
+                                            selected
+                                              ? colors.brand.red
+                                              : colors.text.secondary
+                                          }
+                                        >
+                                          {selected ? '★' : '☆'}
+                                        </AppText>
+                                      </Pressable>
+                                    );
+                                  })}
+                                </View>
+
+                                <AppText
+                                  variant="caption"
+                                  color={colors.text.secondary}
+                                  style={{ textAlign: 'center' }}
+                                >
+                                  {reviewRating === 0
+                                    ? 'Select a star rating'
+                                    : `${reviewRating} out of 5 stars`}
+                                </AppText>
+
+                                <TextInput
+                                  value={reviewText}
+                                  onChangeText={setReviewText}
+                                  placeholder="Share your experience (optional)"
+                                  placeholderTextColor={colors.text.secondary}
+                                  multiline
+                                  maxLength={2000}
+                                  editable={!isSubmittingReview}
+                                  textAlignVertical="top"
+                                  accessibilityLabel="Written trainer review"
+                                  style={{
+                                    minHeight: 110,
+                                    padding: spacing.md,
+                                    borderRadius: 12,
+                                    borderWidth: 1,
+                                    borderColor: colors.border.default,
+                                    color: colors.text.primary,
+                                    backgroundColor: colors.background.primary,
+                                    fontSize: 15,
+                                    lineHeight: 22,
+                                  }}
+                                />
+
+                                <AppText
+                                  variant="caption"
+                                  color={colors.text.secondary}
+                                  style={{ textAlign: 'right' }}
+                                >
+                                  {reviewText.length}/2000
+                                </AppText>
+
+                                {reviewError ? (
+                                  <AppText variant="body" color={colors.brand.red}>
+                                    {reviewError}
+                                  </AppText>
+                                ) : null}
+
+                                <Button
+                                  variant="primary"
+                                  fullWidth
+                                  loading={isSubmittingReview}
+                                  disabled={isSubmittingReview}
+                                  onPress={() => void handleSubmitReview(booking)}
+                                >
+                                  Submit review
+                                </Button>
+
+                                <Button
+                                  variant="ghost"
+                                  fullWidth
+                                  disabled={isSubmittingReview}
+                                  onPress={closeReviewForm}
+                                >
+                                  Cancel
+                                </Button>
+                              </View>
+                            )}
+                          </View>
+                        )
+                      ) : null}
+
+                      {canManageBooking ? (
+                        <View
+                          style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: spacing.xs,
+                            paddingTop: spacing.xs,
+                          }}
+                        >
+                          <MaterialCommunityIcons
+                            name="gesture-swipe-left"
+                            size={17}
+                            color={colors.text.secondary}
+                          />
+
+                          <AppText variant="caption" color={colors.text.secondary}>
+                            Swipe left to manage this booking
+                          </AppText>
                         </View>
-                      )
-                    ) : null}
+                      ) : null}
+                    </View>
+                  </Swipeable>
+                );
+              })}
+            </View>
+          )}
 
-                    {canManageBooking ? (
-                      <View
-                        style={{
-                          flexDirection: 'row',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          gap: spacing.xs,
-                          paddingTop: spacing.xs,
-                        }}
-                      >
-                        <MaterialCommunityIcons
-                          name="gesture-swipe-left"
-                          size={17}
-                          color={colors.text.secondary}
-                        />
+          {/* Session preparation reminder */}
+          <View
+            style={{
+              padding: spacing.lg,
+              borderRadius: 16,
+              borderWidth: 1,
+              borderColor: colors.border.default,
+              gap: spacing.sm,
+            }}
+          >
+            <AppText variant="h3" color={colors.text.primary}>
+              BEFORE YOUR SESSION
+            </AppText>
 
-                        <AppText variant="caption" color={colors.text.secondary}>
-                          Swipe left to manage this booking
-                        </AppText>
-                      </View>
-                    ) : null}
-                  </View>
-                </Swipeable>
-              );
-            })}
+            <AppText variant="body" color={colors.text.secondary}>
+              • Check your appointment details.
+            </AppText>
+
+            <AppText variant="body" color={colors.text.secondary}>
+              • Arrive ready to train.
+            </AppText>
+
+            <AppText variant="body" color={colors.text.secondary}>
+              • Contact your trainer if plans change.
+            </AppText>
           </View>
-        )}
-
-        {/* Session preparation reminder */}
-        <View
-          style={{
-            padding: spacing.lg,
-            borderRadius: 16,
-            borderWidth: 1,
-            borderColor: colors.border.default,
-            gap: spacing.sm,
-          }}
-        >
-          <AppText variant="h3" color={colors.text.primary}>
-            BEFORE YOUR SESSION
-          </AppText>
-
-          <AppText variant="body" color={colors.text.secondary}>
-            • Check your appointment details.
-          </AppText>
-
-          <AppText variant="body" color={colors.text.secondary}>
-            • Arrive ready to train.
-          </AppText>
-
-          <AppText variant="body" color={colors.text.secondary}>
-            • Contact your trainer if plans change.
-          </AppText>
-        </View>
-      </ScrollView>
+        </ScrollView>
+      </View>
     </SafeAreaView>
   );
 }
