@@ -82,7 +82,6 @@ export default function SignInScreen() {
     return Object.keys(nextErrors).length === 0;
   }
 
-
   async function handleSignIn() {
     setStatusMessage('');
 
@@ -124,14 +123,12 @@ export default function SignInScreen() {
       console.error('[TRAINR AUTH] Unexpected error:', error);
 
       setErrors({
-        general:
-          'Something went wrong. Please check your connection and try again.',
+        general: 'Something went wrong. Please check your connection and try again.',
       });
     } finally {
       setIsSubmitting(false);
     }
   }
-
 
   async function handleForgotPassword() {
     setStatusMessage('');
@@ -196,10 +193,17 @@ export default function SignInScreen() {
           }}
         >
           {/* Navigation */}
+
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Back to welcome"
-            onPress={() => router.back()}
+            onPress={() => {
+              if (router.canGoBack()) {
+                router.back();
+              } else {
+                router.replace('/');
+              }
+            }}
             disabled={isBusy}
             hitSlop={8}
             style={{

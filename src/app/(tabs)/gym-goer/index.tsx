@@ -140,11 +140,6 @@ export default function HomeTabScreen() {
   const { colors, spacing, mode } = useTrainrTheme();
   const { user } = useAuth();
 
-  const firstName =
-    typeof user?.user_metadata?.first_name === 'string'
-      ? user.user_metadata.first_name.trim()
-      : 'TRAINR';
-
   const [weightRecords, setWeightRecords] = useState<FitnessProgress[]>([]);
   const [isLoadingWeight, setIsLoadingWeight] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -303,11 +298,11 @@ export default function HomeTabScreen() {
           </AppText>
 
           <AppText variant="displayMedium" color={colors.text.primary}>
-            WELCOME BACK
+            YOUR JOURNEY
           </AppText>
 
           <AppText variant="displayMedium" color={colors.brand.red}>
-            {firstName.toUpperCase()}.
+            STARTS HERE.
           </AppText>
 
           <AppText
@@ -318,8 +313,9 @@ export default function HomeTabScreen() {
               marginTop: spacing.xs,
             }}
           >
-            Your fitness journey continues here. Stay focused, keep showing up, and make
-            every session count.
+            Your fitness journey begins today. Set your goals, build healthy habits, stay
+            consistent and take the first step towards becoming a stronger version of
+            yourself.
           </AppText>
         </View>
 
