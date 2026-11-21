@@ -3,27 +3,32 @@ import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import {
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  TextInput,
-  View,
+    ActivityIndicator,
+    KeyboardAvoidingView,
+    Platform,
+    Pressable,
+    ScrollView,
+    TextInput,
+    View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/AppText';
 import { useAuth } from '@/providers/AuthProvider';
 import {
-  trainerProfileSchema,
-  type TrainerProfileFormValues,
+    trainerProfileSchema,
+    type TrainerProfileFormValues,
 } from '@/schemas/trainer-profile';
 import {
-  getTrainerProfessionalProfile,
-  updateTrainerProfessionalProfile,
+    getTrainerProfessionalProfile,
+    getTrainerTrainingFormat,
+    toTrainerTrainingFormats,
+    updateTrainerProfessionalProfile,
+    type TrainerTrainingFormat,
 } from '@/services/trainer-profile';
 import { useTrainrTheme } from '@/theme';
+
+const TRAINING_FORMATS: TrainerTrainingFormat[] = ['Online', 'In-person', 'Both'];
 
 export default function TrainerProfessionalBioScreen() {
   const { colors, spacing } = useTrainrTheme();
@@ -42,10 +47,12 @@ export default function TrainerProfessionalBioScreen() {
   } = useForm<TrainerProfileFormValues>({
     resolver: zodResolver(trainerProfileSchema),
     defaultValues: {
+      professionalTitle: '',
       professionalBio: '',
       coachingApproach: '',
       location: '',
       yearsExperience: '',
+      trainingFormat: '',
     },
   });
 
@@ -65,11 +72,13 @@ export default function TrainerProfessionalBioScreen() {
         if (!isActive) return;
 
         reset({
+          professionalTitle: data?.professional_title ?? '',
           professionalBio: data?.professional_bio ?? '',
           coachingApproach: data?.coaching_approach ?? '',
           location: data?.location ?? '',
           yearsExperience:
             data?.years_experience == null ? '' : String(data.years_experience),
+          trainingFormat: getTrainerTrainingFormat(data?.training_formats),
         });
       } catch (error) {
         console.error('[Trainer Professional Bio] Failed to load profile:', error);
@@ -107,20 +116,26 @@ export default function TrainerProfessionalBioScreen() {
     setSuccessMessage(null);
 
     try {
-      await updateTrainerProfessionalProfile(user.id, {
-        professional_bio: values.professionalBio.trim(),
-        coaching_approach: values.coachingApproach.trim(),
-        location: values.location.trim(),
-        years_experience:
-          values.yearsExperience.trim() === '' ? null : Number(values.yearsExperience),
-      });
-
-      reset({
+      const savedValues = {
+        professionalTitle: values.professionalTitle.trim(),
         professionalBio: values.professionalBio.trim(),
         coachingApproach: values.coachingApproach.trim(),
         location: values.location.trim(),
         yearsExperience: values.yearsExperience.trim(),
+        trainingFormat: values.trainingFormat,
+      };
+
+      await updateTrainerProfessionalProfile(user.id, {
+        professional_title: savedValues.professionalTitle,
+        professional_bio: savedValues.professionalBio,
+        coaching_approach: savedValues.coachingApproach,
+        location: savedValues.location,
+        years_experience:
+          savedValues.yearsExperience === '' ? null : Number(savedValues.yearsExperience),
+        training_formats: toTrainerTrainingFormats(savedValues.trainingFormat),
       });
+
+      reset(savedValues);
 
       setSuccessMessage('Your professional profile has been updated.');
     } catch (error) {
@@ -207,6 +222,89 @@ export default function TrainerProfessionalBioScreen() {
     );
   }
 
+  function renderTrainingFormatSelector() {
+    return (
+      <Controller
+        control={control}
+        name="trainingFormat"
+        render={({ field: { onChange, value } }) => (
+          <View style={{ gap: spacing.sm }}>
+            <AppText variant="body" color={colors.text.primary}>
+              Training format
+            </AppText>
+
+            <AppText variant="caption" color={colors.text.secondary}>
+              Choose how you offer training sessions.
+            </AppText>
+
+            <View style={{ gap: spacing.sm }}>
+              {TRAINING_FORMATS.map((format) => {
+                const selected = value === format;
+
+                return (
+                  <Pressable
+                    key={format}
+                    accessibilityRole="radio"
+                    accessibilityState={{ checked: selected }}
+                    accessibilityLabel={format}
+                    disabled={isLoading || isSaving}
+                    onPress={() => {
+                      onChange(format);
+                      handleFieldChange();
+                    }}
+                    style={{
+                      minHeight: 54,
+                      paddingHorizontal: spacing.md,
+                      borderRadius: 12,
+                      borderWidth: 1,
+                      borderColor: selected ? colors.brand.red : colors.border.default,
+                      backgroundColor: selected
+                        ? colors.brand.redLight
+                        : colors.background.secondary,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                    }}
+                  >
+                    <AppText
+                      variant="body"
+                      color={selected ? colors.brand.red : colors.text.primary}
+                    >
+                      {format}
+                    </AppText>
+
+                    <View
+                      style={{
+                        width: 20,
+                        height: 20,
+                        borderRadius: 10,
+                        borderWidth: 2,
+                        borderColor: selected ? colors.brand.red : colors.border.default,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      {selected ? (
+                        <View
+                          style={{
+                            width: 10,
+                            height: 10,
+                            borderRadius: 5,
+                            backgroundColor: colors.brand.red,
+                          }}
+                        />
+                      ) : null}
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+        )}
+      />
+    );
+  }
+
   return (
     <SafeAreaView
       edges={['top']}
@@ -274,6 +372,13 @@ export default function TrainerProfessionalBioScreen() {
           ) : (
             <>
               {renderTextField(
+                'professionalTitle',
+                'Professional title',
+                'e.g. Certified Personal Trainer',
+                { maxLength: 120 },
+              )}
+
+              {renderTextField(
                 'professionalBio',
                 'Professional bio',
                 'Tell gym-goers about your experience and what makes you different.',
@@ -286,6 +391,8 @@ export default function TrainerProfessionalBioScreen() {
                 'Describe how you motivate, guide and support your clients.',
                 { multiline: true, maxLength: 1000 },
               )}
+
+              {renderTrainingFormatSelector()}
 
               {renderTextField('location', 'Location', 'Enter your city or area.', {
                 maxLength: 150,
