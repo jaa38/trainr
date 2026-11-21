@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "622419842482",
+    "project_id": "trainr-70068",
+    "storage_bucket": "trainr-70068.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:622419842482:android:36a1d6e312be2e0fd3c0ab",
+        "android_client_info": {
+          "package_name": "com.jaa38.trainr"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDw2twfEFqRme7u2_bvu_TtPM_ix3Y9dr0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

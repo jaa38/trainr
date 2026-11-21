@@ -21,7 +21,8 @@
         "backgroundColor": "#FFFFFF"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.jaa38.trainr"
+      "package": "com.jaa38.trainr",
+      "googleServicesFile": "./google-services.json"
     },
     "web": {
       "output": "static",
