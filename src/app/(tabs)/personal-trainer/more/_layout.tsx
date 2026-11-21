@@ -15,6 +15,7 @@ export default function MoreLayout() {
       <Stack.Screen name="payout-management" />
       <Stack.Screen name="qualifications" />
       <Stack.Screen name="session-rates" />
+      <Stack.Screen name="specialities" />
     </Stack>
   );
 }

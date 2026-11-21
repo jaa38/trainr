@@ -70,6 +70,7 @@ export default function TrainerProfileScreen() {
       title: 'Training Specialities',
       description:
         'Highlight your expertise, such as strength training, conditioning or mobility.',
+      route: '/(tabs)/personal-trainer/more/specialities',
     },
     {
       title: 'Session Rates',
