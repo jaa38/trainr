@@ -1,5 +1,5 @@
 import { router, useFocusEffect } from 'expo-router';
-import { ArrowRight, Heart, Search } from 'lucide-react-native';
+import { ArrowLeft, ArrowRight, Heart, Search } from 'lucide-react-native';
 import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
@@ -9,7 +9,7 @@ import {
   ScrollView,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/AppText';
 import { Button } from '@/components/Button';
@@ -27,12 +27,16 @@ export default function FavouriteTrainersScreen() {
   const theme = useTrainrTheme();
   const { colors, spacing } = theme;
   const { user } = useAuth();
+  const insets = useSafeAreaInsets();
 
   const [trainers, setTrainers] = useState<PublishedTrainer[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [removingTrainerId, setRemovingTrainerId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Reserve space for the floating NativeTabs bar and bottom safe area.
+  const bottomContentPadding = spacing.xxxl + insets.bottom + 100;
 
   const loadFavourites = useCallback(
     async (refresh = false) => {
@@ -70,6 +74,7 @@ export default function FavouriteTrainersScreen() {
         }
 
         const publishedTrainers = await discoverPublishedTrainers();
+
         const favouriteTrainers = publishedTrainers.filter((trainer) =>
           favouriteIds.includes(trainer.trainer_id),
         );
@@ -77,6 +82,7 @@ export default function FavouriteTrainersScreen() {
         setTrainers(favouriteTrainers);
       } catch (error) {
         console.error('[Favourites] Unable to load saved trainers:', error);
+
         setErrorMessage('We couldn’t load your saved trainers. Please try again.');
       } finally {
         setIsLoading(false);
@@ -116,6 +122,7 @@ export default function FavouriteTrainersScreen() {
         );
       } catch (error) {
         console.error('[Favourites] Unable to remove trainer:', error);
+
         setErrorMessage('We couldn’t remove this trainer. Please try again.');
       } finally {
         setRemovingTrainerId(null);
@@ -153,12 +160,43 @@ export default function FavouriteTrainersScreen() {
         backgroundColor: colors.background.primary,
       }}
     >
+      {/* Header */}
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          paddingHorizontal: spacing.lg,
+          paddingVertical: spacing.md,
+          gap: spacing.md,
+        }}
+      >
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+          onPress={() => router.back()}
+          style={{
+            width: 42,
+            height: 42,
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderRadius: 12,
+            borderWidth: 1,
+            borderColor: colors.border.default,
+          }}
+        >
+          <ArrowLeft size={20} color={colors.text.primary} />
+        </Pressable>
+
+        <AppText variant="h2" color={colors.text.primary}>
+          Saved Trainers
+        </AppText>
+      </View>
+
+      {/* Content */}
       <ScrollView
         contentContainerStyle={{
-          flexGrow: 1,
-          paddingHorizontal: spacing.lg,
-          paddingTop: spacing.lg,
-          paddingBottom: spacing.xxxl,
+          padding: spacing.lg,
+          paddingBottom: bottomContentPadding,
           gap: spacing.lg,
         }}
         refreshControl={
@@ -170,6 +208,7 @@ export default function FavouriteTrainersScreen() {
         }
         showsVerticalScrollIndicator={false}
       >
+        {/* Introduction */}
         <View style={{ gap: spacing.sm }}>
           <AppText
             variant="caption"
@@ -182,8 +221,8 @@ export default function FavouriteTrainersScreen() {
             YOUR COLLECTION
           </AppText>
 
-          <AppText variant="displayLarge" color={colors.text.primary}>
-            SAVED TRAINERS
+          <AppText variant="h1" color={colors.text.primary}>
+            Your favourite trainers.
           </AppText>
 
           <AppText variant="body" color={colors.text.secondary}>
@@ -192,6 +231,7 @@ export default function FavouriteTrainersScreen() {
           </AppText>
         </View>
 
+        {/* Not Signed In */}
         {!user ? (
           <View
             style={{
@@ -203,14 +243,17 @@ export default function FavouriteTrainersScreen() {
             }}
           >
             <Heart size={32} color={colors.brand.red} />
+
             <AppText variant="h3" color={colors.text.primary}>
               Sign in to save trainers
             </AppText>
+
             <AppText variant="body" color={colors.text.secondary}>
               Your saved trainers will be available here when you sign in.
             </AppText>
           </View>
         ) : isLoading ? (
+          /* Loading State */
           <View
             style={{
               minHeight: 220,
@@ -220,11 +263,13 @@ export default function FavouriteTrainersScreen() {
             }}
           >
             <ActivityIndicator size="large" color={colors.brand.red} />
+
             <AppText variant="body" color={colors.text.secondary}>
               Loading saved trainers…
             </AppText>
           </View>
         ) : errorMessage ? (
+          /* Error State */
           <View
             style={{
               padding: spacing.lg,
@@ -236,14 +281,17 @@ export default function FavouriteTrainersScreen() {
             <AppText variant="h3" color={colors.text.primary}>
               Something went wrong
             </AppText>
+
             <AppText variant="body" color={colors.text.secondary}>
               {errorMessage}
             </AppText>
+
             <Button variant="primary" onPress={() => void loadFavourites()}>
               Try again
             </Button>
           </View>
         ) : trainers.length === 0 ? (
+          /* Empty State */
           <View
             style={{
               alignItems: 'center',
@@ -256,16 +304,22 @@ export default function FavouriteTrainersScreen() {
             }}
           >
             <Heart size={36} color={colors.brand.red} />
+
             <AppText variant="h3" color={colors.text.primary}>
               No saved trainers yet
             </AppText>
+
             <AppText
               variant="body"
               color={colors.text.secondary}
-              style={{ textAlign: 'center', lineHeight: 24 }}
+              style={{
+                textAlign: 'center',
+                lineHeight: 24,
+              }}
             >
               Browse Discover and tap the heart on a trainer’s card to save them here.
             </AppText>
+
             <Button
               variant="primary"
               onPress={() => router.push('/(tabs)/gym-goer/discover')}
@@ -275,6 +329,7 @@ export default function FavouriteTrainersScreen() {
             </Button>
           </View>
         ) : (
+          /* Favourite Trainers */
           <View style={{ gap: spacing.md }}>
             <AppText variant="h2" color={colors.text.primary}>
               {trainers.length} {trainers.length === 1 ? 'TRAINER' : 'TRAINERS'}
@@ -298,6 +353,7 @@ export default function FavouriteTrainersScreen() {
                     gap: spacing.md,
                   }}
                 >
+                  {/* Trainer Information */}
                   <Pressable
                     accessibilityRole="button"
                     accessibilityLabel={`View profile for ${fullName || 'TRAINR Coach'}`}
@@ -311,7 +367,9 @@ export default function FavouriteTrainersScreen() {
                     {trainer.avatar_url ? (
                       <Image
                         source={{ uri: trainer.avatar_url }}
-                        accessibilityLabel={`Profile photo of ${fullName || 'TRAINR Coach'}`}
+                        accessibilityLabel={`Profile photo of ${
+                          fullName || 'TRAINR Coach'
+                        }`}
                         resizeMode="cover"
                         style={{
                           width: 64,
@@ -356,6 +414,7 @@ export default function FavouriteTrainersScreen() {
                     <ArrowRight size={18} color={colors.text.secondary} />
                   </Pressable>
 
+                  {/* Remove Favourite */}
                   <View
                     style={{
                       flexDirection: 'row',
@@ -373,7 +432,9 @@ export default function FavouriteTrainersScreen() {
 
                     <Pressable
                       accessibilityRole="button"
-                      accessibilityLabel={`Remove ${fullName || 'trainer'} from favourites`}
+                      accessibilityLabel={`Remove ${
+                        fullName || 'trainer'
+                      } from favourites`}
                       disabled={removingTrainerId === trainer.trainer_id}
                       onPress={() => void removeFavourite(trainer.trainer_id)}
                       style={{
@@ -398,6 +459,7 @@ export default function FavouriteTrainersScreen() {
                           fill={colors.brand.red}
                         />
                       )}
+
                       <AppText variant="button" color={colors.text.primary}>
                         Remove
                       </AppText>
