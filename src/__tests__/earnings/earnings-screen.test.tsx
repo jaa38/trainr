@@ -1,4 +1,3 @@
-
 import React from 'react';
 
 import { fireEvent, render } from '@testing-library/react-native';
@@ -33,6 +32,12 @@ jest.mock('@/theme', () => ({
         primary: '#0B0B0B',
         secondary: '#666666',
         tertiary: '#999999',
+      },
+      semantic: {
+        success: '#22C55E',
+        warning: '#F59E0B',
+        error: '#EF4444',
+        info: '#3B82F6',
       },
       border: {
         default: '#E5E5E5',
@@ -247,13 +252,9 @@ describe('EarningsScreen', () => {
 
       expect(getByText('VERIFIED EARNINGS')).toBeTruthy();
 
-      expect(
-        getByText(formatEarningsAmount(125000, 'NGN')),
-      ).toBeTruthy();
+      expect(getByText(formatEarningsAmount(125000, 'NGN'))).toBeTruthy();
 
-      expect(
-        getByText('Verified earnings after TRAINR commission.'),
-      ).toBeTruthy();
+      expect(getByText('Verified earnings after TRAINR commission.')).toBeTruthy();
 
       expect(getByText('NO ANALYTICS AVAILABLE')).toBeTruthy();
     });
@@ -276,9 +277,7 @@ describe('EarningsScreen', () => {
       expect(getByText('NO ANALYTICS AVAILABLE')).toBeTruthy();
       expect(getByText('NO RECENT EARNINGS')).toBeTruthy();
 
-      expect(
-        getByText(formatEarningsAmount(0, 'NGN')),
-      ).toBeTruthy();
+      expect(getByText(formatEarningsAmount(0, 'NGN'))).toBeTruthy();
     });
 
     it('shows an unavailable state when the query fails', async () => {
@@ -292,15 +291,11 @@ describe('EarningsScreen', () => {
 
       const { getByText, getByRole } = await render(<EarningsScreen />);
 
-      expect(
-        getByText('FINANCIAL INFORMATION UNAVAILABLE'),
-      ).toBeTruthy();
+      expect(getByText('FINANCIAL INFORMATION UNAVAILABLE')).toBeTruthy();
 
       expect(getByText('ANALYTICS UNAVAILABLE')).toBeTruthy();
 
-      expect(
-        getByRole('button', { name: 'Retry loading analytics' }),
-      ).toBeTruthy();
+      expect(getByRole('button', { name: 'Retry loading analytics' })).toBeTruthy();
     });
 
     it('shows the next payout placeholder when no payout is scheduled', async () => {
@@ -331,9 +326,7 @@ describe('EarningsScreen', () => {
 
       const { queryByText } = await render(<EarningsScreen />);
 
-      expect(
-        queryByText(formatEarningsAmount(125000, 'NGN')),
-      ).toBeNull();
+      expect(queryByText(formatEarningsAmount(125000, 'NGN'))).toBeNull();
     });
 
     it('displays the earnings analytics metrics when analytics are available', async () => {
@@ -356,17 +349,11 @@ describe('EarningsScreen', () => {
       expect(getByText('NET EARNINGS')).toBeTruthy();
       expect(getByText('COMPLETED SESSIONS')).toBeTruthy();
 
-      expect(
-        getByText(formatEarningsAmount(100000, 'NGN')),
-      ).toBeTruthy();
+      expect(getByText(formatEarningsAmount(100000, 'NGN'))).toBeTruthy();
 
-      expect(
-        getByText(formatEarningsAmount(10000, 'NGN')),
-      ).toBeTruthy();
+      expect(getByText(formatEarningsAmount(10000, 'NGN'))).toBeTruthy();
 
-      expect(
-        getByText(formatEarningsAmount(90000, 'NGN')),
-      ).toBeTruthy();
+      expect(getByText(formatEarningsAmount(90000, 'NGN'))).toBeTruthy();
 
       expect(getByText('10')).toBeTruthy();
       expect(getByText('EARNINGS TREND')).toBeTruthy();
@@ -387,18 +374,14 @@ describe('EarningsScreen', () => {
     it('selects the requested reporting period', async () => {
       const { getByRole } = await render(<EarningsScreen />);
 
-      await fireEvent.press(
-        getByRole('button', { name: 'Last month' }),
-      );
+      await fireEvent.press(getByRole('button', { name: 'Last month' }));
 
       expect(
-        getByRole('button', { name: 'Last month' }).props
-          .accessibilityState?.selected,
+        getByRole('button', { name: 'Last month' }).props.accessibilityState?.selected,
       ).toBe(true);
 
       expect(
-        getByRole('button', { name: 'This month' }).props
-          .accessibilityState?.selected,
+        getByRole('button', { name: 'This month' }).props.accessibilityState?.selected,
       ).toBe(false);
 
       expect(mockUseTrainerEarnings).toHaveBeenLastCalledWith('last_month');
@@ -412,8 +395,7 @@ describe('EarningsScreen', () => {
       await openTransactionsTab(getByRole);
 
       expect(
-        getByRole('button', { name: 'Transactions' }).props
-          .accessibilityState?.selected,
+        getByRole('button', { name: 'Transactions' }).props.accessibilityState?.selected,
       ).toBe(true);
     });
 
@@ -425,8 +407,7 @@ describe('EarningsScreen', () => {
       await fireEvent.press(getByRole('button', { name: 'Overview' }));
 
       expect(
-        getByRole('button', { name: 'Overview' }).props
-          .accessibilityState?.selected,
+        getByRole('button', { name: 'Overview' }).props.accessibilityState?.selected,
       ).toBe(true);
 
       expect(getByText('NO ANALYTICS AVAILABLE')).toBeTruthy();
@@ -440,8 +421,7 @@ describe('EarningsScreen', () => {
       await openTransactionsTab(getByRole);
 
       expect(
-        getByRole('button', { name: 'Transactions' }).props
-          .accessibilityState?.selected,
+        getByRole('button', { name: 'Transactions' }).props.accessibilityState?.selected,
       ).toBe(true);
 
       expect(getByText('TRANSACTION HISTORY')).toBeTruthy();
@@ -467,9 +447,7 @@ describe('EarningsScreen', () => {
         }),
       );
 
-      const { getByRole, getByText, getAllByText } = await render(
-        <EarningsScreen />,
-      );
+      const { getByRole, getByText, getAllByText } = await render(<EarningsScreen />);
 
       await openTransactionsTab(getByRole);
 
@@ -481,8 +459,7 @@ describe('EarningsScreen', () => {
       const { queryByText, getByRole } = await render(<EarningsScreen />);
 
       expect(
-        getByRole('button', { name: 'Overview' }).props
-          .accessibilityState?.selected,
+        getByRole('button', { name: 'Overview' }).props.accessibilityState?.selected,
       ).toBe(true);
 
       expect(queryByText('TRANSACTION HISTORY')).toBeNull();

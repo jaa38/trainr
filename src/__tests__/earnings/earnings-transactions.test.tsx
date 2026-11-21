@@ -30,6 +30,12 @@ jest.mock('@/theme', () => ({
         red: '#D71920',
         redLight: '#FDE8E9',
       },
+      semantic: {
+        success: '#22C55E',
+        warning: '#F59E0B',
+        error: '#EF4444',
+        info: '#3B82F6',
+      },
       border: {
         default: '#DDDDDD',
       },

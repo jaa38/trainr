@@ -247,6 +247,88 @@ export default function PersonalTrainerDetailsScreen() {
             later.
           </AppText>
 
+          {/* Profile photo */}
+          <View
+            style={{
+              padding: spacing.md,
+              borderRadius: 12,
+              borderWidth: 1,
+              borderColor: colors.border.default,
+              gap: spacing.md,
+            }}
+          >
+            <AppText variant="body" color={colors.text.primary}>
+              Profile photo
+            </AppText>
+
+            {avatarUrl ? (
+              <Image
+                source={{ uri: avatarUrl }}
+                accessibilityLabel="Your profile photo"
+                resizeMode="cover"
+                style={{
+                  width: 112,
+                  height: 112,
+                  borderRadius: 56,
+                  alignSelf: 'center',
+                }}
+              />
+            ) : (
+              <View
+                style={{
+                  width: 112,
+                  height: 112,
+                  borderRadius: 56,
+                  alignSelf: 'center',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backgroundColor: colors.background.secondary,
+                  borderWidth: 1,
+                  borderColor: colors.border.default,
+                }}
+              >
+                <AppText variant="h1" color={colors.brand.red}>
+                  {(resolvedFirstName.trim().charAt(0) || 'T').toUpperCase()}
+                </AppText>
+              </View>
+            )}
+
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={
+                avatarUrl ? 'Change profile photo' : 'Choose profile photo'
+              }
+              accessibilityState={{
+                disabled: isSaving || isUploadingPhoto,
+                busy: isUploadingPhoto,
+              }}
+              disabled={isSaving || isUploadingPhoto}
+              onPress={handleChoosePhoto}
+              style={({ pressed }) => ({
+                minHeight: 48,
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: 12,
+                borderWidth: 1,
+                borderColor: colors.border.default,
+                backgroundColor: colors.background.secondary,
+                opacity: isSaving || isUploadingPhoto ? 0.6 : pressed ? 0.8 : 1,
+              })}
+            >
+              {isUploadingPhoto ? (
+                <ActivityIndicator color={colors.brand.red} />
+              ) : (
+                <AppText variant="button" color={colors.text.primary}>
+                  {avatarUrl ? 'CHANGE PROFILE PHOTO' : 'CHOOSE PROFILE PHOTO'}
+                </AppText>
+              )}
+            </Pressable>
+
+            <AppText variant="bodySmall" color={colors.text.secondary}>
+              JPEG, PNG or WebP · Maximum 5 MB
+            </AppText>
+          </View>
+
           {/* First name */}
           <Controller
             control={control}
@@ -345,7 +427,7 @@ export default function PersonalTrainerDetailsScreen() {
                   value={value}
                   onChangeText={onChange}
                   onBlur={onBlur}
-                  placeholder="Tell gym-goers about your experience and what makes you different"
+                  placeholder="Tell your clients about your experience and what makes you different"
                   placeholderTextColor={colors.text.tertiary}
                   multiline
                   editable={!isSaving}
@@ -461,88 +543,6 @@ export default function PersonalTrainerDetailsScreen() {
               </View>
             )}
           />
-
-          {/* Profile photo */}
-          <View
-            style={{
-              padding: spacing.md,
-              borderRadius: 12,
-              borderWidth: 1,
-              borderColor: colors.border.default,
-              gap: spacing.md,
-            }}
-          >
-            <AppText variant="body" color={colors.text.primary}>
-              Profile photo
-            </AppText>
-
-            {avatarUrl ? (
-              <Image
-                source={{ uri: avatarUrl }}
-                accessibilityLabel="Your profile photo"
-                resizeMode="cover"
-                style={{
-                  width: 112,
-                  height: 112,
-                  borderRadius: 56,
-                  alignSelf: 'center',
-                }}
-              />
-            ) : (
-              <View
-                style={{
-                  width: 112,
-                  height: 112,
-                  borderRadius: 56,
-                  alignSelf: 'center',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  backgroundColor: colors.background.secondary,
-                  borderWidth: 1,
-                  borderColor: colors.border.default,
-                }}
-              >
-                <AppText variant="h1" color={colors.brand.red}>
-                  {(resolvedFirstName.trim().charAt(0) || 'T').toUpperCase()}
-                </AppText>
-              </View>
-            )}
-
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={
-                avatarUrl ? 'Change profile photo' : 'Choose profile photo'
-              }
-              accessibilityState={{
-                disabled: isSaving || isUploadingPhoto,
-                busy: isUploadingPhoto,
-              }}
-              disabled={isSaving || isUploadingPhoto}
-              onPress={handleChoosePhoto}
-              style={({ pressed }) => ({
-                minHeight: 48,
-                alignItems: 'center',
-                justifyContent: 'center',
-                borderRadius: 12,
-                borderWidth: 1,
-                borderColor: colors.border.default,
-                backgroundColor: colors.background.secondary,
-                opacity: isSaving || isUploadingPhoto ? 0.6 : pressed ? 0.8 : 1,
-              })}
-            >
-              {isUploadingPhoto ? (
-                <ActivityIndicator color={colors.brand.red} />
-              ) : (
-                <AppText variant="button" color={colors.text.primary}>
-                  {avatarUrl ? 'CHANGE PROFILE PHOTO' : 'CHOOSE PROFILE PHOTO'}
-                </AppText>
-              )}
-            </Pressable>
-
-            <AppText variant="bodySmall" color={colors.text.secondary}>
-              JPEG, PNG or WebP · Maximum 5 MB
-            </AppText>
-          </View>
 
           {/* General error message */}
           {errorMessage ? (

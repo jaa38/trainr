@@ -1,4 +1,3 @@
-
 import { useRouter } from 'expo-router';
 import { ArrowRight } from 'lucide-react-native';
 import { useState } from 'react';
@@ -59,13 +58,13 @@ export default function TrainerProfileScreen() {
   const profileSections = [
     {
       title: 'Professional Bio',
-      description:
-        'Introduce yourself, your coaching approach and your experience.',
+      description: 'Introduce yourself, your coaching approach and your experience.',
+      route: '/(tabs)/personal-trainer/more/professional-bio',
     },
     {
       title: 'Qualifications',
-      description:
-        'Showcase relevant certifications and professional qualifications.',
+      description: 'Showcase relevant certifications and professional qualifications.',
+      route: '/(tabs)/personal-trainer/more/qualifications',
     },
     {
       title: 'Training Specialities',
@@ -76,8 +75,9 @@ export default function TrainerProfileScreen() {
       title: 'Session Rates',
       description:
         'Manage your training prices when booking and payment features are available.',
+      route: '/(tabs)/personal-trainer/more/session-rates',
     },
-  ];
+  ] as const;
 
   async function handleSignOut() {
     if (isSigningOut) return;
@@ -89,9 +89,7 @@ export default function TrainerProfileScreen() {
       await signOut();
     } catch (error) {
       setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : 'Unable to sign out. Please try again.',
+        error instanceof Error ? error.message : 'Unable to sign out. Please try again.',
       );
     } finally {
       setIsSigningOut(false);
@@ -184,37 +182,59 @@ export default function TrainerProfileScreen() {
             PROFESSIONAL DETAILS.
           </AppText>
 
-          {profileSections.map((section) => (
-            <View
-              key={section.title}
-              style={{
-                padding: spacing.lg,
-                gap: spacing.xs,
-                borderRadius: 16,
-                borderWidth: 1,
-                borderColor: colors.border.default,
-                backgroundColor: colors.background.secondary,
-              }}
-            >
-              <AppText variant="h3" color={colors.text.primary}>
-                {section.title}
-              </AppText>
+          {profileSections.map((section) => {
+            const isAvailable = 'route' in section;
 
-              <AppText
-                variant="bodySmall"
-                color={colors.text.secondary}
+            return (
+              <Pressable
+                key={section.title}
+                accessibilityRole="button"
+                accessibilityLabel={`Open ${section.title}`}
+                accessibilityState={{ disabled: !isAvailable }}
+                disabled={!isAvailable}
+                onPress={() => {
+                  if (isAvailable) {
+                    router.push(section.route as never);
+                  }
+                }}
+                style={({ pressed }) => ({
+                  padding: spacing.lg,
+                  gap: spacing.xs,
+                  borderRadius: 16,
+                  borderWidth: 1,
+                  borderColor: colors.border.default,
+                  backgroundColor: colors.background.secondary,
+                  opacity: !isAvailable ? 0.6 : pressed ? 0.75 : 1,
+                })}
               >
-                {section.description}
-              </AppText>
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                  }}
+                >
+                  <AppText variant="h3" color={colors.text.primary}>
+                    {section.title}
+                  </AppText>
 
-              <AppText
-                variant="caption"
-                color={colors.text.tertiary}
-              >
-                Editing functionality coming next.
-              </AppText>
-            </View>
-          ))}
+                  {isAvailable ? (
+                    <ArrowRight size={20} color={colors.text.secondary} />
+                  ) : null}
+                </View>
+
+                <AppText variant="bodySmall" color={colors.text.secondary}>
+                  {section.description}
+                </AppText>
+
+                {!isAvailable ? (
+                  <AppText variant="caption" color={colors.text.tertiary}>
+                    Coming next
+                  </AppText>
+                ) : null}
+              </Pressable>
+            );
+          })}
         </View>
 
         {/* Trainer Workspace */}
@@ -253,10 +273,7 @@ export default function TrainerProfileScreen() {
                   {section.title}
                 </AppText>
 
-                <AppText
-                  variant="bodySmall"
-                  color={colors.text.secondary}
-                >
+                <AppText variant="bodySmall" color={colors.text.secondary}>
                   {section.description}
                 </AppText>
               </View>
@@ -302,10 +319,7 @@ export default function TrainerProfileScreen() {
                   {section.title}
                 </AppText>
 
-                <AppText
-                  variant="bodySmall"
-                  color={colors.text.secondary}
-                >
+                <AppText variant="bodySmall" color={colors.text.secondary}>
                   {section.description}
                 </AppText>
               </View>
@@ -330,9 +344,7 @@ export default function TrainerProfileScreen() {
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Manage notification settings"
-            onPress={() =>
-              router.push('/(tabs)/notification-settings')
-            }
+            onPress={() => router.push('/(tabs)/notification-settings')}
             style={({ pressed }) => ({
               minHeight: 76,
               flexDirection: 'row',
@@ -351,10 +363,7 @@ export default function TrainerProfileScreen() {
                 Notification Settings
               </AppText>
 
-              <AppText
-                variant="bodySmall"
-                color={colors.text.secondary}
-              >
+              <AppText variant="bodySmall" color={colors.text.secondary}>
                 Manage push notifications and device preferences.
               </AppText>
             </View>
@@ -413,11 +422,7 @@ export default function TrainerProfileScreen() {
             paddingTop: spacing.md,
           }}
         >
-          <AppText
-            variant="caption"
-            color={colors.text.tertiary}
-            align="center"
-          >
+          <AppText variant="caption" color={colors.text.tertiary} align="center">
             TRAINR · TRAIN SMARTER. PERFORM BETTER.
           </AppText>
         </View>

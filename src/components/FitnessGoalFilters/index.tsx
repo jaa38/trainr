@@ -15,6 +15,7 @@ export const FITNESS_GOALS = [
   { id: 'improve_endurance', label: 'Improve endurance' },
   { id: 'improve_health', label: 'Improve general health' },
   { id: 'sports_performance', label: 'Improve sports performance' },
+  { id: 'improve_flexibility', label: 'Improve flexibility' },
 ] as const;
 
 export type FitnessGoal = (typeof FITNESS_GOALS)[number]['id'];

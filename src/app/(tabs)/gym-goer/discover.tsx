@@ -1,4 +1,4 @@
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -109,52 +109,56 @@ export default function DiscoverScreen() {
     };
   }, []);
 
-  useEffect(() => {
-    let isActive = true;
+  useFocusEffect(
+    useCallback(() => {
+      let isActive = true;
 
-    async function loadSavedFitnessGoals() {
-      if (!user) {
-        setSavedFitnessGoals([]);
-        setGoalsError(null);
-        setIsLoadingGoals(false);
-        return;
-      }
+      async function loadSavedFitnessGoals() {
+        const userId = user?.id;
 
-      setIsLoadingGoals(true);
-      setGoalsError(null);
-
-      try {
-        const { data, error } = await supabase
-          .from('gym_goer_fitness_goals')
-          .select('goal')
-          .eq('user_id', user.id);
-
-        if (error) {
-          throw error;
-        }
-
-        if (isActive) {
-          setSavedFitnessGoals((data ?? []).map((item) => item.goal));
-        }
-      } catch (error) {
-        console.error('[Discover] Unable to load saved fitness goals:', error);
-
-        if (isActive) {
-          setGoalsError('We couldn’t load your saved fitness goals.');
-        }
-      } finally {
-        if (isActive) {
+        if (!userId) {
+          setSavedFitnessGoals([]);
+          setGoalsError(null);
           setIsLoadingGoals(false);
+          return;
+        }
+
+        setIsLoadingGoals(true);
+        setGoalsError(null);
+
+        try {
+          const { data, error } = await supabase
+            .from('gym_goer_fitness_goals')
+            .select('goal')
+            .eq('user_id', userId);
+
+          if (error) {
+            throw error;
+          }
+
+          if (isActive) {
+            setSavedFitnessGoals((data ?? []).map((item) => item.goal));
+          }
+        } catch (error) {
+          console.error('[Discover] Unable to load saved fitness goals:', error);
+
+          if (isActive) {
+            setGoalsError('We couldn’t load your saved fitness goals.');
+          }
+        } finally {
+          if (isActive) {
+            setIsLoadingGoals(false);
+          }
         }
       }
-    }
 
-    void loadSavedFitnessGoals();
+      void loadSavedFitnessGoals();
 
-    return () => {
-      isActive = false;
-    };
-  }, [user]);
+      return () => {
+        isActive = false;
+      };
+    }, [user?.id]),
+  );
 
   useEffect(() => {
     let isActive = true;

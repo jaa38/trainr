@@ -1,14 +1,20 @@
 import { CalendarDays, MapPin, SlidersHorizontal, Wallet } from 'lucide-react-native';
+
 import React from 'react';
+
 import { Pressable, ScrollView, TextInput, View } from 'react-native';
 
 import { AppText } from '@/components/AppText';
+
 import { BottomSheet } from '@/components/BottomSheet';
+
 import { Button } from '@/components/Button';
+
 import {
   TRAINER_SPECIALTIES,
   type TrainerSpecialty,
 } from '@/components/TrainerSpecialtyFilters';
+
 import { useTrainrTheme } from '@/theme';
 
 export const FITNESS_GOALS = [
@@ -18,73 +24,123 @@ export const FITNESS_GOALS = [
   { id: 'increase_strength', label: 'Increase strength' },
   { id: 'improve_endurance', label: 'Improve endurance' },
   { id: 'improve_health', label: 'Improve general health' },
+  { id: 'improve_flexibility', label: 'Improve flexibility' },
   { id: 'sports_performance', label: 'Improve sports performance' },
 ] as const;
 
 export const TRAINING_DAYS = [
   'Monday',
+
   'Tuesday',
+
   'Wednesday',
+
   'Thursday',
+
   'Friday',
+
   'Saturday',
+
   'Sunday',
 ] as const;
 
 export type TrainingDay = (typeof TRAINING_DAYS)[number];
+
 export type FitnessGoal = (typeof FITNESS_GOALS)[number]['id'];
 
 type TrainerFiltersProps = {
   selectedSpecialties: TrainerSpecialty[];
+
   selectedGoals: FitnessGoal[];
+
   locations: string[];
+
   selectedLocation: string | null;
+
   selectedDay: TrainingDay | null;
+
   minimumPrice: string;
+
   maximumPrice: string;
+
   availableCurrencies: string[];
+
   selectedCurrency: string | null;
+
   showMainFilterButton?: boolean;
+
   mainFilterButtonOnly?: boolean;
+
   onMinimumPriceChange: (value: string) => void;
+
   onMaximumPriceChange: (value: string) => void;
+
   onSelectCurrency: (currency: string | null) => void;
+
   onToggleSpecialty: (specialty: TrainerSpecialty) => void;
+
   onToggleGoal: (goal: FitnessGoal) => void;
+
   onSelectLocation: (location: string | null) => void;
+
   onSelectDay: (day: TrainingDay | null) => void;
+
   onClearPrice: () => void;
+
   onClearAll: () => void;
 };
 
 export function TrainerFilters({
   showMainFilterButton = true,
+
   mainFilterButtonOnly = false,
+
   selectedSpecialties,
+
   selectedGoals,
+
   locations,
+
   selectedLocation,
+
   selectedDay,
+
   minimumPrice,
+
   maximumPrice,
+
   availableCurrencies,
+
   selectedCurrency,
+
   onMinimumPriceChange,
+
   onMaximumPriceChange,
+
   onSelectCurrency,
+
   onToggleSpecialty,
+
   onToggleGoal,
+
   onSelectLocation,
+
   onSelectDay,
+
   onClearPrice,
+
   onClearAll,
 }: TrainerFiltersProps) {
   const theme = useTrainrTheme();
+
   const { colors, spacing } = theme;
 
   const [visible, setVisible] = React.useState(false);
+
   const [locationSheetVisible, setLocationSheetVisible] = React.useState(false);
+
   const [priceSheetVisible, setPriceSheetVisible] = React.useState(false);
+
   const [availabilitySheetVisible, setAvailabilitySheetVisible] = React.useState(false);
 
   const hasPriceFilter = minimumPrice.trim() !== '' || maximumPrice.trim() !== '';
@@ -97,6 +153,7 @@ export function TrainerFilters({
     (hasPriceFilter ? 1 : 0);
 
   const minimum = minimumPrice.trim() === '' ? null : Number(minimumPrice);
+
   const maximum = maximumPrice.trim() === '' ? null : Number(maximumPrice);
 
   const priceError =
@@ -111,33 +168,55 @@ export function TrainerFilters({
     return (
       <Pressable
         key={label}
+
         accessibilityRole="checkbox"
+
         accessibilityLabel={label}
+
         accessibilityState={{ checked: selected }}
+
         onPress={onPress}
+
         style={({ pressed }) => ({
           minHeight: 48,
+
           flexDirection: 'row',
+
           alignItems: 'center',
+
           paddingHorizontal: spacing.md,
+
           paddingVertical: spacing.sm,
+
           borderRadius: theme.radius.md,
+
           borderWidth: 1,
+
           borderColor: selected ? colors.brand.red : colors.border.default,
+
           backgroundColor: selected ? colors.brand.redLight : colors.surface.default,
+
           opacity: pressed ? 0.75 : 1,
         })}
       >
         <View
           style={{
             width: 20,
+
             height: 20,
+
             borderRadius: 5,
+
             borderWidth: 1.5,
+
             borderColor: selected ? colors.brand.red : colors.border.default,
+
             backgroundColor: selected ? colors.brand.red : 'transparent',
+
             alignItems: 'center',
+
             justifyContent: 'center',
+
             marginRight: spacing.md,
           }}
         >
@@ -159,8 +238,11 @@ export function TrainerFilters({
 
   function renderPriceInput(
     label: string,
+
     value: string,
+
     onChangeText: (text: string) => void,
+
     accessibilityLabel: string,
   ) {
     return (
@@ -171,23 +253,36 @@ export function TrainerFilters({
 
         <TextInput
           accessibilityLabel={accessibilityLabel}
+
           value={value}
+
           onChangeText={(text) => {
             if (/^\d*\.?\d{0,2}$/.test(text)) {
               onChangeText(text);
             }
           }}
+
           keyboardType="decimal-pad"
+
           placeholder="0"
+
           placeholderTextColor={colors.text.tertiary}
+
           style={{
             minHeight: theme.sizes.inputHeight,
+
             paddingHorizontal: spacing.md,
+
             borderRadius: theme.radius.md,
+
             borderWidth: 1,
+
             borderColor: colors.border.default,
+
             backgroundColor: colors.surface.default,
+
             color: colors.text.primary,
+
             fontSize: 16,
           }}
         />
@@ -196,62 +291,95 @@ export function TrainerFilters({
   }
 
   // Shared styling for the labelled Location, Day and Price filters.
+
   const filterButtonStyle = (active: boolean) => ({
     minHeight: theme.sizes.inputHeight,
+
     paddingHorizontal: spacing.md,
+
     flexDirection: 'row' as const,
+
     alignItems: 'center' as const,
+
     justifyContent: 'center' as const,
+
     gap: spacing.xs,
+
     borderRadius: theme.radius.md,
+
     borderWidth: 1,
+
     borderColor: active ? colors.brand.red : colors.border.default,
+
     backgroundColor: active ? colors.brand.redLight : colors.surface.default,
   });
 
   return (
     <>
       {/* Horizontally scrollable discovery filters */}
+
       <ScrollView
         horizontal
+
         showsHorizontalScrollIndicator={false}
+
         keyboardShouldPersistTaps="handled"
+
         contentContainerStyle={{
           flexDirection: 'row',
+
           alignItems: 'center',
+
           gap: spacing.sm,
+
           paddingVertical: spacing.xs,
+
           paddingRight: spacing.xs,
         }}
       >
         {showMainFilterButton ? (
           <Pressable
             accessibilityRole="button"
+
             accessibilityLabel={
               activeFilterCount > 0
                 ? `Filter trainers, ${activeFilterCount} selections active`
                 : 'Filter trainers'
             }
+
             accessibilityHint="Opens fitness goal and trainer specialty filters"
+
             accessibilityState={{ expanded: visible }}
+
             onPress={() => setVisible(true)}
+
             style={({ pressed }) => ({
               width: theme.sizes.inputHeight,
+
               height: theme.sizes.inputHeight,
+
               alignItems: 'center',
+
               justifyContent: 'center',
+
               borderRadius: theme.radius.md,
+
               borderWidth: 1,
+
               borderColor:
                 activeFilterCount > 0 ? colors.brand.red : colors.border.default,
+
               backgroundColor:
                 activeFilterCount > 0 ? colors.brand.redLight : colors.surface.default,
+
               opacity: pressed ? 0.7 : 1,
             })}
           >
             <SlidersHorizontal
               size={20}
+
               color={activeFilterCount > 0 ? colors.brand.red : colors.text.primary}
+
               strokeWidth={2}
             />
 
@@ -259,14 +387,23 @@ export function TrainerFilters({
               <View
                 style={{
                   position: 'absolute',
+
                   top: -5,
+
                   right: -5,
+
                   minWidth: 18,
+
                   height: 18,
+
                   paddingHorizontal: 4,
+
                   borderRadius: 9,
+
                   alignItems: 'center',
+
                   justifyContent: 'center',
+
                   backgroundColor: colors.brand.red,
                 }}
               >
@@ -281,27 +418,37 @@ export function TrainerFilters({
         {!mainFilterButtonOnly ? (
           <>
             {/* Location filter */}
+
             <Pressable
               accessibilityRole="button"
+
               accessibilityLabel={
                 selectedLocation
                   ? `Location: ${selectedLocation}`
                   : 'Filter trainers by location'
               }
+
               accessibilityHint="Opens available trainer locations"
+
               accessibilityState={{ expanded: locationSheetVisible }}
+
               onPress={() => setLocationSheetVisible(true)}
+
               style={({ pressed }) => ({
                 ...filterButtonStyle(Boolean(selectedLocation)),
+
                 opacity: pressed ? 0.7 : 1,
               })}
             >
               <MapPin
                 size={18}
+
                 color={selectedLocation ? colors.brand.red : colors.text.primary}
               />
+
               <AppText
                 variant="bodySmall"
+
                 color={selectedLocation ? colors.brand.red : colors.text.primary}
               >
                 {selectedLocation ?? 'Location'}
@@ -309,27 +456,37 @@ export function TrainerFilters({
             </Pressable>
 
             {/* Training day filter */}
+
             <Pressable
               accessibilityRole="button"
+
               accessibilityLabel={
                 selectedDay
                   ? `Availability: ${selectedDay}`
                   : 'Filter trainers by availability'
               }
+
               accessibilityHint="Choose a day when you want to train"
+
               accessibilityState={{ expanded: availabilitySheetVisible }}
+
               onPress={() => setAvailabilitySheetVisible(true)}
+
               style={({ pressed }) => ({
                 ...filterButtonStyle(Boolean(selectedDay)),
+
                 opacity: pressed ? 0.7 : 1,
               })}
             >
               <CalendarDays
                 size={18}
+
                 color={selectedDay ? colors.brand.red : colors.text.primary}
               />
+
               <AppText
                 variant="bodySmall"
+
                 color={selectedDay ? colors.brand.red : colors.text.primary}
               >
                 {selectedDay ?? 'Day'}
@@ -337,24 +494,35 @@ export function TrainerFilters({
             </Pressable>
 
             {/* Session price filter */}
+
             <Pressable
               accessibilityRole="button"
+
               accessibilityLabel="Filter trainers by price"
+
               accessibilityHint="Opens minimum and maximum session price filters"
+
               accessibilityState={{ expanded: priceSheetVisible }}
+
               onPress={() => setPriceSheetVisible(true)}
+
               style={({ pressed }) => ({
                 ...filterButtonStyle(hasPriceFilter),
+
                 opacity: pressed ? 0.7 : 1,
               })}
             >
               <Wallet
                 size={18}
+
                 color={hasPriceFilter ? colors.brand.red : colors.text.primary}
+
                 strokeWidth={2}
               />
+
               <AppText
                 variant="bodySmall"
+
                 color={hasPriceFilter ? colors.brand.red : colors.text.primary}
               >
                 Price
@@ -365,17 +533,25 @@ export function TrainerFilters({
       </ScrollView>
 
       {/* Fitness goal and specialty filters */}
+
       <BottomSheet
         visible={visible}
+
         onClose={() => setVisible(false)}
+
         title="Filter trainers"
+
         subtitle="Choose your goals and areas of expertise."
+
         maxHeight="90%"
+
         footer={
           <View
             style={{
               flexDirection: 'row',
+
               gap: spacing.md,
+
               paddingBottom: spacing.sm,
             }}
           >
@@ -398,6 +574,7 @@ export function TrainerFilters({
             <AppText variant="h3" color={colors.text.primary}>
               Fitness goals
             </AppText>
+
             <AppText variant="bodySmall" color={colors.text.secondary}>
               Choose what you want to achieve.
             </AppText>
@@ -412,7 +589,9 @@ export function TrainerFilters({
           <View
             style={{
               height: 1,
+
               backgroundColor: colors.border.default,
+
               marginVertical: spacing.sm,
             }}
           />
@@ -421,6 +600,7 @@ export function TrainerFilters({
             <AppText variant="h3" color={colors.text.primary}>
               Areas of expertise
             </AppText>
+
             <AppText variant="bodySmall" color={colors.text.secondary}>
               Choose the expertise you want in a trainer.
             </AppText>
@@ -435,20 +615,29 @@ export function TrainerFilters({
       </BottomSheet>
 
       {/* Location selection bottom sheet */}
+
       <BottomSheet
         visible={locationSheetVisible}
+
         onClose={() => setLocationSheetVisible(false)}
+
         title="Trainer location"
+
         subtitle="Choose a location where published trainers are available."
+
         maxHeight="75%"
+
         footer={
           <View style={{ gap: spacing.sm, paddingBottom: spacing.sm }}>
             {selectedLocation ? (
               <Button
                 variant="outline"
+
                 fullWidth
+
                 onPress={() => {
                   onSelectLocation(null);
+
                   setLocationSheetVisible(false);
                 }}
               >
@@ -458,7 +647,9 @@ export function TrainerFilters({
 
             <Button
               variant="primary"
+
               fullWidth
+
               onPress={() => setLocationSheetVisible(false)}
             >
               Done
@@ -474,27 +665,42 @@ export function TrainerFilters({
               return (
                 <Pressable
                   key={location}
+
                   accessibilityRole="radio"
+
                   accessibilityLabel={location}
+
                   accessibilityState={{ checked: selected }}
+
                   onPress={() => onSelectLocation(location)}
+
                   style={({ pressed }) => ({
                     minHeight: 52,
+
                     flexDirection: 'row',
+
                     alignItems: 'center',
+
                     justifyContent: 'space-between',
+
                     paddingHorizontal: spacing.md,
+
                     borderRadius: theme.radius.md,
+
                     borderWidth: 1,
+
                     borderColor: selected ? colors.brand.red : colors.border.default,
+
                     backgroundColor: selected
                       ? colors.brand.redLight
                       : colors.surface.default,
+
                     opacity: pressed ? 0.75 : 1,
                   })}
                 >
                   <AppText
                     variant="body"
+
                     color={selected ? colors.brand.red : colors.text.primary}
                   >
                     {location}
@@ -517,20 +723,29 @@ export function TrainerFilters({
       </BottomSheet>
 
       {/* Availability day selection bottom sheet */}
+
       <BottomSheet
         visible={availabilitySheetVisible}
+
         onClose={() => setAvailabilitySheetVisible(false)}
+
         title="Training availability"
+
         subtitle="Choose the day you prefer to train. This shows trainers who list that day in their weekly schedule."
+
         maxHeight="75%"
+
         footer={
           <View style={{ gap: spacing.sm, paddingBottom: spacing.sm }}>
             {selectedDay ? (
               <Button
                 variant="outline"
+
                 fullWidth
+
                 onPress={() => {
                   onSelectDay(null);
+
                   setAvailabilitySheetVisible(false);
                 }}
               >
@@ -540,7 +755,9 @@ export function TrainerFilters({
 
             <Button
               variant="primary"
+
               fullWidth
+
               onPress={() => setAvailabilitySheetVisible(false)}
             >
               Done
@@ -556,19 +773,28 @@ export function TrainerFilters({
       </BottomSheet>
 
       {/* Price filter bottom sheet */}
+
       <BottomSheet
         visible={priceSheetVisible}
+
         onClose={() => setPriceSheetVisible(false)}
+
         title="Session price"
+
         subtitle="Set a price range for individual training sessions."
+
         maxHeight="75%"
+
         footer={
           <View style={{ gap: spacing.sm, paddingBottom: spacing.sm }}>
             <Button
               variant="outline"
+
               fullWidth
+
               onPress={() => {
                 onClearPrice();
+
                 setPriceSheetVisible(false);
               }}
             >
@@ -577,8 +803,11 @@ export function TrainerFilters({
 
             <Button
               variant="primary"
+
               fullWidth
+
               disabled={Boolean(priceError)}
+
               onPress={() => setPriceSheetVisible(false)}
             >
               Apply price filter
@@ -591,6 +820,7 @@ export function TrainerFilters({
             <AppText variant="h3" color={colors.text.primary}>
               Currency
             </AppText>
+
             <AppText variant="bodySmall" color={colors.text.secondary}>
               Select a currency so trainers with different currencies are not compared
               directly.
@@ -615,6 +845,7 @@ export function TrainerFilters({
             <AppText variant="h3" color={colors.text.primary}>
               Price range
             </AppText>
+
             <AppText variant="bodySmall" color={colors.text.secondary}>
               {selectedCurrency
                 ? `Enter your budget in ${selectedCurrency}.`
@@ -625,14 +856,21 @@ export function TrainerFilters({
           <View style={{ flexDirection: 'row', gap: spacing.md }}>
             {renderPriceInput(
               'Minimum',
+
               minimumPrice,
+
               onMinimumPriceChange,
+
               'Minimum session price',
             )}
+
             {renderPriceInput(
               'Maximum',
+
               maximumPrice,
+
               onMaximumPriceChange,
+
               'Maximum session price',
             )}
           </View>

@@ -5,6 +5,7 @@ export const FITNESS_GOAL_SPECIALTIES = {
   increase_strength: ['Strength training', 'Muscle building'],
   improve_endurance: ['Sports performance', 'Functional training'],
   improve_health: ['General fitness', 'Mobility and flexibility'],
+  improve_flexibility: ['Mobility and flexibility', 'Flexibility training'],
   sports_performance: ['Sports performance', 'Functional training'],
 } as const;
 

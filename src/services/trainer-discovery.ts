@@ -28,18 +28,12 @@ export type PublishedTrainer = {
   session_rate: number | null;
   currency: string | null;
   session_duration_minutes: number | null;
-  availability?: TrainerAvailability | null;
-  timezone?: string | null;
-};
-
-type TrainerAvailabilityRow = {
-  user_id: string;
   availability: TrainerAvailability | null;
   timezone: string | null;
 };
 
 export async function discoverPublishedTrainers(): Promise<PublishedTrainer[]> {
-  const { data, error } = await supabase.rpc('discover_published_trainers');
+  const { data, error } = await supabase.rpc('discover_published_trainers_v2');
 
   if (error) {
     throw new Error(`Unable to discover trainers: ${error.message}`);
@@ -51,39 +45,8 @@ export async function discoverPublishedTrainers(): Promise<PublishedTrainer[]> {
     return [];
   }
 
-  const trainerIds = trainers.map((trainer) => trainer.trainer_id);
-
-  const { data: availabilityRows, error: availabilityError } = await supabase
-    .from('trainer_profiles')
-    .select('user_id, availability, timezone')
-    .in('user_id', trainerIds);
-
-  if (availabilityError) {
-    throw new Error(`Unable to load trainer availability: ${availabilityError.message}`);
-  }
-
-  const availabilityByTrainerId = new Map(
-    ((availabilityRows ?? []) as TrainerAvailabilityRow[]).map((row) => [
-      row.user_id,
-      {
-        availability: row.availability,
-        timezone: row.timezone,
-      },
-    ]),
-  );
-
-  const trainersWithAvailability = trainers.map((trainer) => {
-    const trainerAvailability = availabilityByTrainerId.get(trainer.trainer_id);
-
-    return {
-      ...trainer,
-      availability: trainerAvailability?.availability ?? null,
-      timezone: trainerAvailability?.timezone ?? null,
-    };
-  });
-
   return Promise.all(
-    trainersWithAvailability.map(async (trainer) => {
+    trainers.map(async (trainer) => {
       try {
         return {
           ...trainer,

@@ -1,4 +1,3 @@
-
 import { router } from 'expo-router';
 import { ArrowRight } from 'lucide-react-native';
 import { useState } from 'react';
@@ -11,15 +10,22 @@ import { useTrainrTheme } from '@/theme';
 
 export default function GymGoerProfileScreen() {
   const { colors, spacing } = useTrainrTheme();
-  const { user, signOut } = useAuth();
+  const { user, profile, signOut } = useAuth();
 
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const fullName =
+  // Prefer the saved profile name, then fall back to auth metadata.
+  const profileFullName = [profile?.first_name, profile?.last_name]
+    .filter(Boolean)
+    .join(' ');
+
+  const metadataFullName =
     typeof user?.user_metadata?.full_name === 'string'
       ? user.user_metadata.full_name
-      : 'TRAINR Member';
+      : '';
+
+  const fullName = profileFullName || metadataFullName || 'TRAINR Member';
 
   const email = user?.email ?? 'No email available';
 
@@ -41,25 +47,12 @@ export default function GymGoerProfileScreen() {
       await signOut();
     } catch (error) {
       setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : 'Unable to sign out. Please try again.',
+        error instanceof Error ? error.message : 'Unable to sign out. Please try again.',
       );
     } finally {
       setIsSigningOut(false);
     }
   }
-
-  const sections = [
-    {
-      title: 'PERSONAL INFORMATION',
-      description: 'Manage your name and personal details.',
-    },
-    {
-      title: 'FITNESS GOALS',
-      description: 'Set your goals, training preferences and experience.',
-    },
-  ];
 
   return (
     <SafeAreaView
@@ -252,39 +245,81 @@ export default function GymGoerProfileScreen() {
         </Pressable> */}
 
         {/* Profile Sections */}
-        {sections.map((section) => (
-          <View
-            key={section.title}
-            style={{
+        <View style={{ gap: spacing.md }}>
+          {/* Personal Information */}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Manage personal information"
+            onPress={() => router.push('/(tabs)/gym-goer/profile/personal-information')}
+            style={({ pressed }) => ({
               padding: spacing.lg,
               borderRadius: 16,
               borderWidth: 1,
               borderColor: colors.border.default,
               backgroundColor: colors.background.secondary,
               gap: spacing.sm,
-            }}
+              opacity: pressed ? 0.75 : 1,
+            })}
           >
-            <AppText variant="h3" color={colors.text.primary}>
-              {section.title}
-            </AppText>
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+              }}
+            >
+              <AppText variant="h3" color={colors.text.primary}>
+                PERSONAL INFORMATION
+              </AppText>
+
+              <ArrowRight size={20} color={colors.text.secondary} />
+            </View>
 
             <AppText variant="body" color={colors.text.secondary}>
-              {section.description}
+              Manage your name, profile photo, date of birth and phone number.
             </AppText>
+          </Pressable>
 
-            <AppText variant="caption" color={colors.text.tertiary}>
-              Profile editing coming next.
+          {/* Fitness Goals and Preferences */}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Manage fitness goals and preferences"
+            onPress={() => router.push('/(tabs)/gym-goer/profile/fitness-goals')}
+            style={({ pressed }) => ({
+              padding: spacing.lg,
+              borderRadius: 16,
+              borderWidth: 1,
+              borderColor: colors.border.default,
+              backgroundColor: colors.background.secondary,
+              gap: spacing.sm,
+              opacity: pressed ? 0.75 : 1,
+            })}
+          >
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+              }}
+            >
+              <AppText variant="h3" color={colors.text.primary}>
+                FITNESS GOALS
+              </AppText>
+
+              <ArrowRight size={20} color={colors.text.secondary} />
+            </View>
+
+            <AppText variant="body" color={colors.text.secondary}>
+              Manage your fitness goals, training preferences and experience.
             </AppText>
-          </View>
-        ))}
+          </Pressable>
+        </View>
 
         {/* App Preferences */}
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Manage notification settings"
-          onPress={() =>
-            router.push('/(tabs)/notification-settings')
-          }
+          onPress={() => router.push('/(tabs)/notification-settings')}
           style={({ pressed }) => ({
             minHeight: 76,
             flexDirection: 'row',
@@ -315,9 +350,7 @@ export default function GymGoerProfileScreen() {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="View workout history"
-          onPress={() =>
-            router.push('/(tabs)/gym-goer-workout/history')
-          }
+          onPress={() => router.push('/(tabs)/gym-goer-workout/history')}
           style={{
             minHeight: 68,
             flexDirection: 'row',
@@ -347,9 +380,7 @@ export default function GymGoerProfileScreen() {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="View weight history"
-          onPress={() =>
-            router.push('/(tabs)/gym-goer-weight/history')
-          }
+          onPress={() => router.push('/(tabs)/gym-goer-weight/history')}
           style={{
             minHeight: 68,
             flexDirection: 'row',
