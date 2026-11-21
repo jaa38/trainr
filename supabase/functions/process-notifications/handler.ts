@@ -454,13 +454,14 @@ async function processNotification(
     }
 
     if (!tokens?.length) {
-      await completeOnce(
-        "retryable_failure",
-        undefined,
-        "No active push tokens are registered for this recipient.",
+      await cancelNotification(
+        client,
+        notification,
+        workerId,
+        "no active push tokens are registered for this recipient",
       );
 
-      return "failed";
+      return "skipped";
     }
 
     const tokenList = tokens as PushToken[];

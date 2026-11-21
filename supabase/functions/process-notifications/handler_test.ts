@@ -770,12 +770,14 @@ Deno.test(
 );
 
 Deno.test(
-  "creates notification history when no active device token exists",
+  "creates notification history and cancels push when no active device token exists",
   async () => {
     const {
       dependencies,
       historyWrites,
       calls,
+      updates,
+      fetchCalls,
     } = createDependencies({
       notifications: [createNotification()],
       tokens: [],
@@ -790,16 +792,26 @@ Deno.test(
 
     const result = await response.json();
 
-    assertEquals(result.failed, 1);
+    assertEquals(result.skipped, 1);
+    assertEquals(result.failed, 0);
     assertEquals(historyWrites.length, 1);
+    assertEquals(fetchCalls.length, 0);
+
+    const cancellation = updates.find(
+      (update) => update.table === "notification_outbox",
+    );
+
+    const values = cancellation?.values as Record<string, unknown>;
+
+    assertEquals(values.status, "cancelled");
+    assertEquals(values.locked_at, null);
+    assertEquals(values.locked_by, null);
 
     const completion = calls.find(
       (call) => call.name === "complete_notification_attempt",
     );
 
-    const args = completion?.args as Record<string, unknown>;
-
-    assertEquals(args.p_outcome, "retryable_failure");
+    assertEquals(completion, undefined);
   },
 );
 
@@ -1133,9 +1145,15 @@ Deno.test(
 // ============================================================
 
 Deno.test(
-  "retries notifications when no active device token exists",
+  "cancels notifications when no active device token exists",
   async () => {
-    const { dependencies, calls } = createDependencies({
+    const {
+      dependencies,
+      calls,
+      updates,
+      fetchCalls,
+      historyWrites,
+    } = createDependencies({
       notifications: [createNotification()],
       tokens: [],
     });
@@ -1149,20 +1167,26 @@ Deno.test(
 
     const result = await response.json();
 
-    assertEquals(result.failed, 1);
+    assertEquals(result.skipped, 1);
+    assertEquals(result.failed, 0);
+    assertEquals(historyWrites.length, 1);
+    assertEquals(fetchCalls.length, 0);
+
+    const cancellation = updates.find(
+      (update) => update.table === "notification_outbox",
+    );
+
+    const values = cancellation?.values as Record<string, unknown>;
+
+    assertEquals(values.status, "cancelled");
+    assertEquals(values.locked_at, null);
+    assertEquals(values.locked_by, null);
 
     const completion = calls.find(
       (call) => call.name === "complete_notification_attempt",
     );
 
-    const args = completion?.args as Record<string, unknown>;
-
-    assertEquals(args.p_outcome, "retryable_failure");
-
-    assertStringIncludes(
-      String(args.p_error),
-      "No active push tokens",
-    );
+    assertEquals(completion, undefined);
   },
 );
 
