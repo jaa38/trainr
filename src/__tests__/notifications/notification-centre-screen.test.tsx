@@ -1,4 +1,3 @@
-
 import React from 'react';
 
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
@@ -102,10 +101,7 @@ jest.mock('@/components/AppText', () => {
   const { Text } = require('react-native');
 
   return {
-    AppText: ({
-      children,
-      style,
-    }: React.PropsWithChildren<{ style?: object }>) =>
+    AppText: ({ children, style }: React.PropsWithChildren<{ style?: object }>) =>
       React.createElement(Text, { style }, children),
   };
 });
@@ -206,17 +202,13 @@ describe('NotificationsScreen', () => {
   });
 
   it('loads and displays notifications and unread count', async () => {
-    const { getByText, getByLabelText } = await render(
-      <NotificationsScreen />,
-    );
+    const { getByText, getByLabelText } = await render(<NotificationsScreen />);
 
     await waitFor(() => {
       expect(getByText('Your updates')).toBeTruthy();
       expect(getByText('1 unread notification')).toBeTruthy();
       expect(getByText('Booking confirmed')).toBeTruthy();
-      expect(
-        getByText('Your training session has been confirmed.'),
-      ).toBeTruthy();
+      expect(getByText('Your training session has been confirmed.')).toBeTruthy();
     });
 
     expect(
@@ -249,17 +241,13 @@ describe('NotificationsScreen', () => {
 
   it('displays a load error and retries successfully', async () => {
     mockGetNotifications
-      .mockRejectedValueOnce(
-        new Error('Unable to load notifications. Please try again.'),
-      )
+      .mockRejectedValueOnce(new Error('Unable to load notifications. Please try again.'))
       .mockResolvedValueOnce(createPage());
 
     const { getByText } = await render(<NotificationsScreen />);
 
     await waitFor(() => {
-      expect(
-        getByText('Unable to load notifications. Please try again.'),
-      ).toBeTruthy();
+      expect(getByText('Unable to load notifications. Please try again.')).toBeTruthy();
     });
 
     fireEvent.press(getByText('Try again'));
@@ -272,9 +260,7 @@ describe('NotificationsScreen', () => {
   });
 
   it('refreshes the notification history', async () => {
-    const { getByTestId, getByText } = await render(
-      <NotificationsScreen />,
-    );
+    const { getByTestId, getByText } = await render(<NotificationsScreen />);
 
     await waitFor(() => {
       expect(getByText('Booking confirmed')).toBeTruthy();
@@ -294,9 +280,7 @@ describe('NotificationsScreen', () => {
   });
 
   it('marks an individual notification as read when opened', async () => {
-    const { getByLabelText, getByText } = await render(
-      <NotificationsScreen />,
-    );
+    const { getByLabelText, getByText } = await render(<NotificationsScreen />);
 
     const notification = getByLabelText(
       'Booking confirmed. Your training session has been confirmed. Unread.',
@@ -307,9 +291,7 @@ describe('NotificationsScreen', () => {
     });
 
     await waitFor(() => {
-      expect(mockMarkNotificationAsRead).toHaveBeenCalledWith(
-        'notification-1',
-      );
+      expect(mockMarkNotificationAsRead).toHaveBeenCalledWith('notification-1');
     });
 
     expect(mockResolveNotificationRoute).toHaveBeenCalledWith({
@@ -357,9 +339,7 @@ describe('NotificationsScreen', () => {
   });
 
   it('does not mark an already-read notification as read again', async () => {
-    mockGetNotifications.mockResolvedValue(
-      createPage([mockReadNotification]),
-    );
+    mockGetNotifications.mockResolvedValue(createPage([mockReadNotification]));
     mockGetUnreadNotificationCount.mockResolvedValue(0);
 
     const { getByLabelText } = await render(<NotificationsScreen />);
@@ -391,9 +371,7 @@ describe('NotificationsScreen', () => {
     );
     mockGetUnreadNotificationCount.mockResolvedValue(1);
 
-    const { getByText, getByLabelText } = await render(
-      <NotificationsScreen />,
-    );
+    const { getByText, getByLabelText } = await render(<NotificationsScreen />);
 
     await waitFor(() => {
       expect(getByText('Mark all read')).toBeTruthy();
@@ -423,20 +401,12 @@ describe('NotificationsScreen', () => {
     };
 
     mockGetNotifications
+      .mockResolvedValueOnce(createPage([mockNotification], true, 1))
       .mockResolvedValueOnce(
-        createPage([mockNotification], true, 1),
-      )
-      .mockResolvedValueOnce(
-        createPage(
-          [mockNotification, secondNotification],
-          false,
-          null,
-        ),
+        createPage([mockNotification, secondNotification], false, null),
       );
 
-    const { getByText, queryAllByText } = await render(
-      <NotificationsScreen />,
-    );
+    const { getByText, queryAllByText } = await render(<NotificationsScreen />);
 
     await waitFor(() => {
       expect(getByText('Load more')).toBeTruthy();
@@ -479,9 +449,7 @@ describe('NotificationsScreen', () => {
   });
 
   it('navigates back when the back control is pressed', async () => {
-    const { getByLabelText } = await render(
-      <NotificationsScreen />,
-    );
+    const { getByLabelText } = await render(<NotificationsScreen />);
 
     fireEvent.press(getByLabelText('Go back'));
 
