@@ -6,6 +6,7 @@ import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Modal,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -101,6 +102,45 @@ function createIdempotencyKey(): string {
   return Crypto.randomUUID();
 }
 
+type CancellationReason =
+  | 'change_of_plans'
+  | 'scheduling_conflict'
+  | 'trainer_unavailable'
+  | 'found_another_trainer'
+  | 'other';
+
+const CANCELLATION_REASONS: {
+  value: CancellationReason;
+  label: string;
+  description: string;
+}[] = [
+  {
+    value: 'change_of_plans',
+    label: 'Change of plans',
+    description: 'My plans or availability have changed.',
+  },
+  {
+    value: 'scheduling_conflict',
+    label: 'Scheduling conflict',
+    description: 'The session time no longer works for me.',
+  },
+  {
+    value: 'trainer_unavailable',
+    label: 'Trainer unavailable',
+    description: 'The trainer is unavailable.',
+  },
+  {
+    value: 'found_another_trainer',
+    label: 'Found another trainer',
+    description: 'I have decided to work with someone else.',
+  },
+  {
+    value: 'other',
+    label: 'Other',
+    description: 'Another reason.',
+  },
+];
+
 export default function SessionsScreen() {
   const { user } = useAuth();
   const { colors, spacing } = useTrainrTheme();
@@ -126,6 +166,11 @@ export default function SessionsScreen() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [cancellingBookingId, setCancellingBookingId] = useState<string | null>(null);
+  const [cancellationBooking, setCancellationBooking] = useState<Booking | null>(null);
+  const [cancellationReason, setCancellationReason] = useState<CancellationReason | null>(
+    null,
+  );
+  const [cancellationComments, setCancellationComments] = useState('');
   const [currentTime, setCurrentTime] = useState<number | null>(null);
 
   const loadBookings = useCallback(
@@ -251,50 +296,78 @@ export default function SessionsScreen() {
   );
 
   const handleCancelBooking = (booking: Booking) => {
-    if (!user || booking.status === 'cancelled') return;
+    if (
+      !user ||
+      booking.status === 'cancelled' ||
+      cancellingBookingId !== null ||
+      processingPaymentBookingId !== null
+    ) {
+      return;
+    }
 
-    Alert.alert(
-      'Cancel booking?',
-      'Are you sure you want to cancel this training session? This action cannot be undone.',
-      [
-        { text: 'Keep booking', style: 'cancel' },
-        {
-          text: 'Cancel booking',
-          style: 'destructive',
-          onPress: () => {
-            void (async () => {
-              setCancellingBookingId(booking.id);
+    setCancellationBooking(booking);
+    setCancellationReason(null);
+    setCancellationComments('');
+  };
 
-              try {
-                const { error } = await supabase.rpc('cancel_trainer_booking', {
-                  p_booking_id: booking.id,
-                });
+  const closeCancellationModal = () => {
+    if (cancellingBookingId !== null) return;
 
-                if (error) throw error;
+    setCancellationBooking(null);
+    setCancellationReason(null);
+    setCancellationComments('');
+  };
 
-                await loadBookings(true);
+  const handleSubmitCancellation = async () => {
+    if (!user || !cancellationBooking || !cancellationReason) {
+      return;
+    }
 
-                Alert.alert(
-                  'Booking cancelled',
-                  'Your training session has been cancelled successfully.',
-                );
-              } catch (error) {
-                console.error('[Sessions] Unable to cancel booking:', error);
+    const comments = cancellationComments.trim();
 
-                Alert.alert(
-                  'Unable to cancel booking',
-                  error instanceof Error
-                    ? error.message
-                    : 'We couldn’t cancel this booking. Please refresh and try again.',
-                );
-              } finally {
-                setCancellingBookingId(null);
-              }
-            })();
-          },
-        },
-      ],
-    );
+    if (comments.length > 1000) {
+      Alert.alert(
+        'Comments too long',
+        'Cancellation comments cannot exceed 1,000 characters.',
+      );
+      return;
+    }
+
+    const booking = cancellationBooking;
+
+    setCancellingBookingId(booking.id);
+
+    try {
+      const { error } = await supabase.rpc('cancel_trainer_booking', {
+        p_booking_id: booking.id,
+        p_cancellation_reason: cancellationReason,
+        p_cancellation_comments: comments || null,
+      });
+
+      if (error) throw error;
+
+      setCancellationBooking(null);
+      setCancellationReason(null);
+      setCancellationComments('');
+
+      await loadBookings(true);
+
+      Alert.alert(
+        'Booking cancelled',
+        'Your training session has been cancelled successfully.',
+      );
+    } catch (error) {
+      console.error('[Sessions] Unable to cancel booking:', error);
+
+      Alert.alert(
+        'Unable to cancel booking',
+        error instanceof Error
+          ? error.message
+          : 'We couldn’t cancel this booking. Please refresh and try again.',
+      );
+    } finally {
+      setCancellingBookingId(null);
+    }
   };
 
   /**
@@ -1638,6 +1711,154 @@ export default function SessionsScreen() {
           </View>
         </ScrollView>
       </View>
+
+      <Modal
+        visible={cancellationBooking !== null}
+        transparent
+        animationType="slide"
+        onRequestClose={closeCancellationModal}
+      >
+        <View
+          style={{
+            flex: 1,
+            justifyContent: 'flex-end',
+            backgroundColor: 'rgba(0,0,0,0.55)',
+          }}
+        >
+          <View
+            style={{
+              backgroundColor: colors.background.primary,
+              borderTopLeftRadius: 24,
+              borderTopRightRadius: 24,
+              padding: spacing.lg,
+              paddingBottom: spacing.xxl,
+              gap: spacing.lg,
+            }}
+          >
+            <View style={{ gap: spacing.xs }}>
+              <AppText variant="h2" color={colors.text.primary}>
+                Cancel booking?
+              </AppText>
+
+              <AppText variant="body" color={colors.text.secondary}>
+                Please tell us why you are cancelling this session.
+              </AppText>
+
+              {cancellationBooking ? (
+                <AppText variant="caption" color={colors.text.secondary}>
+                  {formatDate(cancellationBooking.scheduled_start)} ·{' '}
+                  {formatTime(cancellationBooking.scheduled_start)}
+                </AppText>
+              ) : null}
+            </View>
+
+            <ScrollView
+              style={{ maxHeight: 300 }}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
+              <View style={{ gap: spacing.sm }}>
+                {CANCELLATION_REASONS.map((reason) => {
+                  const selected = cancellationReason === reason.value;
+
+                  return (
+                    <Pressable
+                      key={reason.value}
+                      accessibilityRole="radio"
+                      accessibilityState={{ selected }}
+                      disabled={cancellingBookingId !== null}
+                      onPress={() => setCancellationReason(reason.value)}
+                      style={{
+                        padding: spacing.md,
+                        borderRadius: 12,
+                        borderWidth: 1,
+                        borderColor: selected
+                          ? colors.brand.red
+                          : colors.border.default,
+                        backgroundColor: selected
+                          ? colors.background.secondary
+                          : 'transparent',
+                        gap: spacing.xs,
+                      }}
+                    >
+                      <AppText
+                        variant="body"
+                        color={selected ? colors.brand.red : colors.text.primary}
+                      >
+                        {reason.label}
+                      </AppText>
+
+                      <AppText variant="caption" color={colors.text.secondary}>
+                        {reason.description}
+                      </AppText>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </ScrollView>
+
+            <View style={{ gap: spacing.xs }}>
+              <AppText variant="body" color={colors.text.primary}>
+                Additional comments (optional)
+              </AppText>
+
+              <TextInput
+                value={cancellationComments}
+                onChangeText={setCancellationComments}
+                editable={cancellingBookingId === null}
+                placeholder="Tell us more..."
+                placeholderTextColor={colors.text.secondary}
+                multiline
+                maxLength={1000}
+                textAlignVertical="top"
+                accessibilityLabel="Cancellation comments"
+                style={{
+                  minHeight: 100,
+                  padding: spacing.md,
+                  borderRadius: 12,
+                  borderWidth: 1,
+                  borderColor: colors.border.default,
+                  color: colors.text.primary,
+                  backgroundColor: colors.background.secondary,
+                  fontSize: 15,
+                  lineHeight: 22,
+                }}
+              />
+
+              <AppText
+                variant="caption"
+                color={colors.text.secondary}
+                style={{ textAlign: 'right' }}
+              >
+                {cancellationComments.length}/1000
+              </AppText>
+            </View>
+
+            <Button
+              variant="primary"
+              fullWidth
+              loading={cancellingBookingId === cancellationBooking?.id}
+              disabled={
+                !cancellationReason ||
+                cancellingBookingId !== null ||
+                processingPaymentBookingId !== null
+              }
+              onPress={() => void handleSubmitCancellation()}
+            >
+              Confirm cancellation
+            </Button>
+
+            <Button
+              variant="ghost"
+              fullWidth
+              disabled={cancellingBookingId !== null}
+              onPress={closeCancellationModal}
+            >
+              Keep booking
+            </Button>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }

@@ -16,6 +16,7 @@ import { AppState, Platform } from 'react-native';
 import { useAuth } from '@/providers/AuthProvider';
 import {
   getNotificationPermissionStatus,
+  getPushNotificationDeviceForNativeToken,
   getPushNotificationDeviceIfPermitted,
   requestPushNotificationPermission,
   type NotificationPermissionStatus,
@@ -61,6 +62,29 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
   // Prevent duplicate registration attempts for the same account.
   const registrationInFlightUsersRef = useRef(new Set<string>());
 
+  // Retain the latest native token refresh while registration is in progress.
+  const pendingNativePushTokensRef = useRef(
+    new Map<string, Notifications.DevicePushToken>(),
+  );
+
+  // Track active native-token listeners to prevent stale registrations.
+  const activeNativeTokenListenersRef = useRef(new Set<string>());
+
+  const queuePendingNativePushToken = (
+    targetUserId: string,
+    token: Notifications.DevicePushToken,
+  ) => {
+    pendingNativePushTokensRef.current.set(targetUserId, token);
+  };
+
+  const takePendingNativePushToken = (targetUserId: string) => {
+    const token = pendingNativePushTokensRef.current.get(targetUserId);
+
+    pendingNativePushTokensRef.current.delete(targetUserId);
+
+    return token;
+  };
+
   // Prevent an older registration from changing the loading state
   // of a newer registration attempt.
   const registrationAttemptRef = useRef(0);
@@ -93,6 +117,91 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
   // Prevent stale asynchronous cold-start responses from replacing
   // newer notification responses or restoring cleared responses.
   const notificationResponseVersionRef = useRef(0);
+
+  /**
+   * Process queued native push-token refreshes for an authenticated user.
+   * Only one registration can run per account at a time.
+   */
+  const flushPendingNativePushTokens = useCallback(async (targetUserId: string) => {
+    if (
+      currentUserIdRef.current !== targetUserId ||
+      !activeNativeTokenListenersRef.current.has(targetUserId) ||
+      registrationInFlightUsersRef.current.has(targetUserId) ||
+      !pendingNativePushTokensRef.current.has(targetUserId)
+    ) {
+      return;
+    }
+
+    registrationInFlightUsersRef.current.add(targetUserId);
+
+    const attemptId = ++registrationAttemptRef.current;
+
+    setIsRegistering(true);
+    setRegistrationError(null);
+
+    try {
+      let nativeDevicePushToken = takePendingNativePushToken(targetUserId);
+
+      while (nativeDevicePushToken) {
+        if (
+          currentUserIdRef.current !== targetUserId ||
+          !activeNativeTokenListenersRef.current.has(targetUserId)
+        ) {
+          break;
+        }
+
+        try {
+          const device =
+            await getPushNotificationDeviceForNativeToken(nativeDevicePushToken);
+
+          if (device && currentUserIdRef.current === targetUserId) {
+            const registeredToken = await registerDevicePushToken({
+              ...device,
+              expectedUserId: targetUserId,
+            });
+
+            if (
+              currentUserIdRef.current === targetUserId &&
+              activeNativeTokenListenersRef.current.has(targetUserId)
+            ) {
+              setRegisteredUserId(targetUserId);
+
+              console.log(
+                '[Notifications] Refreshed device push token registered:',
+                registeredToken.id,
+              );
+            }
+          }
+        } catch (refreshError) {
+          const message =
+            refreshError instanceof Error
+              ? refreshError.message
+              : 'Unable to update this device push token.';
+
+          if (currentUserIdRef.current === targetUserId) {
+            setRegistrationError({
+              userId: targetUserId,
+              message,
+            });
+          }
+
+          console.error(
+            '[Notifications] Native push-token refresh failed:',
+            refreshError,
+          );
+        }
+
+        // Pick up the latest token received while this one was processing.
+        nativeDevicePushToken = takePendingNativePushToken(targetUserId);
+      }
+    } finally {
+      registrationInFlightUsersRef.current.delete(targetUserId);
+
+      if (registrationAttemptRef.current === attemptId) {
+        setIsRegistering(false);
+      }
+    }
+  }, []);
 
   /**
    * Reset account-specific registration state when the
@@ -270,6 +379,10 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
           if (registrationAttemptRef.current === attemptId) {
             setIsRegistering(false);
           }
+
+          if (isActive && currentUserIdRef.current === userId) {
+            void flushPendingNativePushTokens(userId);
+          }
         }
       } catch (permissionError) {
         console.error(
@@ -288,7 +401,50 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
     return () => {
       isActive = false;
     };
-  }, [isAuthLoading, userId, registeredUserId, permissionRefreshVersion]);
+  }, [
+    isAuthLoading,
+    userId,
+    registeredUserId,
+    permissionRefreshVersion,
+    flushPendingNativePushTokens,
+  ]);
+
+  /**
+   * Keep the authenticated user's Supabase device-token record
+   * synchronised when iOS or Android refreshes its native push token.
+   */
+  useEffect(() => {
+    if (
+      isAuthLoading ||
+      !userId ||
+      !Device.isDevice ||
+      (Platform.OS !== 'ios' && Platform.OS !== 'android')
+    ) {
+      return;
+    }
+
+    let isActive = true;
+    const listenerUserId = userId;
+
+    activeNativeTokenListenersRef.current.add(listenerUserId);
+
+    const subscription = Notifications.addPushTokenListener((nativeDevicePushToken) => {
+      if (!isActive || currentUserIdRef.current !== listenerUserId) {
+        return;
+      }
+
+      queuePendingNativePushToken(listenerUserId, nativeDevicePushToken);
+
+      void flushPendingNativePushTokens(listenerUserId);
+    });
+
+    return () => {
+      isActive = false;
+      activeNativeTokenListenersRef.current.delete(listenerUserId);
+      pendingNativePushTokensRef.current.delete(listenerUserId);
+      subscription.remove();
+    };
+  }, [isAuthLoading, userId, flushPendingNativePushTokens]);
 
   /**
    * Manually request notification permission and register
@@ -395,8 +551,12 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
       if (registrationAttemptRef.current === attemptId) {
         setIsRegistering(false);
       }
+
+      if (currentUserIdRef.current === registeringUserId) {
+        void flushPendingNativePushTokens(registeringUserId);
+      }
     }
-  }, [userId, refreshPermissionStatus]);
+  }, [userId, refreshPermissionStatus, flushPendingNativePushTokens]);
 
   /**
    * Listen for received notifications and notification responses.

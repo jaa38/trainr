@@ -7,6 +7,10 @@ import { AppText } from '@/components/AppText';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/providers/AuthProvider';
 import { getProfileImageUrl } from '@/services/profile-images';
+import {
+  getTrainerSessionRates,
+  type TrainerSessionRate,
+} from '@/services/trainer-session-rates';
 import { useTrainrTheme } from '@/theme';
 import { formatCurrency } from '@/utils/formatCurrency';
 
@@ -20,12 +24,6 @@ type TrainerProfile = {
   years_experience: number | null;
   availability: { days?: string[] } | null;
   is_published: boolean;
-};
-
-type TrainerPricing = {
-  session_rate: number;
-  currency: string;
-  session_duration_minutes: number;
 };
 
 type TrainingPackage = {
@@ -54,7 +52,7 @@ export default function PersonalTrainerReviewScreen() {
 
   const [profile, setProfile] = useState<ProfileDetails | null>(null);
   const [trainer, setTrainer] = useState<TrainerProfile | null>(null);
-  const [pricing, setPricing] = useState<TrainerPricing | null>(null);
+  const [pricing, setPricing] = useState<TrainerSessionRate | null>(null);
   const [packages, setPackages] = useState<TrainingPackage[]>([]);
   const [profileImageUrl, setProfileImageUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -73,7 +71,7 @@ export default function PersonalTrainerReviewScreen() {
       }
 
       try {
-        const [profileResult, trainerResult, pricingResult, packagesResult] =
+        const [profileResult, trainerResult, sessionRates, packagesResult] =
           await Promise.all([
             supabase
               .from('profiles')
@@ -89,11 +87,7 @@ export default function PersonalTrainerReviewScreen() {
               .eq('user_id', user.id)
               .maybeSingle(),
 
-            supabase
-              .from('trainer_pricing')
-              .select('session_rate, currency, session_duration_minutes')
-              .eq('user_id', user.id)
-              .maybeSingle(),
+            getTrainerSessionRates(user.id),
 
             supabase
               .from('trainer_packages')
@@ -104,14 +98,22 @@ export default function PersonalTrainerReviewScreen() {
 
         if (profileResult.error) throw profileResult.error;
         if (trainerResult.error) throw trainerResult.error;
-        if (pricingResult.error) throw pricingResult.error;
         if (packagesResult.error) throw packagesResult.error;
 
         if (!isMounted) return;
 
+        const defaultRate = sessionRates.find(
+          (rate) =>
+            rate.is_default &&
+            rate.status === 'active' &&
+            !rate.requires_confirmation &&
+            rate.session_type !== null &&
+            rate.training_format !== null,
+        );
+
         setProfile(profileResult.data);
         setTrainer(trainerResult.data);
-        setPricing(pricingResult.data);
+        setPricing(defaultRate ?? null);
         setPackages(packagesResult.data ?? []);
 
         try {
@@ -195,7 +197,9 @@ export default function PersonalTrainerReviewScreen() {
         pricing &&
         Number.isFinite(Number(pricing.session_rate)) &&
         Number(pricing.session_rate) > 0 &&
-        pricing.session_duration_minutes > 0,
+        pricing.session_duration_minutes > 0 &&
+        pricing.session_type &&
+        pricing.training_format,
       ),
     },
     {
@@ -206,6 +210,15 @@ export default function PersonalTrainerReviewScreen() {
 
   const completedItems = checklist.filter((item) => item.complete).length;
   const canPublish = checklist.every((item) => item.complete);
+
+  function formatLabel(value: string | null | undefined): string {
+    if (!value) return '';
+
+    return value
+      .split('_')
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(' ');
+  }
 
   function renderSection(title: string, children: React.ReactNode) {
     return (
@@ -535,6 +548,10 @@ export default function PersonalTrainerReviewScreen() {
                   pricing ? `${pricing.session_duration_minutes} minutes` : '',
                 )}
 
+                {renderValue('Session type', formatLabel(pricing?.session_type))}
+
+                {renderValue('Training format', formatLabel(pricing?.training_format))}
+
                 <View style={{ gap: spacing.sm }}>
                   <AppText variant="bodySmall" color={colors.text.secondary}>
                     Training packages
@@ -558,9 +575,11 @@ export default function PersonalTrainerReviewScreen() {
                         <AppText variant="body" color={colors.text.primary}>
                           {item.name}
                         </AppText>
+
                         {item.description
                           ? renderValue('Details', item.description)
                           : null}
+
                         <AppText variant="bodySmall" color={colors.text.secondary}>
                           {item.sessions_count} sessions ·{' '}
                           {formatCurrency(Number(item.price), {

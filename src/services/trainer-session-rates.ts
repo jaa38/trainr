@@ -1,15 +1,15 @@
-import { supabase } from '@/lib/supabase';
+import { supabase } from "@/lib/supabase";
 
 import type {
+  TrainerSessionCurrency,
+  TrainerSessionDuration,
   TrainerSessionRateFormValues,
   TrainerSessionStatus,
-  TrainerSessionCurrency,
   TrainerSessionType,
   TrainerTrainingFormat,
-  TrainerSessionDuration,
-} from '@/schemas/trainer-session-rates';
+} from "@/schemas/trainer-session-rates";
 
-const TABLE_NAME = 'trainer_session_rates';
+const TABLE_NAME = "trainer_session_rates";
 
 export type TrainerSessionRate = {
   id: string;
@@ -27,7 +27,19 @@ export type TrainerSessionRate = {
   updated_at: string;
 };
 
-function toDatabaseValues(values: TrainerSessionRateFormValues) {
+function toInsertDatabaseValues(values: TrainerSessionRateFormValues) {
+  return {
+    session_type: values.sessionType,
+    session_duration_minutes: values.sessionDurationMinutes,
+    session_rate: values.sessionRate,
+    currency: values.currency,
+    training_format: values.trainingFormat,
+    status: values.status,
+    sort_order: 0,
+  };
+}
+
+function toUpdateDatabaseValues(values: TrainerSessionRateFormValues) {
   return {
     session_type: values.sessionType,
     session_duration_minutes: values.sessionDurationMinutes,
@@ -36,7 +48,6 @@ function toDatabaseValues(values: TrainerSessionRateFormValues) {
     training_format: values.trainingFormat,
     status: values.status,
     requires_confirmation: false,
-    updated_at: new Date().toISOString(),
   };
 }
 
@@ -51,10 +62,10 @@ export async function getTrainerSessionRates(
 ): Promise<TrainerSessionRate[]> {
   const { data, error } = await supabase
     .from(TABLE_NAME)
-    .select('*')
-    .eq('trainer_id', trainerId)
-    .order('sort_order', { ascending: true })
-    .order('created_at', { ascending: true });
+    .select("*")
+    .eq("trainer_id", trainerId)
+    .order("sort_order", { ascending: true })
+    .order("created_at", { ascending: true });
 
   if (error) throw error;
 
@@ -76,11 +87,9 @@ export async function createTrainerSessionRate(
     .from(TABLE_NAME)
     .insert({
       trainer_id: trainerId,
-      ...toDatabaseValues(values),
-      is_default: false,
-      sort_order: 0,
+      ...toInsertDatabaseValues(values),
     })
-    .select('*')
+    .select("*")
     .single();
 
   if (error) throw error;
@@ -109,10 +118,10 @@ export async function updateTrainerSessionRate(
 ): Promise<TrainerSessionRate> {
   const { data, error } = await supabase
     .from(TABLE_NAME)
-    .update(toDatabaseValues(values))
-    .eq('id', rateId)
-    .eq('trainer_id', trainerId)
-    .select('*')
+    .update(toUpdateDatabaseValues(values))
+    .eq("id", rateId)
+    .eq("trainer_id", trainerId)
+    .select("*")
     .single();
 
   if (error) throw error;
@@ -133,8 +142,8 @@ export async function deleteTrainerSessionRate(
   const { error } = await supabase
     .from(TABLE_NAME)
     .delete()
-    .eq('id', rateId)
-    .eq('trainer_id', trainerId);
+    .eq("id", rateId)
+    .eq("trainer_id", trainerId);
 
   if (error) throw error;
 }
@@ -154,10 +163,10 @@ export async function setTrainerSessionRateDefault(
   if (userError) throw userError;
 
   if (!userData.user || userData.user.id !== trainerId) {
-    throw new Error('You can only manage your own session rates.');
+    throw new Error("You can only manage your own session rates.");
   }
 
-  const { error } = await supabase.rpc('set_trainer_session_rate_default', {
+  const { error } = await supabase.rpc("set_trainer_session_rate_default", {
     p_rate_id: rateId,
   });
 
@@ -173,9 +182,9 @@ export async function getTrainerSessionRateById(
 ): Promise<TrainerSessionRate> {
   const { data, error } = await supabase
     .from(TABLE_NAME)
-    .select('*')
-    .eq('id', rateId)
-    .eq('trainer_id', trainerId)
+    .select("*")
+    .eq("id", rateId)
+    .eq("trainer_id", trainerId)
     .single();
 
   if (error) throw error;

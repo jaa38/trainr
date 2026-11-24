@@ -10,7 +10,15 @@ type NotificationEvent =
   | "session_completed"
   | "workout_assigned"
   | "trainer_feedback_created"
-  | "post_session_followup";
+  | "post_session_followup"
+  | "refund_initiated"
+  | "refund_approved"
+  | "refund_awaiting_integration"
+  | "refund_processing"
+  | "refund_completed"
+  | "refund_failed"
+  | "refund_rejected"
+  | "refund_reversed";
 
 type NotificationPreference =
   | "booking_updates"
@@ -98,6 +106,17 @@ const preferenceByEvent: Record<
   booking_reschedule_requested: "booking_updates",
   payment_succeeded: "booking_updates",
   payment_failed: "booking_updates",
+
+  // Refund notifications are part of booking/payment updates.
+  refund_initiated: "booking_updates",
+  refund_approved: "booking_updates",
+  refund_awaiting_integration: "booking_updates",
+  refund_processing: "booking_updates",
+  refund_completed: "booking_updates",
+  refund_failed: "booking_updates",
+  refund_rejected: "booking_updates",
+  refund_reversed: "booking_updates",
+
   session_reminder: "session_reminders",
   session_completed: "workout_updates",
   workout_assigned: "workout_updates",
@@ -167,6 +186,56 @@ function getNotificationCopy(
       return {
         title: "Payment unsuccessful",
         body: "Your training session payment could not be completed.",
+      };
+
+    case "refund_initiated":
+      return {
+        title: "Refund submitted",
+        body: "Your refund request has been submitted for review.",
+      };
+
+    case "refund_approved":
+      return {
+        title: "Refund approved",
+        body: "Your refund request has been approved.",
+      };
+
+    case "refund_awaiting_integration":
+      return {
+        title: "Refund awaiting processing",
+        body: "Your approved refund is awaiting payment-provider integration.",
+      };
+
+    case "refund_processing":
+      return {
+        title: "Refund processing",
+        body: "Your refund is now being processed.",
+      };
+
+    case "refund_completed":
+      return {
+        title: "Refund completed",
+        body: "Your refund has been successfully completed.",
+      };
+
+    case "refund_failed":
+      return {
+        title: "Refund unsuccessful",
+        body:
+          "We couldn't complete your refund. Please contact support if you need assistance.",
+      };
+
+    case "refund_rejected":
+      return {
+        title: "Refund request declined",
+        body: "Your refund request has been declined.",
+      };
+
+    case "refund_reversed":
+      return {
+        title: "Refund reversed",
+        body:
+          "A previously processed refund has been reversed. Please contact support for assistance.",
       };
 
     case "session_reminder": {
@@ -383,7 +452,7 @@ async function processNotification(
       }
     }
 
-    // Generate the notification copy once for history and push.
+    // Generate notification copy once for history and push.
     const copy = getNotificationCopy(
       notification.event_type,
       notification.payload ?? {},
@@ -487,7 +556,7 @@ async function processNotification(
       );
     }
 
-    // Retrieve the existing per-device delivery states.
+    // Retrieve existing per-device delivery states.
     const { data: existingDeliveries, error: deliveryReadError } = await client
       .from("notification_deliveries")
       .select(
@@ -515,8 +584,6 @@ async function processNotification(
     }
 
     // Restrict processing to active tokens belonging to this recipient.
-    // Existing delivery records for deleted or inactive devices are not
-    // allowed to keep an event retrying indefinitely.
     const activeTokenIds = new Set(tokenList.map((token) => token.id));
 
     const eligibleTokens = tokenList.filter((token) => {
@@ -601,6 +668,9 @@ async function processNotification(
           eventType: notification.event_type,
           entityType: notification.entity_type,
           entityId: notification.entity_id,
+
+          // Preserve refund identifiers and financial metadata in the push.
+          // The worker does not interpret or modify these values.
           payload: notification.payload ?? {},
         },
       }));
@@ -745,7 +815,7 @@ async function processNotification(
       }
     }
 
-    // Determine the overall result from the final active-device states.
+    // Determine the overall result from final active-device states.
     const activeDeliveries = tokenList.map((token) =>
       deliveryByTokenId.get(token.id)
     ).filter((record): record is DeliveryRecord => record !== undefined);
@@ -766,8 +836,6 @@ async function processNotification(
         record.status === "invalid",
     );
 
-    // Preserve the original per-device Expo errors for the outbox record
-    // and completion RPC instead of replacing them with generic messages.
     const deliveryErrors = activeDeliveries
       .map((record) => record.last_error)
       .filter((message): message is string =>

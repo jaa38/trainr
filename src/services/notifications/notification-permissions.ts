@@ -77,7 +77,10 @@ export async function getNotificationPermissionStatus(): Promise<
  *
  * Remote push-token registration requires a physical device.
  */
-async function getPushNotificationDevice(): Promise<PushNotificationDevice> {
+
+async function getPushNotificationDevice(
+  nativeDevicePushToken?: Notifications.DevicePushToken,
+): Promise<PushNotificationDevice> {
   if (Platform.OS !== "ios" && Platform.OS !== "android") {
     throw new Error(
       "Push notifications are only supported on iOS and Android.",
@@ -88,6 +91,13 @@ async function getPushNotificationDevice(): Promise<PushNotificationDevice> {
     throw new Error(
       "Push notifications require a physical device. Please use an iPhone or Android device.",
     );
+  }
+
+  if (
+    nativeDevicePushToken &&
+    nativeDevicePushToken.type !== Platform.OS
+  ) {
+    throw new Error("The refreshed push token does not match this device.");
   }
 
   if (Platform.OS === "android") {
@@ -108,7 +118,12 @@ async function getPushNotificationDevice(): Promise<PushNotificationDevice> {
   }
 
   const [token, deviceId] = await Promise.all([
-    Notifications.getExpoPushTokenAsync({ projectId }),
+    Notifications.getExpoPushTokenAsync({
+      projectId,
+      ...(nativeDevicePushToken
+        ? { devicePushToken: nativeDevicePushToken }
+        : {}),
+    }),
     getNotificationDeviceId(),
   ]);
 
@@ -119,6 +134,35 @@ async function getPushNotificationDevice(): Promise<PushNotificationDevice> {
     deviceName: Device.modelName ?? null,
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone ?? null,
   };
+}
+
+/**
+ * Retrieves the Expo push token corresponding to a refreshed
+ * native APNs/FCM token.
+ *
+ * Does not request notification permission.
+ */
+
+export async function getPushNotificationDeviceForNativeToken(
+  nativeDevicePushToken: Notifications.DevicePushToken,
+): Promise<PushNotificationDevice | null> {
+  if (Platform.OS !== "ios" && Platform.OS !== "android") {
+    throw new Error(
+      "Push notifications are only supported on iOS and Android.",
+    );
+  }
+
+  if (nativeDevicePushToken.type !== Platform.OS) {
+    throw new Error("The refreshed push token does not match this device.");
+  }
+
+  const permission = await getNotificationPermissionStatus();
+
+  if (!permission.granted || !Device.isDevice) {
+    return null;
+  }
+
+  return getPushNotificationDevice(nativeDevicePushToken);
 }
 
 /**

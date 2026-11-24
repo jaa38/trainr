@@ -11,6 +11,7 @@ import {
 } from '@/providers/notifications/NotificationProvider';
 import {
   getNotificationPermissionStatus,
+  getPushNotificationDeviceForNativeToken,
   getPushNotificationDeviceIfPermitted,
   requestPushNotificationPermission,
 } from '@/services/notifications/notification-permissions';
@@ -22,7 +23,11 @@ let mockIsPhysicalDevice = true;
 // Captures the AppState listener so tests can simulate foreground events.
 let mockAppStateListener: ((state: AppStateStatus) => void) | undefined;
 
+// Captures the native push-token listener.
+let mockPushTokenListener: ((token: Notifications.DevicePushToken) => void) | undefined;
+
 const mockAppStateSubscriptionRemove = jest.fn();
+const mockPushTokenSubscriptionRemove = jest.fn();
 
 // Mock AppState once for the entire test file.
 // Every subscription receives a valid remove() method.
@@ -50,6 +55,7 @@ jest.mock('@/providers/AuthProvider', () => ({
 
 jest.mock('@/services/notifications/notification-permissions', () => ({
   getNotificationPermissionStatus: jest.fn(),
+  getPushNotificationDeviceForNativeToken: jest.fn(),
   getPushNotificationDeviceIfPermitted: jest.fn(),
   requestPushNotificationPermission: jest.fn(),
 }));
@@ -65,6 +71,13 @@ jest.mock('expo-notifications', () => ({
   addNotificationResponseReceivedListener: jest.fn(() => ({
     remove: jest.fn(),
   })),
+  addPushTokenListener: jest.fn((listener) => {
+    mockPushTokenListener = listener;
+
+    return {
+      remove: mockPushTokenSubscriptionRemove,
+    };
+  }),
   getLastNotificationResponseAsync: jest.fn().mockResolvedValue(null),
   getPermissionsAsync: jest.fn().mockResolvedValue({
     granted: false,
@@ -80,6 +93,7 @@ jest.mock('expo-notifications', () => ({
 
 const mockUseAuth = jest.mocked(useAuth);
 const mockGetPermissionStatus = jest.mocked(getNotificationPermissionStatus);
+const mockGetDeviceForNativeToken = jest.mocked(getPushNotificationDeviceForNativeToken);
 const mockGetDeviceIfPermitted = jest.mocked(getPushNotificationDeviceIfPermitted);
 const mockRequestPermission = jest.mocked(requestPushNotificationPermission);
 const mockRegisterDevice = jest.mocked(registerDevicePushToken);
@@ -90,6 +104,7 @@ const mockAddNotificationReceivedListener = jest.mocked(
 const mockAddNotificationResponseReceivedListener = jest.mocked(
   Notifications.addNotificationResponseReceivedListener,
 );
+const mockAddPushTokenListener = jest.mocked(Notifications.addPushTokenListener);
 const mockGetLastNotificationResponse = jest.mocked(
   Notifications.getLastNotificationResponseAsync,
 );
@@ -115,6 +130,11 @@ const mockDevice = {
   platform: 'ios' as const,
   deviceName: 'Test iPhone',
   timezone: 'Africa/Lagos',
+};
+
+const mockNativePushToken: Notifications.DevicePushToken = {
+  type: 'ios',
+  data: 'native-apns-token',
 };
 
 const mockRegisteredToken = {
@@ -205,8 +225,11 @@ describe('NotificationProvider', () => {
 
     mockIsPhysicalDevice = true;
 
-    // Reset the captured callback without removing the shared mock.
+    // Reset captured callbacks.
     mockAppStateListener = undefined;
+    mockPushTokenListener = undefined;
+
+    mockPushTokenSubscriptionRemove.mockClear();
 
     mockUseAuth.mockReturnValue({
       user: createMockUser(),
@@ -215,6 +238,10 @@ describe('NotificationProvider', () => {
 
     mockGetPermissionStatus.mockResolvedValue(
       mockPermissionDenied as Awaited<ReturnType<typeof getNotificationPermissionStatus>>,
+    );
+
+    mockGetDeviceForNativeToken.mockResolvedValue(
+      mockDevice as Awaited<ReturnType<typeof getPushNotificationDeviceForNativeToken>>,
     );
 
     mockGetDeviceIfPermitted.mockResolvedValue(null);
@@ -289,6 +316,64 @@ describe('NotificationProvider', () => {
     });
 
     expect(mockRequestPermission).not.toHaveBeenCalled();
+  });
+
+  it('registers a refreshed native push token for the authenticated user', async () => {
+    const { getByTestId } = await renderNotificationProvider();
+
+    await waitFor(() => {
+      expect(mockAddPushTokenListener).toHaveBeenCalledTimes(1);
+      expect(mockPushTokenListener).toBeDefined();
+    });
+
+    await act(async () => {
+      mockPushTokenListener?.(mockNativePushToken);
+    });
+
+    await waitFor(() => {
+      expect(mockGetDeviceForNativeToken).toHaveBeenCalledWith(mockNativePushToken);
+
+      expect(mockRegisterDevice).toHaveBeenCalledWith({
+        ...mockDevice,
+        expectedUserId: testUserId,
+      });
+
+      expect(getByTestId('registered').props.children).toBe('true');
+    });
+  });
+
+  it('does not register a refreshed token when permission is unavailable', async () => {
+    mockGetDeviceForNativeToken.mockResolvedValueOnce(null);
+
+    await renderNotificationProvider();
+
+    await waitFor(() => {
+      expect(mockPushTokenListener).toBeDefined();
+    });
+
+    await act(async () => {
+      mockPushTokenListener?.(mockNativePushToken);
+    });
+
+    await waitFor(() => {
+      expect(mockGetDeviceForNativeToken).toHaveBeenCalledWith(mockNativePushToken);
+    });
+
+    expect(mockRegisterDevice).not.toHaveBeenCalled();
+  });
+
+  it('removes the native push-token listener when the provider unmounts', async () => {
+    const { unmount } = await renderNotificationProvider();
+
+    await waitFor(() => {
+      expect(mockAddPushTokenListener).toHaveBeenCalledTimes(1);
+    });
+
+    await act(async () => {
+      unmount();
+    });
+
+    expect(mockPushTokenSubscriptionRemove).toHaveBeenCalledTimes(1);
   });
 
   it('registers the device after an explicit permission request', async () => {

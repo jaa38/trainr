@@ -1791,3 +1791,311 @@ Deno.test(
     );
   },
 );
+
+// ============================================================
+// REFUND NOTIFICATION TESTS
+// ============================================================
+
+const refundNotificationCases = [
+  {
+    event_type: "refund_initiated",
+    title: "Refund submitted",
+    body: "Your refund request has been submitted for review.",
+  },
+  {
+    event_type: "refund_approved",
+    title: "Refund approved",
+    body: "Your refund request has been approved.",
+  },
+  {
+    event_type: "refund_awaiting_integration",
+    title: "Refund awaiting processing",
+    body: "Your approved refund is awaiting payment-provider integration.",
+  },
+  {
+    event_type: "refund_processing",
+    title: "Refund processing",
+    body: "Your refund is now being processed.",
+  },
+  {
+    event_type: "refund_completed",
+    title: "Refund completed",
+    body: "Your refund has been successfully completed.",
+  },
+  {
+    event_type: "refund_failed",
+    title: "Refund unsuccessful",
+    body:
+      "We couldn't complete your refund. Please contact support if you need assistance.",
+  },
+  {
+    event_type: "refund_rejected",
+    title: "Refund request declined",
+    body: "Your refund request has been declined.",
+  },
+  {
+    event_type: "refund_reversed",
+    title: "Refund reversed",
+    body:
+      "A previously processed refund has been reversed. Please contact support for assistance.",
+  },
+] as const;
+
+const testRefundPayload = {
+  refund_id: "33333333-3333-4333-8333-333333333333",
+  cancellation_id: "44444444-4444-4444-8444-444444444444",
+  booking_id: "55555555-5555-4555-8555-555555555555",
+  payment_id: "66666666-6666-4666-8666-666666666666",
+  refund_amount: 25000,
+  original_amount: 50000,
+  currency: "NGN",
+  refund_status: "awaiting_review",
+  provider_reference: null,
+};
+
+for (const refundCase of refundNotificationCases) {
+  Deno.test(
+    `processes ${refundCase.event_type} refund notifications`,
+    async () => {
+      const {
+        dependencies,
+        historyWrites,
+        fetchCalls,
+        calls,
+      } = createDependencies({
+        notifications: [
+          createNotification({
+            event_type: refundCase.event_type,
+            entity_type: "booking",
+            entity_id: testRefundPayload.booking_id,
+            payload: testRefundPayload,
+          }),
+        ],
+        tokens: [
+          {
+            id: "refund-token-1",
+            expo_push_token: "ExponentPushToken[refund-device]",
+          },
+        ],
+      });
+
+      const response = await handleNotificationWorkerRequest(
+        createRequest(),
+        dependencies,
+      );
+
+      assertEquals(response.status, 200);
+
+      const result = await response.json();
+
+      assertEquals(result.claimed, 1);
+      assertEquals(result.sent, 1);
+      assertEquals(result.failed, 0);
+
+      assertEquals(historyWrites.length, 1);
+
+      const history = historyWrites[0].values as Record<string, unknown>;
+
+      assertEquals(history.event_type, refundCase.event_type);
+      assertEquals(history.title, refundCase.title);
+      assertEquals(history.body, refundCase.body);
+      assertEquals(history.entity_type, "booking");
+      assertEquals(history.entity_id, testRefundPayload.booking_id);
+
+      assertEquals(fetchCalls.length, 1);
+
+      const messages = fetchCalls[0].messages as Record<string, unknown>[];
+      const message = messages[0];
+
+      assertEquals(message.title, refundCase.title);
+      assertEquals(message.body, refundCase.body);
+
+      const data = message.data as Record<string, unknown>;
+      const payload = data.payload as Record<string, unknown>;
+
+      assertEquals(data.eventType, refundCase.event_type);
+      assertEquals(data.entityId, testRefundPayload.booking_id);
+      assertEquals(payload.refund_id, testRefundPayload.refund_id);
+      assertEquals(payload.cancellation_id, testRefundPayload.cancellation_id);
+      assertEquals(payload.booking_id, testRefundPayload.booking_id);
+      assertEquals(payload.payment_id, testRefundPayload.payment_id);
+      assertEquals(payload.refund_amount, 25000);
+      assertEquals(payload.original_amount, 50000);
+      assertEquals(payload.currency, "NGN");
+
+      assertEquals(
+        calls.some((call) => call.name === "complete_notification_attempt"),
+        true,
+      );
+    },
+  );
+}
+
+Deno.test(
+  "refund notifications preserve in-app history when booking updates are disabled",
+  async () => {
+    const {
+      dependencies,
+      historyWrites,
+      fetchCalls,
+      updates,
+    } = createDependencies({
+      notifications: [
+        createNotification({
+          event_type: "refund_approved",
+          payload: testRefundPayload,
+        }),
+      ],
+      preferences: {
+        booking_updates: false,
+      },
+    });
+
+    const response = await handleNotificationWorkerRequest(
+      createRequest(),
+      dependencies,
+    );
+
+    assertEquals(response.status, 200);
+
+    const result = await response.json();
+
+    assertEquals(result.skipped, 1);
+    assertEquals(result.sent, 0);
+    assertEquals(historyWrites.length, 1);
+    assertEquals(fetchCalls.length, 0);
+
+    const history = historyWrites[0].values as Record<string, unknown>;
+
+    assertEquals(history.event_type, "refund_approved");
+    assertEquals(history.title, "Refund approved");
+
+    const cancellation = updates.find(
+      (update) => update.table === "notification_outbox",
+    );
+
+    const values = cancellation?.values as Record<string, unknown>;
+
+    assertEquals(values.status, "cancelled");
+  },
+);
+
+Deno.test(
+  "refund notification history upsert is idempotent across retries",
+  async () => {
+    const {
+      dependencies,
+      historyWrites,
+      fetchCalls,
+      deliveryRecords,
+    } = createDependencies({
+      notifications: [
+        createNotification({
+          id: "refund-outbox-1",
+          event_type: "refund_completed",
+          payload: testRefundPayload,
+        }),
+      ],
+      tokens: [
+        {
+          id: "refund-token-1",
+          expo_push_token: "ExponentPushToken[refund-device]",
+        },
+      ],
+    });
+
+    const firstResponse = await handleNotificationWorkerRequest(
+      createRequest(),
+      dependencies,
+    );
+
+    assertEquals(firstResponse.status, 200);
+
+    const firstResult = await firstResponse.json();
+
+    assertEquals(firstResult.sent, 1);
+    assertEquals(fetchCalls.length, 1);
+
+    // Reuse the same dependencies so the accepted delivery record persists.
+    const secondResponse = await handleNotificationWorkerRequest(
+      createRequest(),
+      dependencies,
+    );
+
+    assertEquals(secondResponse.status, 200);
+
+    // The mock records both upsert attempts; the database's unique
+    // outbox_id plus ignoreDuplicates contract prevents duplicate history rows.
+    assertEquals(historyWrites.length, 2);
+
+    const firstHistory = historyWrites[0].values as Record<string, unknown>;
+    const secondHistory = historyWrites[1].values as Record<string, unknown>;
+
+    assertEquals(firstHistory.outbox_id, "refund-outbox-1");
+    assertEquals(secondHistory.outbox_id, "refund-outbox-1");
+
+    const firstOptions = historyWrites[0].options as Record<string, unknown>;
+    const secondOptions = historyWrites[1].options as Record<string, unknown>;
+
+    assertEquals(firstOptions.onConflict, "outbox_id");
+    assertEquals(secondOptions.onConflict, "outbox_id");
+    assertEquals(firstOptions.ignoreDuplicates, true);
+    assertEquals(secondOptions.ignoreDuplicates, true);
+
+    // The already accepted device is not sent the same notification twice.
+    assertEquals(fetchCalls.length, 1);
+    assertEquals(deliveryRecords.length, 1);
+    assertEquals(deliveryRecords[0].status, "accepted");
+    assertEquals(deliveryRecords[0].attempt_count, 1);
+  },
+);
+
+Deno.test(
+  "refund approval notification does not claim that the refund is completed",
+  async () => {
+    const {
+      dependencies,
+      historyWrites,
+      fetchCalls,
+    } = createDependencies({
+      notifications: [
+        createNotification({
+          event_type: "refund_approved",
+          payload: {
+            ...testRefundPayload,
+            refund_status: "approved",
+          },
+        }),
+      ],
+      tokens: [
+        {
+          id: "refund-token-1",
+          expo_push_token: "ExponentPushToken[refund-device]",
+        },
+      ],
+    });
+
+    const response = await handleNotificationWorkerRequest(
+      createRequest(),
+      dependencies,
+    );
+
+    assertEquals(response.status, 200);
+
+    const history = historyWrites[0].values as Record<string, unknown>;
+
+    assertEquals(history.title, "Refund approved");
+    assertEquals(
+      history.body,
+      "Your refund request has been approved.",
+    );
+    assertEquals(
+      history.body === "Your refund has been successfully completed.",
+      false,
+    );
+
+    const message = fetchCalls[0].messages[0] as Record<string, unknown>;
+
+    assertEquals(message.title, "Refund approved");
+  },
+);

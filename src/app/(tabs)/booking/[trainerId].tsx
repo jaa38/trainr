@@ -1,6 +1,7 @@
 import DateTimePicker from '@react-native-community/datetimepicker';
+import * as Crypto from 'expo-crypto';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -11,6 +12,7 @@ import { useAuth } from '@/providers/AuthProvider';
 import {
   discoverPublishedTrainers,
   type PublishedTrainer,
+  type PublishedTrainerSessionRate,
 } from '@/services/trainer-discovery';
 import { useTrainrTheme } from '@/theme';
 
@@ -44,6 +46,24 @@ type AvailableSlot = {
 };
 
 type BookingErrorContext = 'availability' | 'submission';
+
+type RescheduleBooking = {
+  id: string;
+  trainer_id: string;
+  scheduled_start: string;
+  scheduled_end: string;
+  session_rate: number;
+  currency: string;
+  session_rate_id: string | null;
+  session_type: string | null;
+  training_format: string | null;
+  session_duration_minutes: number;
+};
+
+type IdempotencyRequest = {
+  fingerprint: string;
+  key: string;
+};
 
 const SLOT_INTERVAL_MINUTES = 30;
 
@@ -114,7 +134,9 @@ function zonedDateTimeToUtc(date: string, time: string, timezone: string): Date 
 
   for (let attempt = 0; attempt < 4; attempt += 1) {
     const parts = getZonedDateParts(new Date(guess), timezone);
+
     const [localYear, localMonth, localDay] = parts.date.split('-').map(Number);
+
     const [localHour, localMinute] = parts.time.split(':').map(Number);
 
     const representedUtc = Date.UTC(
@@ -170,6 +192,15 @@ function formatRate(rate: number, currency: string | null): string {
   });
 }
 
+function formatLabel(value: string | null | undefined): string {
+  if (!value) return '';
+
+  return value
+    .split('_')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
 function overlaps(
   firstStart: number,
   firstEnd: number,
@@ -211,7 +242,6 @@ function getBookingErrorMessage(error: unknown, context: BookingErrorContext): s
     return 'This trainer is no longer available for booking. Please choose another trainer.';
   }
 
-  // PostgreSQL exclusion constraint: a booking overlaps an existing one.
   if (
     code === '23P01' ||
     combined.includes('exclusion constraint') ||
@@ -220,7 +250,6 @@ function getBookingErrorMessage(error: unknown, context: BookingErrorContext): s
     return 'This slot is no longer available. Please refresh the available times and select another slot.';
   }
 
-  // PostgreSQL check constraint or the availability validation trigger.
   if (
     code === '23514' ||
     combined.includes('outside trainer') ||
@@ -272,69 +301,235 @@ export default function BookingScreen() {
   }>();
 
   const activeBookingId = Array.isArray(bookingId) ? bookingId[0] : bookingId;
+
   const isRescheduling = Boolean(activeBookingId);
+
   const { user, profile } = useAuth();
   const { colors, spacing } = useTrainrTheme();
 
   const [trainer, setTrainer] = useState<PublishedTrainer | null>(null);
+
+  const [rescheduleBooking, setRescheduleBooking] = useState<RescheduleBooking | null>(
+    null,
+  );
+
+  const [selectedRateId, setSelectedRateId] = useState<string | null>(null);
+
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingSlots, setIsLoadingSlots] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [availabilityError, setAvailabilityError] = useState<string | null>(null);
+
   const [availability, setAvailability] = useState<TrainerAvailability | null>(null);
+
   const [timezone, setTimezone] = useState<string | null>(null);
+
   const [occupiedSlots, setOccupiedSlots] = useState<OccupiedSlot[]>([]);
+
   const [selectedDate, setSelectedDate] = useState(() => new Date());
+
   const [showDatePicker, setShowDatePicker] = useState(false);
+
   const [selectedStartTime, setSelectedStartTime] = useState<string | null>(null);
+
   const [notes, setNotes] = useState('');
+
   const [nowTimestamp, setNowTimestamp] = useState(() => getCurrentTimestamp());
 
+  const idempotencyRequestRef = useRef<IdempotencyRequest | null>(null);
+
   const selectedDateKey = dateKey(selectedDate);
+
+  const minimumSelectableDate = useMemo(() => {
+    const trainerTimezone = timezone ?? trainer?.timezone;
+
+    if (!trainerTimezone) {
+      return new Date();
+    }
+
+    const trainerLocalToday = getZonedDateParts(new Date(), trainerTimezone).date;
+
+    const [year, month, day] = trainerLocalToday.split('-').map(Number);
+
+    return new Date(year, month - 1, day);
+  }, [timezone, trainer?.timezone]);
 
   const trainerName = trainer
     ? [trainer.first_name, trainer.last_name].filter(Boolean).join(' ').trim()
     : 'TRAINR Coach';
 
-  // Load the selected published trainer.
+  const selectedRate = useMemo(
+    () => trainer?.session_rates.find((rate) => rate.id === selectedRateId) ?? null,
+    [trainer, selectedRateId],
+  );
+
+  /**
+   * New bookings use the explicitly selected rate.
+   * Rescheduling uses the original booking's stored duration.
+   */
+  const sessionDurationMinutes = isRescheduling
+    ? (rescheduleBooking?.session_duration_minutes ?? null)
+    : (selectedRate?.session_duration_minutes ?? null);
+
+  const displayRate = isRescheduling
+    ? rescheduleBooking
+      ? {
+          session_rate: rescheduleBooking.session_rate,
+          currency: rescheduleBooking.currency,
+        }
+      : null
+    : selectedRate
+      ? {
+          session_rate: selectedRate.session_rate,
+          currency: selectedRate.currency,
+        }
+      : null;
+
+  // Load the selected published trainer and, when rescheduling,
+  // the original booking.
   useEffect(() => {
     let isActive = true;
 
     async function loadTrainer() {
       setIsLoading(true);
       setErrorMessage(null);
+      setTrainer(null);
+      setRescheduleBooking(null);
+      setSelectedRateId(null);
 
       try {
+        if (isRescheduling && (!activeBookingId || !user?.id)) {
+          throw new Error('Sign in is required to reschedule this booking.');
+        }
+
         const trainers = await discoverPublishedTrainers();
+
         const selected = trainers.find((item) => item.trainer_id === trainerId);
+
+        if (!selected) {
+          throw new Error(
+            'This trainer is no longer available for booking. Please choose another trainer.',
+          );
+        }
+
+        const trainerTimezone = selected.timezone;
+
+        if (!trainerTimezone) {
+          throw new Error(
+            'This trainer’s timezone is not configured. Please try again later.',
+          );
+        }
+
+        // Validate the IANA timezone before using it.
+        new Intl.DateTimeFormat('en-GB', {
+          timeZone: trainerTimezone,
+        }).format(new Date());
+
+        // Determine today's calendar date in the trainer's timezone.
+        const trainerLocalToday = getZonedDateParts(new Date(), trainerTimezone).date;
+
+        const [todayYear, todayMonth, todayDay] = trainerLocalToday
+          .split('-')
+          .map(Number);
+
+        if (isActive && !isRescheduling) {
+          setSelectedDate(new Date(todayYear, todayMonth - 1, todayDay));
+        }
+
+        let existingBooking: RescheduleBooking | null = null;
+
+        if (isRescheduling && activeBookingId && user?.id) {
+          const { data, error } = await supabase
+            .from('trainer_bookings')
+            .select(
+              'id, trainer_id, scheduled_start, scheduled_end, session_rate, currency, session_rate_id, session_type, training_format, session_duration_minutes',
+            )
+            .eq('id', activeBookingId)
+            .eq('gym_goer_id', user.id)
+            .maybeSingle();
+
+          if (error) throw error;
+
+          if (!data) {
+            throw new Error(
+              'This booking could not be found or you do not have permission to reschedule it.',
+            );
+          }
+
+          if (data.trainer_id !== selected.trainer_id) {
+            throw new Error('The selected trainer does not match this booking.');
+          }
+
+          const startTimestamp = new Date(data.scheduled_start).getTime();
+
+          const endTimestamp = new Date(data.scheduled_end).getTime();
+
+          const storedDuration = data.session_duration_minutes;
+
+          const originalDuration =
+            storedDuration ?? Math.round((endTimestamp - startTimestamp) / 60000);
+
+          if (
+            !Number.isFinite(startTimestamp) ||
+            !Number.isFinite(endTimestamp) ||
+            endTimestamp <= startTimestamp ||
+            !Number.isFinite(originalDuration) ||
+            originalDuration <= 0
+          ) {
+            throw new Error(
+              'The original session duration could not be determined. Please contact support before rescheduling.',
+            );
+          }
+
+          // A rate-backed booking must have its complete duration snapshot.
+          if (data.session_rate_id && storedDuration == null) {
+            throw new Error(
+              'The original session details are incomplete. Please contact support before rescheduling.',
+            );
+          }
+
+          existingBooking = {
+            id: data.id,
+            trainer_id: data.trainer_id,
+            scheduled_start: data.scheduled_start,
+            scheduled_end: data.scheduled_end,
+            session_rate: Number(data.session_rate),
+            currency: data.currency,
+            session_rate_id: data.session_rate_id,
+            session_type: data.session_type,
+            training_format: data.training_format,
+            session_duration_minutes: originalDuration,
+          };
+
+          // Preserve the original calendar date in the trainer's timezone.
+          const originalLocalDate = getZonedDateParts(
+            new Date(data.scheduled_start),
+            trainerTimezone,
+          ).date;
+
+          const [year, month, day] = originalLocalDate.split('-').map(Number);
+
+          if (isActive) {
+            setSelectedDate(new Date(year, month - 1, day));
+            setNotes('');
+          }
+        }
 
         if (!isActive) return;
 
-        if (!selected) {
-          setTrainer(null);
-          setErrorMessage(
-            'This trainer is no longer available for booking. Please choose another trainer.',
-          );
-        } else if (
-          selected.session_rate == null ||
-          selected.session_duration_minutes == null ||
-          selected.session_duration_minutes <= 0
-        ) {
-          setTrainer(null);
-          setErrorMessage(
-            'This trainer has not configured a valid session rate and duration.',
-          );
-        } else {
-          setTrainer(selected);
-          setErrorMessage(null);
-        }
+        setTrainer(selected);
+        setRescheduleBooking(existingBooking);
+        setErrorMessage(null);
       } catch (error) {
-        console.error('[Booking] Unable to load trainer:', error);
+        console.error('[Booking] Unable to load trainer or booking:', error);
 
         if (isActive) {
           setErrorMessage(
-            'We couldn’t load this trainer. Check your connection and try again.',
+            error instanceof Error
+              ? error.message
+              : 'We couldn’t load this trainer. Check your connection and try again.',
           );
         }
       } finally {
@@ -351,7 +546,7 @@ export default function BookingScreen() {
     return () => {
       isActive = false;
     };
-  }, [trainerId]);
+  }, [trainerId, isRescheduling, activeBookingId, user?.id]);
 
   // Load the trainer's schedule and occupied intervals for the selected date.
   const loadAvailability = useCallback(async () => {
@@ -396,19 +591,8 @@ export default function BookingScreen() {
       setAvailability(response.availability);
       setTimezone(response.timezone);
 
-      // During rescheduling, the current booking must not block its own slot.
-      // Other pending and confirmed bookings remain unavailable.
-      setOccupiedSlots(
-        (response.occupied_slots ?? []).filter(
-          (slot) =>
-            !(
-              isRescheduling &&
-              activeBookingId &&
-              slot.start === slot.start &&
-              slot.end === slot.end
-            ),
-        ),
-      );
+      // The reschedule RPC already excludes the current booking.
+      setOccupiedSlots(response.occupied_slots ?? []);
     } catch (error) {
       console.error('[Booking] Unable to load availability:', error);
 
@@ -437,7 +621,7 @@ export default function BookingScreen() {
   }, [loadAvailability]);
 
   const availableSlots = useMemo<AvailableSlot[]>(() => {
-    if (!availability || !timezone || !trainer?.session_duration_minutes) {
+    if (!availability || !timezone || !sessionDurationMinutes) {
       return [];
     }
 
@@ -462,7 +646,7 @@ export default function BookingScreen() {
       return [];
     }
 
-    const duration = trainer.session_duration_minutes;
+    const duration = sessionDurationMinutes;
     const slots: AvailableSlot[] = [];
     const now = nowTimestamp;
 
@@ -475,18 +659,28 @@ export default function BookingScreen() {
       startMinute + duration <= closingMinute;
       startMinute += SLOT_INTERVAL_MINUTES
     ) {
-      const startTime = `${String(Math.floor(startMinute / 60)).padStart(2, '0')}:${String(startMinute % 60).padStart(2, '0')}`;
+      const startTime = `${String(Math.floor(startMinute / 60)).padStart(
+        2,
+        '0',
+      )}:${String(startMinute % 60).padStart(2, '0')}`;
+
       const endMinute = startMinute + duration;
-      const endTime = `${String(Math.floor(endMinute / 60)).padStart(2, '0')}:${String(endMinute % 60).padStart(2, '0')}`;
+
+      const endTime = `${String(Math.floor(endMinute / 60)).padStart(
+        2,
+        '0',
+      )}:${String(endMinute % 60).padStart(2, '0')}`;
 
       try {
         const start = zonedDateTimeToUtc(selectedDateKey, startTime, timezone);
+
         const end = zonedDateTimeToUtc(selectedDateKey, endTime, timezone);
 
         if (start.getTime() <= now) continue;
 
         const hasConflict = occupiedSlots.some((occupied) => {
           const occupiedStart = new Date(occupied.start).getTime();
+
           const occupiedEnd = new Date(occupied.end).getTime();
 
           return (
@@ -509,7 +703,14 @@ export default function BookingScreen() {
     }
 
     return slots;
-  }, [availability, timezone, trainer, selectedDateKey, occupiedSlots, nowTimestamp]);
+  }, [
+    availability,
+    timezone,
+    sessionDurationMinutes,
+    selectedDateKey,
+    occupiedSlots,
+    nowTimestamp,
+  ]);
 
   const selectedSlot = availableSlots.find((slot) => slot.start === selectedStartTime);
 
@@ -546,6 +747,30 @@ export default function BookingScreen() {
       return;
     }
 
+    if (isRescheduling && !rescheduleBooking) {
+      Alert.alert(
+        'Booking unavailable',
+        'The original booking could not be loaded. Please try again.',
+      );
+      return;
+    }
+
+    if (!isRescheduling && !selectedRate) {
+      Alert.alert(
+        'Choose a session rate',
+        'Select the session type and rate you want before continuing.',
+      );
+      return;
+    }
+
+    if (!sessionDurationMinutes || sessionDurationMinutes <= 0) {
+      Alert.alert(
+        'Session details unavailable',
+        'The session duration could not be determined. Please try again.',
+      );
+      return;
+    }
+
     if (!timezone || !selectedSlot) {
       Alert.alert(
         'Choose an available time',
@@ -560,16 +785,17 @@ export default function BookingScreen() {
     try {
       scheduledStart = zonedDateTimeToUtc(selectedDateKey, selectedSlot.start, timezone);
 
+      // Used for rescheduling validation. New booking end time is
+      // calculated by the database from the selected session rate.
       scheduledEnd = zonedDateTimeToUtc(selectedDateKey, selectedSlot.end, timezone);
     } catch (error) {
       Alert.alert(
         'Invalid session time',
-        error instanceof Error ? error.message : 'Please select another available time.',
+        error instanceof Error ? error.message : 'Please select another available slot.',
       );
       return;
     }
 
-    // Use the actual current time at submission, not the render timestamp.
     if (scheduledStart.getTime() <= getCurrentTimestamp()) {
       Alert.alert(
         'Choose a future time',
@@ -577,6 +803,17 @@ export default function BookingScreen() {
       );
 
       await loadAvailability();
+      return;
+    }
+
+    if (
+      scheduledEnd.getTime() - scheduledStart.getTime() !==
+      sessionDurationMinutes * 60 * 1000
+    ) {
+      Alert.alert(
+        'Invalid session duration',
+        'The selected time does not match the session duration. Please choose another slot.',
+      );
       return;
     }
 
@@ -592,18 +829,43 @@ export default function BookingScreen() {
 
         if (error) throw error;
       } else {
-        const { error } = await supabase.from('trainer_bookings').insert({
-          gym_goer_id: user.id,
-          trainer_id: trainer.trainer_id,
-          scheduled_start: scheduledStart.toISOString(),
-          scheduled_end: scheduledEnd.toISOString(),
-          session_rate: trainer.session_rate,
-          currency: trainer.currency ?? 'NGN',
-          status: 'pending',
-          notes: notes.trim() || null,
+        if (!selectedRate) {
+          throw new Error('Please select a session rate before booking.');
+        }
+
+        const trimmedNotes = notes.trim();
+
+        // Retain the same idempotency key when retrying the exact same
+        // request after a network or server response failure.
+        const fingerprint = JSON.stringify({
+          trainerId: trainer.trainer_id,
+          sessionRateId: selectedRate.id,
+          scheduledStart: scheduledStart.toISOString(),
+          notes: trimmedNotes || null,
+        });
+
+        let idempotencyRequest = idempotencyRequestRef.current;
+
+        if (!idempotencyRequest || idempotencyRequest.fingerprint !== fingerprint) {
+          idempotencyRequest = {
+            fingerprint,
+            key: Crypto.randomUUID(),
+          };
+
+          idempotencyRequestRef.current = idempotencyRequest;
+        }
+
+        const { error } = await supabase.rpc('create_trainer_booking', {
+          p_session_rate_id: selectedRate.id,
+          p_scheduled_start: scheduledStart.toISOString(),
+          p_idempotency_key: idempotencyRequest.key,
+          p_notes: trimmedNotes || null,
         });
 
         if (error) throw error;
+
+        // Clear the key only after the server confirms success.
+        idempotencyRequestRef.current = null;
       }
 
       Alert.alert(
@@ -657,6 +919,68 @@ export default function BookingScreen() {
     );
   }
 
+  function renderRateOption(rate: PublishedTrainerSessionRate) {
+    const isSelected = selectedRateId === rate.id;
+
+    return (
+      <Pressable
+        key={rate.id}
+        accessibilityRole="button"
+        accessibilityState={{ selected: isSelected }}
+        disabled={isSubmitting}
+        onPress={() => {
+          setSelectedRateId(rate.id);
+          setSelectedStartTime(null);
+        }}
+        style={{
+          padding: spacing.md,
+          gap: spacing.sm,
+          borderRadius: 14,
+          borderWidth: 1,
+          borderColor: isSelected ? colors.brand.red : colors.border.default,
+          backgroundColor: isSelected
+            ? colors.background.secondary
+            : colors.background.primary,
+        }}
+      >
+        <View
+          style={{
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            gap: spacing.sm,
+          }}
+        >
+          <AppText variant="button" color={colors.text.primary}>
+            {formatLabel(rate.session_type)}
+          </AppText>
+
+          {isSelected ? (
+            <AppText variant="caption" color={colors.brand.red}>
+              SELECTED
+            </AppText>
+          ) : null}
+        </View>
+
+        <AppText variant="body" color={colors.text.secondary}>
+          {rate.session_duration_minutes} minutes · {formatLabel(rate.training_format)}
+        </AppText>
+
+        <AppText variant="h2" color={colors.brand.red}>
+          {formatRate(rate.session_rate, rate.currency)}
+        </AppText>
+      </Pressable>
+    );
+  }
+
+  const isReadyToSubmit =
+    !isSubmitting &&
+    !isLoadingSlots &&
+    !availabilityError &&
+    Boolean(selectedSlot) &&
+    Boolean(sessionDurationMinutes) &&
+    (isRescheduling ? Boolean(rescheduleBooking) : Boolean(selectedRate));
+
   return (
     <SafeAreaView
       edges={['top']}
@@ -695,7 +1019,7 @@ export default function BookingScreen() {
           <AppText variant="body" color={colors.text.secondary}>
             {isRescheduling
               ? 'Choose a new date and available time for your session.'
-              : 'Choose a date and an available time with your coach.'}
+              : 'Choose a session rate, date and available time with your coach.'}
           </AppText>
         </View>
 
@@ -745,13 +1069,37 @@ export default function BookingScreen() {
                 {trainerName || 'TRAINR Coach'}
               </AppText>
 
-              <AppText variant="body" color={colors.text.secondary}>
-                {trainer.session_duration_minutes} minutes per session
-              </AppText>
+              {isRescheduling && rescheduleBooking ? (
+                <>
+                  <AppText variant="body" color={colors.text.secondary}>
+                    Original session: {rescheduleBooking.session_duration_minutes} minutes
+                  </AppText>
 
-              <AppText variant="h2" color={colors.brand.red}>
-                {formatRate(trainer.session_rate!, trainer.currency)}
-              </AppText>
+                  <AppText variant="h2" color={colors.brand.red}>
+                    {formatRate(
+                      rescheduleBooking.session_rate,
+                      rescheduleBooking.currency,
+                    )}
+                  </AppText>
+
+                  {rescheduleBooking.session_type ? (
+                    <AppText variant="caption" color={colors.text.secondary}>
+                      {formatLabel(rescheduleBooking.session_type)}
+                      {rescheduleBooking.training_format
+                        ? ` · ${formatLabel(rescheduleBooking.training_format)}`
+                        : ''}
+                    </AppText>
+                  ) : null}
+
+                  <AppText variant="caption" color={colors.text.secondary}>
+                    Your original session rate and duration will remain unchanged.
+                  </AppText>
+                </>
+              ) : (
+                <AppText variant="caption" color={colors.text.secondary}>
+                  Select one of the trainer’s available session options below.
+                </AppText>
+              )}
 
               <AppText variant="caption" color={colors.text.secondary}>
                 {isRescheduling
@@ -760,9 +1108,27 @@ export default function BookingScreen() {
               </AppText>
             </View>
 
+            {!isRescheduling ? (
+              <View style={{ gap: spacing.md }}>
+                <AppText variant="h2" color={colors.text.primary}>
+                  1. Choose a session
+                </AppText>
+
+                {trainer.session_rates.length === 0 ? (
+                  <AppText variant="body" color={colors.text.secondary}>
+                    This trainer currently has no bookable session rates.
+                  </AppText>
+                ) : (
+                  <View style={{ gap: spacing.sm }}>
+                    {trainer.session_rates.map(renderRateOption)}
+                  </View>
+                )}
+              </View>
+            ) : null}
+
             <View style={{ gap: spacing.sm }}>
               <AppText variant="h2" color={colors.text.primary}>
-                1. Choose a date
+                {isRescheduling ? '1.' : '2.'} Choose a date
               </AppText>
 
               <Pressable
@@ -794,7 +1160,7 @@ export default function BookingScreen() {
                   value={selectedDate}
                   mode="date"
                   display="default"
-                  minimumDate={new Date()}
+                  minimumDate={minimumSelectableDate}
                   onChange={handleDateChange}
                 />
               ) : null}
@@ -803,7 +1169,7 @@ export default function BookingScreen() {
             <View style={{ gap: spacing.sm }}>
               <View style={{ gap: spacing.xs }}>
                 <AppText variant="h2" color={colors.text.primary}>
-                  2. Choose a time
+                  {isRescheduling ? '2.' : '3.'} Choose a time
                 </AppText>
 
                 {timezone ? (
@@ -813,7 +1179,11 @@ export default function BookingScreen() {
                 ) : null}
               </View>
 
-              {isLoadingSlots ? (
+              {!sessionDurationMinutes && !isRescheduling ? (
+                <AppText variant="body" color={colors.text.secondary}>
+                  Select a session option first to see available times.
+                </AppText>
+              ) : isLoadingSlots ? (
                 <View
                   style={{
                     padding: spacing.xl,
@@ -907,28 +1277,30 @@ export default function BookingScreen() {
               )}
             </View>
 
-            <View style={{ gap: spacing.sm }}>
-              <AppText variant="h2" color={colors.text.primary}>
-                3. Add a note
-              </AppText>
+            {!isRescheduling ? (
+              <View style={{ gap: spacing.sm }}>
+                <AppText variant="h2" color={colors.text.primary}>
+                  4. Add a note
+                </AppText>
 
-              <Input
-                label="Notes for your trainer (optional)"
-                value={notes}
-                onChangeText={setNotes}
-                placeholder="Share your goals or anything your trainer should know."
-                multiline
-                maxLength={1000}
-                textAlignVertical="top"
-                style={{
-                  minHeight: 100,
-                  paddingTop: spacing.md,
-                }}
-                editable={!isSubmitting}
-              />
-            </View>
+                <Input
+                  label="Notes for your trainer (optional)"
+                  value={notes}
+                  onChangeText={setNotes}
+                  placeholder="Share your goals or anything your trainer should know."
+                  multiline
+                  maxLength={1000}
+                  textAlignVertical="top"
+                  style={{
+                    minHeight: 100,
+                    paddingTop: spacing.md,
+                  }}
+                  editable={!isSubmitting}
+                />
+              </View>
+            ) : null}
 
-            {selectedSlot ? (
+            {selectedSlot && displayRate ? (
               <View
                 style={{
                   padding: spacing.lg,
@@ -956,26 +1328,40 @@ export default function BookingScreen() {
                 </AppText>
 
                 <AppText variant="button" color={colors.brand.red}>
-                  {trainer.session_duration_minutes} minutes ·{' '}
-                  {formatRate(trainer.session_rate!, trainer.currency)}
+                  {sessionDurationMinutes} minutes ·{' '}
+                  {formatRate(displayRate.session_rate, displayRate.currency)}
                 </AppText>
               </View>
             ) : null}
 
-            {renderPrimaryButton(
-              isSubmitting
-                ? isRescheduling
-                  ? 'Rescheduling…'
-                  : 'Sending request…'
-                : isRescheduling
-                  ? 'Reschedule session'
-                  : 'Send booking request',
-              () => void handleSubmit(),
-              isSubmitting ||
-                isLoadingSlots ||
-                Boolean(availabilityError) ||
-                !selectedSlot,
-            )}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityState={{ disabled: !isReadyToSubmit }}
+              disabled={!isReadyToSubmit}
+              onPress={() => {
+                void handleSubmit();
+              }}
+              style={{
+                minHeight: 52,
+                paddingHorizontal: spacing.lg,
+                borderRadius: 14,
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: !isReadyToSubmit
+                  ? colors.text.tertiary
+                  : colors.brand.red,
+              }}
+            >
+              <AppText variant="button" color="#FFFFFF">
+                {isSubmitting
+                  ? isRescheduling
+                    ? 'Rescheduling…'
+                    : 'Sending request…'
+                  : isRescheduling
+                    ? 'Reschedule session'
+                    : 'Send booking request'}
+              </AppText>
+            </Pressable>
           </>
         )}
       </ScrollView>

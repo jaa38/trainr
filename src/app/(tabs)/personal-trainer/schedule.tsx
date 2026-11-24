@@ -19,6 +19,7 @@ import { BottomSheet } from '@/components/BottomSheet';
 import { Button } from '@/components/Button';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/providers/AuthProvider';
+import { updateTrainerBookingStatus } from '@/services/trainer-bookings';
 import {
   createTrainerSessionNote,
   getTrainerSessionNote,
@@ -46,6 +47,45 @@ type Booking = {
     last_name: string | null;
   } | null;
 };
+
+type CancellationReason =
+  | 'change_of_plans'
+  | 'scheduling_conflict'
+  | 'trainer_unavailable'
+  | 'found_another_trainer'
+  | 'other';
+
+const TRAINER_CANCELLATION_REASONS: {
+  value: CancellationReason;
+  label: string;
+  description: string;
+}[] = [
+  {
+    value: 'change_of_plans',
+    label: 'Change of plans',
+    description: 'My plans or availability have changed.',
+  },
+  {
+    value: 'scheduling_conflict',
+    label: 'Scheduling conflict',
+    description: 'I can no longer accommodate the scheduled time.',
+  },
+  {
+    value: 'trainer_unavailable',
+    label: 'Unavailable',
+    description: 'I am unable to deliver this session.',
+  },
+  {
+    value: 'found_another_trainer',
+    label: 'Alternative arrangement',
+    description: 'The client and I have agreed on another arrangement.',
+  },
+  {
+    value: 'other',
+    label: 'Other',
+    description: 'Another reason.',
+  },
+];
 
 const DEFAULT_TIMEZONE = 'Africa/Lagos';
 
@@ -169,6 +209,10 @@ export default function ScheduleScreen() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [availabilityError, setAvailabilityError] = useState<string | null>(null);
   const [updatingBookingId, setUpdatingBookingId] = useState<string | null>(null);
+  const [cancellationBooking, setCancellationBooking] = useState<Booking | null>(null);
+  const [cancellationReason, setCancellationReason] = useState<CancellationReason | null>(null);
+  const [cancellationComments, setCancellationComments] = useState('');
+  const [cancellingBookingId, setCancellingBookingId] = useState<string | null>(null);
 
   const [expandedSessionNoteBookingId, setExpandedSessionNoteBookingId] = useState<
     string | null
@@ -475,9 +519,82 @@ export default function ScheduleScreen() {
     }
   }
 
+  function openTrainerCancellation(booking: Booking) {
+    setCancellationBooking(booking);
+    setCancellationReason(null);
+    setCancellationComments('');
+  }
+
+  function closeTrainerCancellation() {
+    if (cancellingBookingId) return;
+
+    setCancellationBooking(null);
+    setCancellationReason(null);
+    setCancellationComments('');
+  }
+
+  async function submitTrainerCancellation() {
+    if (!user || !cancellationBooking || !cancellationReason || cancellingBookingId) {
+      return;
+    }
+
+    const booking = cancellationBooking;
+    const comments = cancellationComments.trim();
+
+    if (booking.status !== 'confirmed') {
+      Alert.alert('Booking already updated', 'Refresh your schedule before trying again.');
+      return;
+    }
+
+    if (new Date(booking.scheduled_start).getTime() <= now.getTime()) {
+      Alert.alert(
+        'Cannot cancel session',
+        'Only upcoming confirmed sessions can be cancelled here.',
+      );
+      return;
+    }
+
+    if (comments.length > 1000) {
+      Alert.alert('Comments too long', 'Cancellation comments must be 1,000 characters or fewer.');
+      return;
+    }
+
+    setCancellingBookingId(booking.id);
+
+    try {
+      const { error } = await supabase.rpc('cancel_trainer_booking', {
+        p_booking_id: booking.id,
+        p_cancellation_reason: cancellationReason,
+        p_cancellation_comments: comments || null,
+      });
+
+      if (error) throw error;
+
+      setCancellationBooking(null);
+      setCancellationReason(null);
+      setCancellationComments('');
+
+      await loadSchedule(false, true);
+
+      Alert.alert(
+        'Session cancelled',
+        'The confirmed session has been cancelled successfully.',
+      );
+    } catch (error) {
+      console.error('[Trainer Schedule] Unable to cancel booking:', error);
+
+      Alert.alert(
+        'Unable to cancel session',
+        'Please refresh your schedule and try again. If the problem continues, contact support.',
+      );
+    } finally {
+      setCancellingBookingId(null);
+    }
+  }
+
   async function updateBookingStatus(
     booking: Booking,
-    status: 'confirmed' | 'declined' | 'cancelled' | 'completed',
+    status: 'confirmed' | 'declined' | 'completed',
   ) {
     if (!user || updatingBookingId !== null) return;
 
@@ -497,22 +614,6 @@ export default function ScheduleScreen() {
         );
         return;
       }
-    } else if (status === 'cancelled') {
-      if (booking.status !== 'confirmed') {
-        Alert.alert(
-          'Cannot cancel session',
-          'Only confirmed sessions can be cancelled using this option.',
-        );
-        return;
-      }
-
-      if (new Date(booking.scheduled_start).getTime() <= now.getTime()) {
-        Alert.alert(
-          'Cannot cancel session',
-          'Only upcoming confirmed sessions can be cancelled here.',
-        );
-        return;
-      }
     } else if (booking.status !== 'pending') {
       Alert.alert(
         'Booking already updated',
@@ -521,29 +622,23 @@ export default function ScheduleScreen() {
       return;
     }
 
-    const action =
-      status === 'confirmed'
-        ? 'confirm'
-        : status === 'declined'
-          ? 'decline'
-          : status === 'cancelled'
-            ? 'cancel'
-            : 'complete';
+    const action = status === 'confirmed'
+      ? 'confirm'
+      : status === 'declined'
+        ? 'decline'
+        : 'complete';
 
     setUpdatingBookingId(booking.id);
 
     try {
-      const { data, error } = await supabase
-        .from('trainer_bookings')
-        .update({ status })
-        .eq('id', booking.id)
-        .eq('trainer_id', user.id)
-        .eq('status', booking.status)
-        .select('id');
+      const updatedBookingId = await updateTrainerBookingStatus(
+        booking.id,
+        user.id,
+        booking.status,
+        status,
+      );
 
-      if (error) throw error;
-
-      if (!data?.length) {
+      if (!updatedBookingId) {
         Alert.alert(
           'Booking not updated',
           'The booking may have changed. Refresh your schedule and try again.',
@@ -560,16 +655,12 @@ export default function ScheduleScreen() {
           ? 'Session confirmed'
           : status === 'declined'
             ? 'Request declined'
-            : status === 'cancelled'
-              ? 'Session cancelled'
-              : 'Session completed',
+            : 'Session completed',
         status === 'confirmed'
           ? 'The session has been confirmed.'
           : status === 'declined'
             ? 'The booking request has been declined.'
-            : status === 'cancelled'
-              ? 'The confirmed session has been cancelled.'
-              : 'The session is now marked as completed. The gym-goer can leave a review.',
+            : 'The session is now marked as completed. The gym-goer can leave a review.',
       );
     } catch (error) {
       console.error(`[Trainer Schedule] Unable to ${action} booking:`, error);
@@ -584,31 +675,9 @@ export default function ScheduleScreen() {
   }
 
   function confirmSessionCancellation(booking: Booking) {
-    const clientName = [booking.client?.first_name, booking.client?.last_name]
-      .filter(Boolean)
-      .join(' ')
-      .trim();
-
-    Alert.alert(
-      'Cancel confirmed session?',
-      `Are you sure you want to cancel ${
-        clientName ? `${clientName}'s` : 'this'
-      } session? This action will update the booking status.`,
-      [
-        {
-          text: 'Keep session',
-          style: 'cancel',
-        },
-        {
-          text: 'Cancel session',
-          style: 'destructive',
-          onPress: () => void updateBookingStatus(booking, 'cancelled'),
-        },
-      ],
-    );
+    openTrainerCancellation(booking);
   }
 
-  // Swipe actions now receive the Swipeable close method.
   function renderBookingSwipeActions(booking: Booking, closeSwipeable: () => void) {
     const isPending = booking.status === 'pending';
     const isConfirmed = booking.status === 'confirmed';
@@ -805,6 +874,7 @@ export default function ScheduleScreen() {
       if (sessionNoteRequestId.current !== requestId) return;
 
       console.error('[Trainer Schedule] Unable to load session note:', error);
+
       setSessionNoteError(
         error instanceof Error
           ? error.message
@@ -879,6 +949,7 @@ export default function ScheduleScreen() {
       );
     } catch (error) {
       console.error('[Trainer Schedule] Unable to save session note:', error);
+
       setSessionNoteError(
         error instanceof Error
           ? error.message
