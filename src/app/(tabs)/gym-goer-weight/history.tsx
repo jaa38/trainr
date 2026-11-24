@@ -1,4 +1,4 @@
-
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { router, useFocusEffect } from 'expo-router';
 import {
   ArrowLeft,
@@ -9,20 +9,9 @@ import {
   TrendingUp,
 } from 'lucide-react-native';
 import { useCallback, useMemo, useState } from 'react';
-import {
-  Alert,
-  Modal,
-  Pressable,
-  ScrollView,
-  View,
-} from 'react-native';
-import DateTimePicker from '@react-native-community/datetimepicker';
-import Svg, {
-  Circle,
-  Line,
-  Path,
-} from 'react-native-svg';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Alert, Modal, Pressable, ScrollView, View } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import Svg, { Circle, Line, Path } from 'react-native-svg';
 
 import { AppText } from '@/components/AppText';
 import { Button } from '@/components/Button';
@@ -125,16 +114,13 @@ function WeightTrendChart({
     const y =
       chartHeight -
       verticalPadding -
-      ((record.value - minValue) / valueRange) *
-        (chartHeight - verticalPadding * 2);
+      ((record.value - minValue) / valueRange) * (chartHeight - verticalPadding * 2);
 
     return { x, y };
   });
 
   const linePath = points
-    .map((point, index) =>
-      `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`,
-    )
+    .map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`)
     .join(' ');
 
   return (
@@ -146,9 +132,7 @@ function WeightTrendChart({
         <>
           <Svg width={chartWidth} height={chartHeight}>
             {[0, 0.5, 1].map((position) => {
-              const y =
-                verticalPadding +
-                position * (chartHeight - verticalPadding * 2);
+              const y = verticalPadding + position * (chartHeight - verticalPadding * 2);
 
               return (
                 <Line
@@ -193,20 +177,12 @@ function WeightTrendChart({
               paddingHorizontal: spacing.xs,
             }}
           >
-            <AppText
-              variant="caption"
-              color={colors.text.tertiary}
-            >
+            <AppText variant="caption" color={colors.text.tertiary}>
               {formatWeightDate(chartRecords[0].recorded_at)}
             </AppText>
 
-            <AppText
-              variant="caption"
-              color={colors.text.tertiary}
-            >
-              {formatWeightDate(
-                chartRecords[chartRecords.length - 1].recorded_at,
-              )}
+            <AppText variant="caption" color={colors.text.tertiary}>
+              {formatWeightDate(chartRecords[chartRecords.length - 1].recorded_at)}
             </AppText>
           </View>
         </>
@@ -218,6 +194,7 @@ function WeightTrendChart({
 export default function WeightHistoryScreen() {
   const { colors, spacing } = useTrainrTheme();
   const { user } = useAuth();
+  const insets = useSafeAreaInsets();
 
   const [records, setRecords] = useState<FitnessProgress[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -225,14 +202,11 @@ export default function WeightHistoryScreen() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const [isModalVisible, setIsModalVisible] = useState(false);
-  const [editingRecord, setEditingRecord] =
-    useState<FitnessProgress | null>(null);
+  const [editingRecord, setEditingRecord] = useState<FitnessProgress | null>(null);
 
   const [weight, setWeight] = useState('');
   const [unit, setUnit] = useState<WeightUnit>('kg');
-  const [recordedDate, setRecordedDate] = useState(
-    formatInputDate(new Date()),
-  );
+  const [recordedDate, setRecordedDate] = useState(formatInputDate(new Date()));
   const [notes, setNotes] = useState('');
   const [showDatePicker, setShowDatePicker] = useState(false);
 
@@ -240,9 +214,7 @@ export default function WeightHistoryScreen() {
   const previousWeight = records[1] ?? null;
 
   const weightDifference =
-    currentWeight &&
-    previousWeight &&
-    currentWeight.unit === previousWeight.unit
+    currentWeight && previousWeight && currentWeight.unit === previousWeight.unit
       ? currentWeight.value - previousWeight.value
       : null;
 
@@ -263,9 +235,7 @@ export default function WeightHistoryScreen() {
       console.error('[Weight History] Unable to load history:', error);
 
       setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : 'Unable to load your weight history.',
+        error instanceof Error ? error.message : 'Unable to load your weight history.',
       );
     } finally {
       setIsLoading(false);
@@ -303,23 +273,13 @@ export default function WeightHistoryScreen() {
 
     const parsedWeight = Number(weight);
 
-    if (
-      !weight.trim() ||
-      !Number.isFinite(parsedWeight) ||
-      parsedWeight <= 0
-    ) {
-      Alert.alert(
-        'Invalid weight',
-        'Please enter a valid weight greater than zero.',
-      );
+    if (!weight.trim() || !Number.isFinite(parsedWeight) || parsedWeight <= 0) {
+      Alert.alert('Invalid weight', 'Please enter a valid weight greater than zero.');
       return;
     }
 
     if (notes.trim().length > 1000) {
-      Alert.alert(
-        'Notes too long',
-        'Notes must be 1,000 characters or fewer.',
-      );
+      Alert.alert('Notes too long', 'Notes must be 1,000 characters or fewer.');
       return;
     }
 
@@ -359,9 +319,7 @@ export default function WeightHistoryScreen() {
 
       Alert.alert(
         'Unable to save weight',
-        error instanceof Error
-          ? error.message
-          : 'Please try again.',
+        error instanceof Error ? error.message : 'Please try again.',
       );
     } finally {
       setIsSaving(false);
@@ -378,91 +336,77 @@ export default function WeightHistoryScreen() {
         backgroundColor: colors.background.primary,
       }}
     >
+      {/* Page Header */}
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          paddingHorizontal: spacing.lg,
+          paddingVertical: spacing.md,
+          gap: spacing.md,
+        }}
+      >
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+          onPress={() => router.back()}
+          style={{
+            width: 42,
+            height: 42,
+            borderWidth: 1,
+            borderColor: colors.border.default,
+            borderRadius: 12,
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <ArrowLeft size={20} color={colors.text.primary} />
+        </Pressable>
+
+        <AppText variant="h2" color={colors.text.primary}>
+          Weight History
+        </AppText>
+      </View>
+
       <ScrollView
         style={{ flex: 1 }}
         contentContainerStyle={{
           padding: spacing.lg,
-          paddingBottom: spacing.xl,
+          paddingBottom: spacing.xxxl + insets.bottom + 100,
           gap: spacing.xl,
         }}
         showsVerticalScrollIndicator={false}
       >
-        {/* Header */}
-        <View style={{ gap: spacing.md }}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Go back"
-            onPress={() => router.back()}
-            style={{
-              alignSelf: 'flex-start',
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: spacing.sm,
-              paddingVertical: spacing.xs,
-            }}
-          >
-            <ArrowLeft size={20} color={colors.text.primary} />
+        {/* Introduction */}
+        <View style={{ gap: spacing.xs }}>
+          <AppText variant="caption" color={colors.brand.red}>
+            YOUR PROGRESS
+          </AppText>
 
-            <AppText
-              variant="bodySmall"
-              color={colors.text.secondary}
-            >
-              Back
-            </AppText>
-          </Pressable>
+          <AppText variant="h1" color={colors.text.primary}>
+            Track your progress.
+          </AppText>
 
-          <View style={{ gap: spacing.xs }}>
-            <AppText
-              variant="caption"
-              color={colors.brand.red}
-            >
-              YOUR PROGRESS
-            </AppText>
-
-            <AppText
-              variant="displayLarge"
-              color={colors.text.primary}
-            >
-              WEIGHT HISTORY.
-            </AppText>
-
-            <AppText
-              variant="body"
-              color={colors.text.secondary}
-            >
-              Monitor your weight changes and track your fitness journey.
-            </AppText>
-          </View>
+          <AppText variant="body" color={colors.text.secondary}>
+            Monitor your weight changes and track your fitness journey.
+          </AppText>
         </View>
 
         {/* Loading State */}
         {isLoading ? (
           <Card variant="outlined" style={{ padding: spacing.lg }}>
-            <AppText
-              variant="body"
-              color={colors.text.secondary}
-            >
+            <AppText variant="body" color={colors.text.secondary}>
               Loading your weight history...
             </AppText>
           </Card>
         ) : errorMessage ? (
           /* Error State */
-          <Card
-            variant="outlined"
-            style={{ padding: spacing.lg, gap: spacing.md }}
-          >
-            <AppText
-              variant="body"
-              color={colors.text.error}
-            >
+          <Card variant="outlined" style={{ padding: spacing.lg, gap: spacing.md }}>
+            <AppText variant="body" color={colors.text.error}>
               {errorMessage}
             </AppText>
 
-            <Button
-              variant="outline"
-              onPress={() => void loadHistory()}
-              fullWidth
-            >
+            <Button variant="outline" onPress={() => void loadHistory()} fullWidth>
               Try again
             </Button>
           </Card>
@@ -483,10 +427,7 @@ export default function WeightHistoryScreen() {
                   justifyContent: 'space-between',
                 }}
               >
-                <AppText
-                  variant="caption"
-                  color={colors.text.secondary}
-                >
+                <AppText variant="caption" color={colors.text.secondary}>
                   CURRENT WEIGHT
                 </AppText>
 
@@ -502,25 +443,16 @@ export default function WeightHistoryScreen() {
                       gap: spacing.sm,
                     }}
                   >
-                    <AppText
-                      variant="displayLarge"
-                      color={colors.text.primary}
-                    >
+                    <AppText variant="displayLarge" color={colors.text.primary}>
                       {currentWeight.value}
                     </AppText>
 
-                    <AppText
-                      variant="h3"
-                      color={colors.text.secondary}
-                    >
+                    <AppText variant="h3" color={colors.text.secondary}>
                       {currentWeight.unit}
                     </AppText>
                   </View>
 
-                  <AppText
-                    variant="caption"
-                    color={colors.text.tertiary}
-                  >
+                  <AppText variant="caption" color={colors.text.tertiary}>
                     Last recorded {formatWeightDate(currentWeight.recorded_at)}
                   </AppText>
 
@@ -541,29 +473,21 @@ export default function WeightHistoryScreen() {
                         }
                       />
 
-                      <AppText
-                        variant="bodySmall"
-                        color={colors.text.secondary}
-                      >
+                      <AppText variant="bodySmall" color={colors.text.secondary}>
                         {weightDifference > 0 ? '+' : ''}
-                        {weightDifference.toFixed(1)} {currentWeight.unit} since previous measurement
+                        {weightDifference.toFixed(1)} {currentWeight.unit} since previous
+                        measurement
                       </AppText>
                     </View>
                   ) : null}
                 </>
               ) : (
                 <View style={{ gap: spacing.sm }}>
-                  <AppText
-                    variant="h3"
-                    color={colors.text.primary}
-                  >
+                  <AppText variant="h3" color={colors.text.primary}>
                     No weight recorded yet
                   </AppText>
 
-                  <AppText
-                    variant="bodySmall"
-                    color={colors.text.secondary}
-                  >
+                  <AppText variant="bodySmall" color={colors.text.secondary}>
                     Add your first measurement to start tracking your progress.
                   </AppText>
                 </View>
@@ -573,17 +497,11 @@ export default function WeightHistoryScreen() {
             {/* Weight Trend */}
             <View style={{ gap: spacing.md }}>
               <View style={{ gap: spacing.xs }}>
-                <AppText
-                  variant="h2"
-                  color={colors.text.primary}
-                >
+                <AppText variant="h2" color={colors.text.primary}>
                   WEIGHT TREND
                 </AppText>
 
-                <AppText
-                  variant="bodySmall"
-                  color={colors.text.secondary}
-                >
+                <AppText variant="bodySmall" color={colors.text.secondary}>
                   Your latest seven measurements in the selected unit.
                 </AppText>
               </View>
@@ -611,10 +529,7 @@ export default function WeightHistoryScreen() {
                       gap: spacing.sm,
                     }}
                   >
-                    <TrendingUp
-                      size={30}
-                      color={colors.text.tertiary}
-                    />
+                    <TrendingUp size={30} color={colors.text.tertiary} />
 
                     <AppText
                       variant="bodySmall"
@@ -631,17 +546,11 @@ export default function WeightHistoryScreen() {
             {/* Weight Records */}
             <View style={{ gap: spacing.md }}>
               <View style={{ gap: spacing.xs }}>
-                <AppText
-                  variant="h2"
-                  color={colors.text.primary}
-                >
+                <AppText variant="h2" color={colors.text.primary}>
                   ALL MEASUREMENTS
                 </AppText>
 
-                <AppText
-                  variant="bodySmall"
-                  color={colors.text.secondary}
-                >
+                <AppText variant="bodySmall" color={colors.text.secondary}>
                   Review and edit your previous weight records.
                 </AppText>
               </View>
@@ -657,10 +566,7 @@ export default function WeightHistoryScreen() {
                 >
                   <Scale size={34} color={colors.text.tertiary} />
 
-                  <AppText
-                    variant="h3"
-                    color={colors.text.primary}
-                  >
+                  <AppText variant="h3" color={colors.text.primary}>
                     NO MEASUREMENTS YET
                   </AppText>
 
@@ -691,17 +597,11 @@ export default function WeightHistoryScreen() {
                       }}
                     >
                       <View style={{ flex: 1, gap: spacing.xs }}>
-                        <AppText
-                          variant="h3"
-                          color={colors.text.primary}
-                        >
+                        <AppText variant="h3" color={colors.text.primary}>
                           {record.value} {record.unit}
                         </AppText>
 
-                        <AppText
-                          variant="caption"
-                          color={colors.text.secondary}
-                        >
+                        <AppText variant="caption" color={colors.text.secondary}>
                           {formatWeightDate(record.recorded_at)}
                         </AppText>
                       </View>
@@ -719,10 +619,7 @@ export default function WeightHistoryScreen() {
                           backgroundColor: colors.background.secondary,
                         }}
                       >
-                        <Pencil
-                          size={17}
-                          color={colors.brand.red}
-                        />
+                        <Pencil size={17} color={colors.brand.red} />
                       </Pressable>
                     </View>
 
@@ -734,10 +631,7 @@ export default function WeightHistoryScreen() {
                           paddingTop: spacing.md,
                         }}
                       >
-                        <AppText
-                          variant="bodySmall"
-                          color={colors.text.secondary}
-                        >
+                        <AppText variant="bodySmall" color={colors.text.secondary}>
                           {record.notes}
                         </AppText>
                       </View>
@@ -801,24 +695,15 @@ export default function WeightHistoryScreen() {
             showsVerticalScrollIndicator={false}
           >
             <View style={{ gap: spacing.xs }}>
-              <AppText
-                variant="caption"
-                color={colors.brand.red}
-              >
+              <AppText variant="caption" color={colors.brand.red}>
                 FITNESS PROGRESS
               </AppText>
 
-              <AppText
-                variant="h1"
-                color={colors.text.primary}
-              >
+              <AppText variant="h1" color={colors.text.primary}>
                 {editingRecord ? 'EDIT WEIGHT' : 'RECORD WEIGHT'}
               </AppText>
 
-              <AppText
-                variant="bodySmall"
-                color={colors.text.secondary}
-              >
+              <AppText variant="bodySmall" color={colors.text.secondary}>
                 Enter your measurement and the date it was recorded.
               </AppText>
             </View>
@@ -835,10 +720,7 @@ export default function WeightHistoryScreen() {
 
             {/* Unit Selection */}
             <View style={{ gap: spacing.sm }}>
-              <AppText
-                variant="label"
-                color={colors.text.primary}
-              >
+              <AppText variant="label" color={colors.text.primary}>
                 Unit
               </AppText>
 
@@ -864,9 +746,7 @@ export default function WeightHistoryScreen() {
                         justifyContent: 'center',
                         borderRadius: 12,
                         borderWidth: 1,
-                        borderColor: selected
-                          ? colors.brand.red
-                          : colors.border.default,
+                        borderColor: selected ? colors.brand.red : colors.border.default,
                         backgroundColor: selected
                           ? colors.brand.redLight
                           : colors.background.secondary,
@@ -874,11 +754,7 @@ export default function WeightHistoryScreen() {
                     >
                       <AppText
                         variant="button"
-                        color={
-                          selected
-                            ? colors.brand.red
-                            : colors.text.secondary
-                        }
+                        color={selected ? colors.brand.red : colors.text.secondary}
                       >
                         {option.toUpperCase()}
                       </AppText>
@@ -890,10 +766,7 @@ export default function WeightHistoryScreen() {
 
             {/* Measurement Date */}
             <View style={{ gap: spacing.sm }}>
-              <AppText
-                variant="label"
-                color={colors.text.primary}
-              >
+              <AppText variant="label" color={colors.text.primary}>
                 Measurement date
               </AppText>
 
@@ -913,19 +786,11 @@ export default function WeightHistoryScreen() {
                   backgroundColor: colors.background.secondary,
                 }}
               >
-                <AppText
-                  variant="body"
-                  color={colors.text.primary}
-                >
-                  {formatWeightDate(
-                    parseInputDate(recordedDate).toISOString(),
-                  )}
+                <AppText variant="body" color={colors.text.primary}>
+                  {formatWeightDate(parseInputDate(recordedDate).toISOString())}
                 </AppText>
 
-                <CalendarDays
-                  size={19}
-                  color={colors.text.secondary}
-                />
+                <CalendarDays size={19} color={colors.text.secondary} />
               </Pressable>
 
               {showDatePicker ? (

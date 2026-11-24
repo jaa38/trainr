@@ -1,9 +1,10 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { router } from 'expo-router';
+import { ArrowLeft } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { ActivityIndicator, Pressable, ScrollView, TextInput, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/AppText';
 import { useGymGoerFitnessGoals } from '@/hooks/gym-goer/useGymGoerFitnessGoals';
@@ -135,6 +136,7 @@ const defaultValues: GymGoerFitnessGoalsFormValues = {
 export default function GymGoerFitnessGoalsScreen() {
   const { colors, spacing } = useTrainrTheme();
   const { user } = useAuth();
+  const insets = useSafeAreaInsets();
 
   const { fitnessGoalsQuery, saveMutation } = useGymGoerFitnessGoals(user?.id);
 
@@ -398,34 +400,58 @@ export default function GymGoerFitnessGoalsScreen() {
         backgroundColor: colors.background.primary,
       }}
     >
-      <ScrollView
-        contentContainerStyle={{
-          flexGrow: 1,
-          padding: spacing.lg,
-          gap: spacing.xl,
-          paddingBottom: spacing.xxl,
+      {/* Page Header */}
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          paddingHorizontal: spacing.lg,
+          paddingVertical: spacing.md,
+          gap: spacing.md,
         }}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
       >
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Go back to profile"
           onPress={() => router.back()}
-          style={{ alignSelf: 'flex-start', paddingVertical: spacing.sm }}
+          style={{
+            width: 42,
+            height: 42,
+            borderWidth: 1,
+            borderColor: colors.border.default,
+            borderRadius: 12,
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
         >
-          <AppText variant="body" color={colors.text.secondary}>
-            ← Back to profile
-          </AppText>
+          <ArrowLeft size={20} color={colors.text.primary} />
         </Pressable>
 
-        <View style={{ gap: spacing.sm }}>
+        <AppText variant="h2" color={colors.text.primary}>
+          Fitness Goals
+        </AppText>
+      </View>
+
+      {/* Scrollable Fitness Goals Content */}
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={{
+          flexGrow: 1,
+          padding: spacing.lg,
+          gap: spacing.xl,
+          paddingBottom: spacing.xxxl + insets.bottom + 100,
+        }}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Introduction */}
+        <View style={{ gap: spacing.xs }}>
           <AppText variant="caption" color={colors.brand.red}>
             YOUR PROFILE
           </AppText>
 
           <AppText variant="h1" color={colors.text.primary}>
-            Fitness goals
+            Define your goals.
           </AppText>
 
           <AppText variant="body" color={colors.text.secondary}>

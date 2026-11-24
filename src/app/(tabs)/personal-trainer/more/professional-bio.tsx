@@ -1,30 +1,31 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { router } from 'expo-router';
+import { ArrowLeft } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import {
-    ActivityIndicator,
-    KeyboardAvoidingView,
-    Platform,
-    Pressable,
-    ScrollView,
-    TextInput,
-    View,
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  TextInput,
+  View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/AppText';
 import { useAuth } from '@/providers/AuthProvider';
 import {
-    trainerProfileSchema,
-    type TrainerProfileFormValues,
+  trainerProfileSchema,
+  type TrainerProfileFormValues,
 } from '@/schemas/trainer-profile';
 import {
-    getTrainerProfessionalProfile,
-    getTrainerTrainingFormat,
-    toTrainerTrainingFormats,
-    updateTrainerProfessionalProfile,
-    type TrainerTrainingFormat,
+  getTrainerProfessionalProfile,
+  getTrainerTrainingFormat,
+  toTrainerTrainingFormats,
+  updateTrainerProfessionalProfile,
+  type TrainerTrainingFormat,
 } from '@/services/trainer-profile';
 import { useTrainrTheme } from '@/theme';
 
@@ -33,11 +34,15 @@ const TRAINING_FORMATS: TrainerTrainingFormat[] = ['Online', 'In-person', 'Both'
 export default function TrainerProfessionalBioScreen() {
   const { colors, spacing } = useTrainrTheme();
   const { user } = useAuth();
+  const insets = useSafeAreaInsets();
 
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  // Reserve space for the floating NativeTabs bar and bottom safe area.
+  const bottomContentPadding = spacing.xxxl + insets.bottom + 100;
 
   const {
     control,
@@ -106,7 +111,9 @@ export default function TrainerProfessionalBioScreen() {
   }
 
   async function handleSave(values: TrainerProfileFormValues) {
-    if (!user?.id || isSaving) {
+    if (isSaving) return;
+
+    if (!user?.id) {
       setErrorMessage('Your session has expired. Please sign in again.');
       return;
     }
@@ -245,14 +252,17 @@ export default function TrainerProfessionalBioScreen() {
                   <Pressable
                     key={format}
                     accessibilityRole="radio"
-                    accessibilityState={{ checked: selected }}
+                    accessibilityState={{
+                      checked: selected,
+                      disabled: isLoading || isSaving,
+                    }}
                     accessibilityLabel={format}
                     disabled={isLoading || isSaving}
                     onPress={() => {
                       onChange(format);
                       handleFieldChange();
                     }}
-                    style={{
+                    style={({ pressed }) => ({
                       minHeight: 54,
                       paddingHorizontal: spacing.md,
                       borderRadius: 12,
@@ -264,7 +274,8 @@ export default function TrainerProfessionalBioScreen() {
                       flexDirection: 'row',
                       alignItems: 'center',
                       justifyContent: 'space-between',
-                    }}
+                      opacity: isSaving ? 0.6 : pressed ? 0.8 : 1,
+                    })}
                   >
                     <AppText
                       variant="body"
@@ -299,6 +310,12 @@ export default function TrainerProfessionalBioScreen() {
                 );
               })}
             </View>
+
+            {errors.trainingFormat?.message ? (
+              <AppText variant="bodySmall" color={colors.text.error}>
+                {errors.trainingFormat.message}
+              </AppText>
+            ) : null}
           </View>
         )}
       />
@@ -317,35 +334,58 @@ export default function TrainerProfessionalBioScreen() {
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <ScrollView
-          keyboardShouldPersistTaps="handled"
-          contentContainerStyle={{
-            flexGrow: 1,
-            padding: spacing.lg,
-            paddingBottom: spacing.xxl,
-            gap: spacing.lg,
+        {/* Header */}
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            paddingHorizontal: spacing.lg,
+            paddingVertical: spacing.md,
+            gap: spacing.md,
           }}
-          showsVerticalScrollIndicator={false}
         >
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Go back"
             disabled={isSaving}
             onPress={handleCancel}
-            style={{ alignSelf: 'flex-start', paddingVertical: spacing.xs }}
+            style={{
+              width: 42,
+              height: 42,
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: 12,
+              borderWidth: 1,
+              borderColor: colors.border.default,
+              opacity: isSaving ? 0.5 : 1,
+            }}
           >
-            <AppText variant="button" color={colors.brand.red}>
-              BACK
-            </AppText>
+            <ArrowLeft size={20} color={colors.text.primary} />
           </Pressable>
 
+          <AppText variant="h2" color={colors.text.primary}>
+            Professional Bio
+          </AppText>
+        </View>
+
+        {/* Content */}
+        <ScrollView
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={{
+            padding: spacing.lg,
+            paddingBottom: bottomContentPadding,
+            gap: spacing.lg,
+          }}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Introduction */}
           <View style={{ gap: spacing.sm }}>
             <AppText variant="caption" color={colors.brand.red}>
-              TRAINER PROFILE
+              PROFESSIONAL PROFILE
             </AppText>
 
             <AppText variant="h1" color={colors.text.primary}>
-              Professional bio.
+              Tell your story.
             </AppText>
 
             <AppText variant="body" color={colors.text.secondary}>
@@ -354,23 +394,25 @@ export default function TrainerProfessionalBioScreen() {
             </AppText>
           </View>
 
+          {/* Loading State */}
           {isLoading ? (
             <View
               style={{
-                minHeight: 220,
                 alignItems: 'center',
                 justifyContent: 'center',
+                paddingVertical: spacing.xxl,
                 gap: spacing.md,
               }}
             >
               <ActivityIndicator color={colors.brand.red} />
 
-              <AppText variant="body" color={colors.text.secondary}>
+              <AppText variant="bodySmall" color={colors.text.secondary}>
                 Loading your professional profile...
               </AppText>
             </View>
           ) : (
             <>
+              {/* Professional Information */}
               {renderTextField(
                 'professionalTitle',
                 'Professional title',
@@ -392,12 +434,15 @@ export default function TrainerProfessionalBioScreen() {
                 { multiline: true, maxLength: 1000 },
               )}
 
+              {/* Training Format */}
               {renderTrainingFormatSelector()}
 
+              {/* Location */}
               {renderTextField('location', 'Location', 'Enter your city or area.', {
                 maxLength: 150,
               })}
 
+              {/* Experience */}
               {renderTextField(
                 'yearsExperience',
                 'Years of experience',
@@ -405,26 +450,39 @@ export default function TrainerProfessionalBioScreen() {
                 { numeric: true },
               )}
 
+              {/* Error Message */}
               {errorMessage ? (
-                <AppText
-                  variant="bodySmall"
-                  color={colors.text.error}
+                <View
                   accessibilityRole="alert"
+                  style={{
+                    padding: spacing.md,
+                    borderRadius: 12,
+                    backgroundColor: colors.background.secondary,
+                  }}
                 >
-                  {errorMessage}
-                </AppText>
+                  <AppText variant="bodySmall" color={colors.text.error}>
+                    {errorMessage}
+                  </AppText>
+                </View>
               ) : null}
 
+              {/* Success Message */}
               {successMessage ? (
-                <AppText
-                  variant="bodySmall"
-                  color={colors.text.secondary}
+                <View
                   accessibilityRole="alert"
+                  style={{
+                    padding: spacing.md,
+                    borderRadius: 12,
+                    backgroundColor: colors.background.secondary,
+                  }}
                 >
-                  {successMessage}
-                </AppText>
+                  <AppText variant="bodySmall" color={colors.brand.red}>
+                    {successMessage}
+                  </AppText>
+                </View>
               ) : null}
 
+              {/* Save Button */}
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Save professional profile"
@@ -438,20 +496,21 @@ export default function TrainerProfessionalBioScreen() {
                   minHeight: 54,
                   alignItems: 'center',
                   justifyContent: 'center',
-                  borderRadius: 12,
+                  borderRadius: 14,
                   backgroundColor: colors.brand.red,
-                  opacity: isSaving || !isDirty ? 0.5 : pressed ? 0.8 : 1,
+                  opacity: isSaving || !isDirty ? 0.6 : pressed ? 0.8 : 1,
                 })}
               >
                 {isSaving ? (
                   <ActivityIndicator color="#FFFFFF" />
                 ) : (
-                  <AppText variant="button" color="#FFFFFF">
+                  <AppText variant="buttonLarge" color="#FFFFFF">
                     SAVE CHANGES
                   </AppText>
                 )}
               </Pressable>
 
+              {/* Cancel Button */}
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Cancel editing"
@@ -461,6 +520,7 @@ export default function TrainerProfessionalBioScreen() {
                   minHeight: 48,
                   alignItems: 'center',
                   justifyContent: 'center',
+                  opacity: isSaving ? 0.5 : 1,
                 }}
               >
                 <AppText variant="button" color={colors.text.secondary}>

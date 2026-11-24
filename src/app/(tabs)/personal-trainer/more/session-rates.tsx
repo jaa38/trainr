@@ -14,7 +14,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/AppText';
 import { useTrainerSessionRates } from '@/hooks/trainer/useTrainerSessionRates';
@@ -97,6 +97,7 @@ function formatPrice(amount: number, currency: TrainerSessionCurrency) {
 
 export default function TrainerSessionRatesScreen() {
   const { colors, spacing } = useTrainrTheme();
+  const insets = useSafeAreaInsets();
   const { user } = useAuth();
 
   const { ratesQuery, createMutation, updateMutation, deleteMutation, defaultMutation } =
@@ -105,6 +106,9 @@ export default function TrainerSessionRatesScreen() {
   const records = ratesQuery.data ?? [];
   const isLoading = ratesQuery.isPending;
   const isSaving = createMutation.isPending || updateMutation.isPending;
+
+  // Reserve space for the floating NativeTabs bar and bottom safe area.
+  const bottomContentPadding = spacing.xxxl + insets.bottom + 100;
 
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [defaultingId, setDefaultingId] = useState<string | null>(null);
@@ -130,8 +134,6 @@ export default function TrainerSessionRatesScreen() {
     defaultValues: INITIAL_FORM,
   });
 
-  // Explicitly type the watched values so option controls retain their
-  // literal union types rather than widening to string | number | undefined.
   const formValues = useWatch({
     control,
   }) as SessionRateDraft;
@@ -328,6 +330,7 @@ export default function TrainerSessionRatesScreen() {
                   backgroundColor: selectedOption
                     ? colors.brand.redLight
                     : colors.background.secondary,
+                  opacity: isFormBusy ? 0.6 : 1,
                 }}
               >
                 <AppText
@@ -363,6 +366,7 @@ export default function TrainerSessionRatesScreen() {
           backgroundColor: colors.background.secondary,
         }}
       >
+        {/* Session Information */}
         <View
           style={{
             flexDirection: 'row',
@@ -403,10 +407,12 @@ export default function TrainerSessionRatesScreen() {
           ) : null}
         </View>
 
+        {/* Session Price */}
         <AppText variant="h2" color={colors.text.primary}>
           {formatPrice(record.session_rate, record.currency)}
         </AppText>
 
+        {/* Status */}
         <View
           style={{
             flexDirection: 'row',
@@ -436,6 +442,7 @@ export default function TrainerSessionRatesScreen() {
           </AppText>
         ) : null}
 
+        {/* Actions */}
         <View
           style={{
             flexDirection: 'row',
@@ -458,6 +465,7 @@ export default function TrainerSessionRatesScreen() {
               borderRadius: 10,
               borderWidth: 1,
               borderColor: colors.border.default,
+              opacity: isSaving || isDeleting ? 0.5 : 1,
             }}
           >
             <Pencil size={15} color={colors.text.primary} />
@@ -482,6 +490,7 @@ export default function TrainerSessionRatesScreen() {
                 paddingHorizontal: spacing.md,
                 borderRadius: 10,
                 backgroundColor: colors.brand.redLight,
+                opacity: defaultingId ? 0.6 : 1,
               }}
             >
               {isDefaulting ? (
@@ -537,61 +546,72 @@ export default function TrainerSessionRatesScreen() {
         backgroundColor: colors.background.primary,
       }}
     >
-      <ScrollView
-        contentContainerStyle={{
-          padding: spacing.lg,
-          paddingBottom: spacing.xxl,
-          gap: spacing.lg,
+      {/* Header */}
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          paddingHorizontal: spacing.lg,
+          paddingVertical: spacing.md,
+          gap: spacing.md,
         }}
-        showsVerticalScrollIndicator={false}
       >
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Go back"
           onPress={() => router.back()}
           style={{
-            alignSelf: 'flex-start',
-            paddingVertical: spacing.xs,
+            width: 42,
+            height: 42,
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderRadius: 12,
+            borderWidth: 1,
+            borderColor: colors.border.default,
           }}
         >
-          <View
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: spacing.xs,
-            }}
-          >
-            <ArrowLeft size={18} color={colors.brand.red} />
-
-            <AppText variant="button" color={colors.brand.red}>
-              BACK
-            </AppText>
-          </View>
+          <ArrowLeft size={20} color={colors.text.primary} />
         </Pressable>
 
+        <AppText variant="h2" color={colors.text.primary}>
+          Session Rates
+        </AppText>
+      </View>
+
+      {/* Content */}
+      <ScrollView
+        contentContainerStyle={{
+          padding: spacing.lg,
+          paddingBottom: bottomContentPadding,
+          gap: spacing.lg,
+        }}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Introduction */}
         <View style={{ gap: spacing.sm }}>
           <AppText variant="caption" color={colors.brand.red}>
-            TRAINER PROFILE
+            PROFESSIONAL PROFILE
           </AppText>
 
           <AppText variant="h1" color={colors.text.primary}>
-            Session rates.
+            Set your session rates.
           </AppText>
 
           <AppText variant="body" color={colors.text.secondary}>
-            Set your prices for different training sessions. Confirm your session details
-            so gym-goers can understand the services you offer.
+            Manage your training prices, session durations and training formats. Your
+            rates help gym-goers understand your services and choose the right training
+            option.
           </AppText>
         </View>
 
+        {/* Error Message */}
         {errorMessage || ratesQuery.isError ? (
           <View
             accessibilityRole="alert"
             style={{
               padding: spacing.md,
               borderRadius: 12,
-              borderWidth: 1,
-              borderColor: colors.text.error,
+              backgroundColor: colors.background.secondary,
               gap: spacing.sm,
             }}
           >
@@ -613,16 +633,23 @@ export default function TrainerSessionRatesScreen() {
           </View>
         ) : null}
 
+        {/* Success Message */}
         {successMessage ? (
-          <AppText
-            variant="bodySmall"
-            color={colors.text.secondary}
+          <View
             accessibilityRole="alert"
+            style={{
+              padding: spacing.md,
+              borderRadius: 12,
+              backgroundColor: colors.background.secondary,
+            }}
           >
-            {successMessage}
-          </AppText>
+            <AppText variant="bodySmall" color={colors.brand.red}>
+              {successMessage}
+            </AppText>
+          </View>
         ) : null}
 
+        {/* Add Session Rate */}
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Add session rate"
@@ -634,18 +661,19 @@ export default function TrainerSessionRatesScreen() {
             alignItems: 'center',
             justifyContent: 'center',
             gap: spacing.sm,
-            borderRadius: 12,
+            borderRadius: 14,
             backgroundColor: colors.brand.red,
             opacity: isLoading ? 0.5 : pressed ? 0.8 : 1,
           })}
         >
           <Plus size={19} color="#FFFFFF" />
 
-          <AppText variant="button" color="#FFFFFF">
+          <AppText variant="buttonLarge" color="#FFFFFF">
             ADD SESSION RATE
           </AppText>
         </Pressable>
 
+        {/* Session Rates */}
         {isLoading ? (
           <View
             style={{
@@ -657,35 +685,45 @@ export default function TrainerSessionRatesScreen() {
           >
             <ActivityIndicator color={colors.brand.red} />
 
-            <AppText variant="body" color={colors.text.secondary}>
+            <AppText variant="bodySmall" color={colors.text.secondary}>
               Loading your session rates...
             </AppText>
           </View>
         ) : records.length === 0 ? (
+          /* Empty State */
           <View
             style={{
-              padding: spacing.xl,
               alignItems: 'center',
-              gap: spacing.md,
+              padding: spacing.xl,
               borderRadius: 16,
               borderWidth: 1,
               borderColor: colors.border.default,
               backgroundColor: colors.background.secondary,
+              gap: spacing.md,
             }}
           >
+            <Star size={36} color={colors.brand.red} />
+
             <AppText variant="h3" color={colors.text.primary}>
-              No session rates yet.
+              No session rates yet
             </AppText>
 
-            <AppText variant="bodySmall" color={colors.text.secondary}>
+            <AppText
+              variant="body"
+              color={colors.text.secondary}
+              style={{
+                textAlign: 'center',
+                lineHeight: 24,
+              }}
+            >
               Add your first session rate to tell gym-goers how much your training
               sessions cost.
             </AppText>
           </View>
         ) : (
           <View style={{ gap: spacing.md }}>
-            <AppText variant="h2" color={colors.text.primary}>
-              YOUR SESSION RATES.
+            <AppText variant="h3" color={colors.text.primary}>
+              YOUR SESSION RATES
             </AppText>
 
             {records.map(renderRateCard)}
@@ -693,6 +731,7 @@ export default function TrainerSessionRatesScreen() {
         )}
       </ScrollView>
 
+      {/* Add / Edit Session Rate Modal */}
       <Modal
         visible={isModalVisible}
         animationType="slide"
@@ -719,27 +758,28 @@ export default function TrainerSessionRatesScreen() {
               }}
               showsVerticalScrollIndicator={false}
             >
-              <View style={{ gap: spacing.xs }}>
+              {/* Modal Introduction */}
+              <View style={{ gap: spacing.sm }}>
                 <AppText variant="caption" color={colors.brand.red}>
-                  TRAINER PROFILE
+                  PROFESSIONAL PROFILE
                 </AppText>
 
                 <AppText variant="h1" color={colors.text.primary}>
                   {editingRecord ? 'Edit session rate.' : 'Add session rate.'}
                 </AppText>
 
-                <AppText variant="bodySmall" color={colors.text.secondary}>
+                <AppText variant="body" color={colors.text.secondary}>
                   Configure the session type, duration, price and training format.
                 </AppText>
               </View>
 
+              {/* Legacy Rate Notice */}
               {editingRecord?.requires_confirmation ? (
                 <View
                   style={{
                     padding: spacing.md,
                     borderRadius: 12,
-                    borderWidth: 1,
-                    borderColor: colors.brand.red,
+                    backgroundColor: colors.background.secondary,
                     gap: spacing.xs,
                   }}
                 >
@@ -754,6 +794,7 @@ export default function TrainerSessionRatesScreen() {
                 </View>
               ) : null}
 
+              {/* Session Type */}
               {renderOption<TrainerSessionType>(
                 'Session type',
                 SESSION_TYPES.map((item) => item.value),
@@ -774,6 +815,7 @@ export default function TrainerSessionRatesScreen() {
                 </AppText>
               ) : null}
 
+              {/* Session Duration */}
               {renderOption<TrainerSessionDuration>(
                 'Session duration',
                 DURATIONS,
@@ -794,6 +836,7 @@ export default function TrainerSessionRatesScreen() {
                 </AppText>
               ) : null}
 
+              {/* Session Price */}
               <Controller
                 control={control}
                 name="sessionRate"
@@ -837,6 +880,7 @@ export default function TrainerSessionRatesScreen() {
                 )}
               />
 
+              {/* Currency */}
               {renderOption<TrainerSessionCurrency>(
                 'Currency',
                 CURRENCIES,
@@ -850,6 +894,13 @@ export default function TrainerSessionRatesScreen() {
                 },
               )}
 
+              {errors.currency?.message ? (
+                <AppText variant="bodySmall" color={colors.text.error}>
+                  {errors.currency.message}
+                </AppText>
+              ) : null}
+
+              {/* Training Format */}
               {renderOption<TrainerTrainingFormat>(
                 'Training format',
                 FORMATS.map((item) => item.value),
@@ -870,6 +921,7 @@ export default function TrainerSessionRatesScreen() {
                 </AppText>
               ) : null}
 
+              {/* Pricing Status */}
               {renderOption<TrainerSessionStatus>(
                 'Pricing status',
                 STATUSES,
@@ -884,22 +936,23 @@ export default function TrainerSessionRatesScreen() {
                 (value) => (value === 'active' ? 'Active' : 'Inactive'),
               )}
 
-              {errors.currency?.message ? (
-                <AppText variant="bodySmall" color={colors.text.error}>
-                  {errors.currency.message}
-                </AppText>
-              ) : null}
-
+              {/* Form Error */}
               {errorMessage ? (
-                <AppText
-                  variant="bodySmall"
-                  color={colors.text.error}
+                <View
                   accessibilityRole="alert"
+                  style={{
+                    padding: spacing.md,
+                    borderRadius: 12,
+                    backgroundColor: colors.background.secondary,
+                  }}
                 >
-                  {errorMessage}
-                </AppText>
+                  <AppText variant="bodySmall" color={colors.text.error}>
+                    {errorMessage}
+                  </AppText>
+                </View>
               ) : null}
 
+              {/* Save */}
               <Pressable
                 accessibilityRole="button"
                 accessibilityState={{
@@ -912,7 +965,7 @@ export default function TrainerSessionRatesScreen() {
                   minHeight: 54,
                   alignItems: 'center',
                   justifyContent: 'center',
-                  borderRadius: 12,
+                  borderRadius: 14,
                   backgroundColor: colors.brand.red,
                   opacity: isFormBusy ? 0.6 : pressed ? 0.8 : 1,
                 })}
@@ -920,12 +973,13 @@ export default function TrainerSessionRatesScreen() {
                 {isFormBusy ? (
                   <ActivityIndicator color="#FFFFFF" />
                 ) : (
-                  <AppText variant="button" color="#FFFFFF">
+                  <AppText variant="buttonLarge" color="#FFFFFF">
                     {editingRecord ? 'SAVE CHANGES' : 'ADD SESSION RATE'}
                   </AppText>
                 )}
               </Pressable>
 
+              {/* Cancel */}
               <Pressable
                 accessibilityRole="button"
                 disabled={isFormBusy}

@@ -15,7 +15,7 @@ import {
   Switch,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/AppText';
 import { useAuth } from '@/providers/AuthProvider';
@@ -70,6 +70,7 @@ type SavingPreference = {
 export default function NotificationSettingsScreen() {
   const { colors, spacing } = useTrainrTheme();
   const { user } = useAuth();
+  const insets = useSafeAreaInsets();
 
   const {
     permissionStatus,
@@ -91,6 +92,9 @@ export default function NotificationSettingsScreen() {
   const [testNotificationError, setTestNotificationError] = useState<string | null>(null);
 
   const activeUserIdRef = useRef<string | null>(user?.id ?? null);
+
+  // Reserve space for the floating NativeTabs bar and bottom safe area.
+  const bottomContentPadding = spacing.xxxl + insets.bottom + 100;
 
   useLayoutEffect(() => {
     activeUserIdRef.current = user?.id ?? null;
@@ -136,7 +140,7 @@ export default function NotificationSettingsScreen() {
       }
     }
 
-    loadPreferences();
+    void loadPreferences();
 
     return () => {
       isActive = false;
@@ -244,6 +248,39 @@ export default function NotificationSettingsScreen() {
   const showDeviceSettings =
     !permissionGranted && permissionStatus?.status === 'denied' && !canAskAgain;
 
+  async function handleRetryPreferences() {
+    if (!user?.id) {
+      setIsLoadingPreferences(false);
+      return;
+    }
+
+    const retryUserId = user.id;
+
+    setIsLoadingPreferences(true);
+    setPreferences(null);
+    setPreferenceError(null);
+
+    try {
+      const savedPreferences = await getNotificationPreferences(retryUserId);
+
+      if (activeUserIdRef.current === retryUserId) {
+        setPreferences(savedPreferences);
+      }
+    } catch (retryError) {
+      if (activeUserIdRef.current === retryUserId) {
+        setPreferenceError(
+          retryError instanceof Error
+            ? retryError.message
+            : 'Unable to load notification preferences.',
+        );
+      }
+    } finally {
+      if (activeUserIdRef.current === retryUserId) {
+        setIsLoadingPreferences(false);
+      }
+    }
+  }
+
   return (
     <SafeAreaView
       edges={['top']}
@@ -252,40 +289,55 @@ export default function NotificationSettingsScreen() {
         backgroundColor: colors.background.primary,
       }}
     >
-      <ScrollView
-        contentContainerStyle={{
-          padding: spacing.lg,
-          paddingBottom: spacing.xxl,
-          gap: spacing.lg,
+      {/* Header */}
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          paddingHorizontal: spacing.lg,
+          paddingVertical: spacing.md,
+          gap: spacing.md,
         }}
-        showsVerticalScrollIndicator={false}
       >
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Go back"
           onPress={() => router.back()}
           style={{
-            flexDirection: 'row',
+            width: 42,
+            height: 42,
             alignItems: 'center',
-            gap: spacing.sm,
-            alignSelf: 'flex-start',
-            paddingVertical: spacing.sm,
+            justifyContent: 'center',
+            borderRadius: 12,
+            borderWidth: 1,
+            borderColor: colors.border.default,
           }}
         >
           <ArrowLeft size={20} color={colors.text.primary} />
-          <AppText variant="button" color={colors.text.primary}>
-            Back
-          </AppText>
         </Pressable>
 
-        {/* Header */}
+        <AppText variant="h2" color={colors.text.primary}>
+          Notification Settings
+        </AppText>
+      </View>
+
+      {/* Content */}
+      <ScrollView
+        contentContainerStyle={{
+          padding: spacing.lg,
+          paddingBottom: bottomContentPadding,
+          gap: spacing.lg,
+        }}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Introduction */}
         <View style={{ gap: spacing.sm }}>
           <AppText variant="caption" color={colors.brand.red}>
             APP PREFERENCES
           </AppText>
 
-          <AppText variant="displayLarge" color={colors.text.primary}>
-            NOTIFICATIONS.
+          <AppText variant="h1" color={colors.text.primary}>
+            Stay in the loop.
           </AppText>
 
           <AppText variant="body" color={colors.text.secondary}>
@@ -319,6 +371,7 @@ export default function NotificationSettingsScreen() {
               }}
             >
               <Bell size={21} color={colors.brand.red} />
+
               <AppText variant="h3" color={colors.text.primary}>
                 Notification Permission
               </AppText>
@@ -465,38 +518,7 @@ export default function NotificationSettingsScreen() {
 
               <Pressable
                 accessibilityRole="button"
-                onPress={() => {
-                  setPreferences(null);
-                  setIsLoadingPreferences(true);
-                  setPreferenceError(null);
-
-                  if (user?.id) {
-                    const retryUserId = user.id;
-
-                    getNotificationPreferences(retryUserId)
-                      .then((savedPreferences) => {
-                        if (activeUserIdRef.current === retryUserId) {
-                          setPreferences(savedPreferences);
-                        }
-                      })
-                      .catch((retryError) => {
-                        if (activeUserIdRef.current === retryUserId) {
-                          setPreferenceError(
-                            retryError instanceof Error
-                              ? retryError.message
-                              : 'Unable to load notification preferences.',
-                          );
-                        }
-                      })
-                      .finally(() => {
-                        if (activeUserIdRef.current === retryUserId) {
-                          setIsLoadingPreferences(false);
-                        }
-                      });
-                  } else {
-                    setIsLoadingPreferences(false);
-                  }
-                }}
+                onPress={() => void handleRetryPreferences()}
                 style={{
                   alignSelf: 'flex-start',
                   paddingVertical: spacing.sm,
@@ -611,7 +633,7 @@ export default function NotificationSettingsScreen() {
                 gap: spacing.sm,
                 borderRadius: 14,
                 backgroundColor: colors.brand.red,
-                opacity: pressed || isRegistering ? 0.75 : isCheckingPermission ? 0.5 : 1,
+                opacity: isCheckingPermission || isRegistering ? 0.5 : pressed ? 0.75 : 1,
               })}
             >
               {isRegistering ? (

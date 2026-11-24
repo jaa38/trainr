@@ -1,4 +1,3 @@
-
 import { useRouter } from 'expo-router';
 import {
   AlertCircle,
@@ -10,7 +9,7 @@ import {
   Wallet,
 } from 'lucide-react-native';
 import { Pressable, ScrollView, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/AppText';
 import { useTrainerPayoutManagement } from '@/hooks/payouts/useTrainerPayoutManagement';
@@ -28,7 +27,9 @@ function formatDate(date: string | null) {
 
   const parsedDate = new Date(date);
 
-  if (Number.isNaN(parsedDate.getTime())) return 'Not available';
+  if (Number.isNaN(parsedDate.getTime())) {
+    return 'Not available';
+  }
 
   return new Intl.DateTimeFormat('en', {
     day: 'numeric',
@@ -57,6 +58,7 @@ function getStatusLabel(status: string) {
 export default function PayoutManagementScreen() {
   const router = useRouter();
   const { colors, spacing } = useTrainrTheme();
+  const insets = useSafeAreaInsets();
 
   const {
     data: result,
@@ -71,9 +73,12 @@ export default function PayoutManagementScreen() {
   const payoutHistory = payoutData?.payoutHistory ?? [];
   const payoutAvailability = payoutData?.payoutAvailability;
 
+  // Reserve space for the floating NativeTabs bar and bottom safe area.
+  const bottomContentPadding = spacing.xxxl + insets.bottom + 100;
+
   const cardStyle = {
-    padding: spacing.lg,
-    borderRadius: 20,
+    padding: spacing.md,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: colors.border.default,
     backgroundColor: colors.background.secondary,
@@ -90,60 +95,86 @@ export default function PayoutManagementScreen() {
         backgroundColor: colors.background.primary,
       }}
     >
-      <ScrollView
-        contentContainerStyle={{
-          padding: spacing.lg,
-          paddingBottom: spacing.xxl,
-          gap: spacing.xl,
+      {/* Header */}
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          paddingHorizontal: spacing.lg,
+          paddingVertical: spacing.md,
+          gap: spacing.md,
         }}
-        showsVerticalScrollIndicator={false}
       >
-        {/* Navigation */}
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Go back to trainer profile"
+          accessibilityLabel="Go back"
           onPress={() => router.back()}
           style={{
-            flexDirection: 'row',
+            width: 42,
+            height: 42,
             alignItems: 'center',
-            gap: spacing.sm,
-            alignSelf: 'flex-start',
-            paddingVertical: spacing.sm,
+            justifyContent: 'center',
+            borderRadius: 12,
+            borderWidth: 1,
+            borderColor: colors.border.default,
           }}
         >
           <ArrowLeft size={20} color={colors.text.primary} />
-
-          <AppText variant="body" color={colors.text.primary}>
-            Back
-          </AppText>
         </Pressable>
 
-        {/* Screen Header */}
+        <AppText variant="h2" color={colors.text.primary}>
+          Payout Management
+        </AppText>
+      </View>
+
+      {/* Content */}
+      <ScrollView
+        contentContainerStyle={{
+          padding: spacing.lg,
+          paddingBottom: bottomContentPadding,
+          gap: spacing.lg,
+        }}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Introduction */}
         <View style={{ gap: spacing.sm }}>
           <AppText variant="caption" color={colors.brand.red}>
             FINANCIAL MANAGEMENT
           </AppText>
 
-          <AppText variant="displayLarge" color={colors.text.primary}>
-            PAYOUTS.
+          <AppText variant="h1" color={colors.text.primary}>
+            Manage your payouts.
           </AppText>
 
           <AppText variant="body" color={mutedText}>
-            Manage your payout account, review payout history and track
-            payment status.
+            Manage your payout account, review payout history and track your payment
+            status.
           </AppText>
         </View>
 
         {/* Loading State */}
         {isLoading && (
-          <View style={cardStyle}>
-            <RefreshCw size={24} color={colors.brand.red} />
+          <View
+            style={{
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: spacing.xl,
+              borderRadius: 16,
+              backgroundColor: colors.background.secondary,
+              gap: spacing.md,
+            }}
+          >
+            <RefreshCw size={26} color={colors.brand.red} />
 
-            <AppText variant="h2" color={colors.text.primary}>
+            <AppText variant="h3" color={colors.text.primary}>
               Loading payout information
             </AppText>
 
-            <AppText variant="body" color={mutedText}>
+            <AppText
+              variant="bodySmall"
+              color={mutedText}
+              style={{ textAlign: 'center' }}
+            >
               Retrieving your payout account and payment history.
             </AppText>
           </View>
@@ -151,10 +182,17 @@ export default function PayoutManagementScreen() {
 
         {/* Error State */}
         {isError && (
-          <View style={cardStyle}>
+          <View
+            style={{
+              padding: spacing.lg,
+              borderRadius: 16,
+              backgroundColor: colors.background.secondary,
+              gap: spacing.md,
+            }}
+          >
             <AlertCircle size={26} color={colors.brand.red} />
 
-            <AppText variant="h2" color={colors.text.primary}>
+            <AppText variant="h3" color={colors.text.primary}>
               Unable to load payouts
             </AppText>
 
@@ -164,16 +202,17 @@ export default function PayoutManagementScreen() {
 
             <Pressable
               accessibilityRole="button"
-              onPress={() => refetch()}
+              onPress={() => void refetch()}
               style={{
-                alignSelf: 'flex-start',
-                paddingVertical: spacing.sm,
-                paddingHorizontal: spacing.md,
+                minHeight: 48,
+                alignItems: 'center',
+                justifyContent: 'center',
+                paddingHorizontal: spacing.lg,
                 borderRadius: 12,
                 backgroundColor: colors.brand.red,
               }}
             >
-              <AppText variant="body" color="#FFFFFF">
+              <AppText variant="button" color="#FFFFFF">
                 Try again
               </AppText>
             </Pressable>
@@ -194,7 +233,7 @@ export default function PayoutManagementScreen() {
               >
                 <Wallet size={22} color={colors.brand.red} />
 
-                <AppText variant="h2" color={colors.text.primary}>
+                <AppText variant="h3" color={colors.text.primary}>
                   Payout availability
                 </AppText>
               </View>
@@ -224,12 +263,19 @@ export default function PayoutManagementScreen() {
               {payoutAvailability?.availableBalance !== null &&
                 payoutAvailability?.availableBalance !== undefined &&
                 payoutAvailability.currencyCode && (
-                  <View style={{ gap: spacing.xs }}>
+                  <View
+                    style={{
+                      paddingTop: spacing.md,
+                      borderTopWidth: 1,
+                      borderTopColor: colors.border.default,
+                      gap: spacing.xs,
+                    }}
+                  >
                     <AppText variant="caption" color={mutedText}>
-                      Available balance
+                      AVAILABLE BALANCE
                     </AppText>
 
-                    <AppText variant="h2" color={colors.text.primary}>
+                    <AppText variant="h1" color={colors.text.primary}>
                       {formatCurrency(
                         payoutAvailability.availableBalance,
                         payoutAvailability.currencyCode,
@@ -250,7 +296,7 @@ export default function PayoutManagementScreen() {
               >
                 <CreditCard size={22} color={colors.brand.red} />
 
-                <AppText variant="h2" color={colors.text.primary}>
+                <AppText variant="h3" color={colors.text.primary}>
                   Payout account
                 </AppText>
               </View>
@@ -261,9 +307,9 @@ export default function PayoutManagementScreen() {
                     No payout account found
                   </AppText>
 
-                  <AppText variant="body" color={mutedText}>
-                    Your payout destination will appear here once an account
-                    has been configured.
+                  <AppText variant="bodySmall" color={mutedText}>
+                    Your payout destination will appear here once an account has been
+                    configured.
                   </AppText>
                 </View>
               ) : (
@@ -272,7 +318,7 @@ export default function PayoutManagementScreen() {
                     key={account.id}
                     style={{
                       padding: spacing.md,
-                      borderRadius: 14,
+                      borderRadius: 12,
                       backgroundColor: colors.background.primary,
                       gap: spacing.sm,
                     }}
@@ -315,10 +361,7 @@ export default function PayoutManagementScreen() {
                       }}
                     >
                       {account.verificationStatus === 'verified' ? (
-                        <CheckCircle2
-                          size={16}
-                          color={colors.brand.red}
-                        />
+                        <CheckCircle2 size={16} color={colors.brand.red} />
                       ) : (
                         <Clock3 size={16} color={mutedText} />
                       )}
@@ -343,7 +386,7 @@ export default function PayoutManagementScreen() {
               >
                 <Clock3 size={22} color={colors.brand.red} />
 
-                <AppText variant="h2" color={colors.text.primary}>
+                <AppText variant="h3" color={colors.text.primary}>
                   Payout history
                 </AppText>
               </View>
@@ -358,9 +401,8 @@ export default function PayoutManagementScreen() {
                     No payout history yet
                   </AppText>
 
-                  <AppText variant="body" color={mutedText}>
-                    Your payout records will appear here when payouts have
-                    been created.
+                  <AppText variant="bodySmall" color={mutedText}>
+                    Your payout records will appear here when payouts have been created.
                   </AppText>
                 </View>
               ) : (
@@ -383,10 +425,7 @@ export default function PayoutManagementScreen() {
                       }}
                     >
                       <View style={{ flex: 1, gap: spacing.xs }}>
-                        <AppText
-                          variant="body"
-                          color={colors.text.primary}
-                        >
+                        <AppText variant="body" color={colors.text.primary}>
                           {formatDate(payout.createdAt)}
                         </AppText>
 
@@ -395,10 +434,7 @@ export default function PayoutManagementScreen() {
                         </AppText>
                       </View>
 
-                      <AppText
-                        variant="body"
-                        color={colors.text.primary}
-                      >
+                      <AppText variant="body" color={colors.text.primary}>
                         {formatCurrency(payout.amount, payout.currencyCode)}
                       </AppText>
                     </View>
@@ -430,20 +466,18 @@ export default function PayoutManagementScreen() {
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Refresh payout information"
-            onPress={() => refetch()}
+            onPress={() => void refetch()}
             disabled={isRefetching}
-            style={{
+            style={({ pressed }) => ({
+              minHeight: 44,
               flexDirection: 'row',
               alignItems: 'center',
               justifyContent: 'center',
               gap: spacing.sm,
-              paddingVertical: spacing.md,
-            }}
+              opacity: isRefetching ? 0.5 : pressed ? 0.7 : 1,
+            })}
           >
-            <RefreshCw
-              size={16}
-              color={colors.text.secondary}
-            />
+            <RefreshCw size={16} color={colors.text.secondary} />
 
             <AppText variant="caption" color={mutedText}>
               {isRefetching ? 'Refreshing...' : 'Refresh payout information'}

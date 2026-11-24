@@ -1,3 +1,4 @@
+
 import { zodResolver } from '@hookform/resolvers/zod';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { router } from 'expo-router';
@@ -14,7 +15,10 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/AppText';
 import { useAuth } from '@/providers/AuthProvider';
@@ -26,7 +30,10 @@ import {
   getGymGoerPersonalInformation,
   updateGymGoerPersonalInformation,
 } from '@/services/gym-goer-profile';
-import { getProfileImageUrl, pickAndUploadProfileImage } from '@/services/profile-images';
+import {
+  getProfileImageUrl,
+  pickAndUploadProfileImage,
+} from '@/services/profile-images';
 import { useTrainrTheme } from '@/theme';
 
 function formatDate(value: string) {
@@ -48,6 +55,7 @@ function parseDate(value: string) {
 export default function GymGoerPersonalInformationScreen() {
   const { colors, spacing } = useTrainrTheme();
   const { user } = useAuth();
+  const insets = useSafeAreaInsets();
 
   const [isLoading, setIsLoading] = useState(true);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
@@ -89,7 +97,9 @@ export default function GymGoerPersonalInformationScreen() {
     async function loadInformation() {
       if (!user?.id) {
         setIsLoading(false);
-        setErrorMessage('Your session could not be found. Please sign in again.');
+        setErrorMessage(
+          'Your session could not be found. Please sign in again.',
+        );
         return;
       }
 
@@ -115,10 +125,15 @@ export default function GymGoerPersonalInformationScreen() {
           setAvatarUrl(resolvedAvatar);
         }
       } catch (error) {
-        console.error('[Gym-Goer Profile] Failed to load personal information:', error);
+        console.error(
+          '[Gym-Goer Profile] Failed to load personal information:',
+          error,
+        );
 
         if (isActive) {
-          setErrorMessage('Unable to load your personal information. Please try again.');
+          setErrorMessage(
+            'Unable to load your personal information. Please try again.',
+          );
         }
       } finally {
         if (isActive) {
@@ -161,7 +176,10 @@ export default function GymGoerPersonalInformationScreen() {
 
       setSuccessMessage('Your profile photo has been updated.');
     } catch (error) {
-      console.error('[Gym-Goer Profile] Failed to update profile photo:', error);
+      console.error(
+        '[Gym-Goer Profile] Failed to update profile photo:',
+        error,
+      );
 
       setErrorMessage(
         error instanceof Error
@@ -176,7 +194,9 @@ export default function GymGoerPersonalInformationScreen() {
   // Save personal information.
   async function handleSave(values: GymGoerDetailsFormValues) {
     if (!user?.id) {
-      setErrorMessage('Your session could not be found. Please sign in again.');
+      setErrorMessage(
+        'Your session could not be found. Please sign in again.',
+      );
       return;
     }
 
@@ -191,7 +211,10 @@ export default function GymGoerPersonalInformationScreen() {
 
       setSuccessMessage('Your personal information has been updated.');
     } catch (error) {
-      console.error('[Gym-Goer Profile] Failed to save personal information:', error);
+      console.error(
+        '[Gym-Goer Profile] Failed to save personal information:',
+        error,
+      );
 
       setErrorMessage(
         error instanceof Error
@@ -231,7 +254,10 @@ export default function GymGoerPersonalInformationScreen() {
         name={name}
         render={({ field: { onChange, onBlur, value } }) => (
           <View style={{ gap: spacing.xs }}>
-            <AppText variant="body" color={colors.text.primary}>
+            <AppText
+              variant="body"
+              color={colors.text.primary}
+            >
               {label}
             </AppText>
 
@@ -246,13 +272,17 @@ export default function GymGoerPersonalInformationScreen() {
               placeholder={placeholder}
               placeholderTextColor={colors.text.tertiary}
               keyboardType={keyboardType}
-              autoCapitalize={keyboardType === 'default' ? 'words' : 'none'}
+              autoCapitalize={
+                keyboardType === 'default' ? 'words' : 'none'
+              }
               editable={!isBusy && !isLoading}
               accessibilityLabel={label}
               style={{
                 minHeight: 54,
                 borderWidth: 1,
-                borderColor: errors[name] ? colors.text.error : colors.border.default,
+                borderColor: errors[name]
+                  ? colors.text.error
+                  : colors.border.default,
                 borderRadius: 12,
                 paddingHorizontal: spacing.md,
                 color: colors.text.primary,
@@ -261,7 +291,10 @@ export default function GymGoerPersonalInformationScreen() {
             />
 
             {errors[name]?.message ? (
-              <AppText variant="bodySmall" color={colors.text.error}>
+              <AppText
+                variant="bodySmall"
+                color={colors.text.error}
+              >
                 {errors[name]?.message}
               </AppText>
             ) : null}
@@ -279,49 +312,79 @@ export default function GymGoerPersonalInformationScreen() {
         backgroundColor: colors.background.primary,
       }}
     >
+      {/* Page Header */}
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          paddingHorizontal: spacing.lg,
+          paddingVertical: spacing.md,
+          gap: spacing.md,
+        }}
+      >
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Go back to profile"
+          onPress={handleCancel}
+          style={{
+            width: 42,
+            height: 42,
+            borderWidth: 1,
+            borderColor: colors.border.default,
+            borderRadius: 12,
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <ArrowLeft
+            size={20}
+            color={colors.text.primary}
+          />
+        </Pressable>
+
+        <AppText
+          variant="h2"
+          color={colors.text.primary}
+        >
+          Personal Information
+        </AppText>
+      </View>
+
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <ScrollView
+          style={{ flex: 1 }}
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={{
             flexGrow: 1,
             padding: spacing.lg,
-            paddingBottom: spacing.xxl,
-            gap: spacing.lg,
+            paddingBottom: spacing.xxxl + insets.bottom + 100,
+            gap: spacing.xl,
           }}
           showsVerticalScrollIndicator={false}
         >
-          {/* Back navigation */}
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Go back to profile"
-            onPress={handleCancel}
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: spacing.sm,
-            }}
-          >
-            <ArrowLeft size={21} color={colors.text.primary} />
-
-            <AppText variant="body" color={colors.text.primary}>
-              Back to profile
-            </AppText>
-          </Pressable>
-
-          {/* Screen heading */}
+          {/* Introduction */}
           <View style={{ gap: spacing.xs }}>
-            <AppText variant="caption" color={colors.brand.red}>
+            <AppText
+              variant="caption"
+              color={colors.brand.red}
+            >
               YOUR ACCOUNT
             </AppText>
 
-            <AppText variant="h1" color={colors.text.primary}>
-              Personal information.
+            <AppText
+              variant="h1"
+              color={colors.text.primary}
+            >
+              Manage your details.
             </AppText>
 
-            <AppText variant="body" color={colors.text.secondary}>
+            <AppText
+              variant="body"
+              color={colors.text.secondary}
+            >
               Manage the details associated with your TRAINR account.
             </AppText>
           </View>
@@ -336,7 +399,10 @@ export default function GymGoerPersonalInformationScreen() {
             >
               <ActivityIndicator color={colors.brand.red} />
 
-              <AppText variant="bodySmall" color={colors.text.secondary}>
+              <AppText
+                variant="bodySmall"
+                color={colors.text.secondary}
+              >
                 Loading your information...
               </AppText>
             </View>
@@ -373,7 +439,10 @@ export default function GymGoerPersonalInformationScreen() {
                       resizeMode="cover"
                     />
                   ) : (
-                    <AppText variant="h1" color={colors.text.secondary}>
+                    <AppText
+                      variant="h1"
+                      color={colors.text.secondary}
+                    >
                       {(firstName?.[0] ?? 'T').toUpperCase()}
                       {(lastName?.[0] ?? 'M').toUpperCase()}
                     </AppText>
@@ -393,34 +462,62 @@ export default function GymGoerPersonalInformationScreen() {
                   }}
                 >
                   {isUploadingPhoto ? (
-                    <ActivityIndicator size="small" color={colors.brand.red} />
+                    <ActivityIndicator
+                      size="small"
+                      color={colors.brand.red}
+                    />
                   ) : (
-                    <Camera size={17} color={colors.brand.red} />
+                    <Camera
+                      size={17}
+                      color={colors.brand.red}
+                    />
                   )}
 
-                  <AppText variant="button" color={colors.brand.red}>
-                    {isUploadingPhoto ? 'Uploading photo...' : 'Change photo'}
+                  <AppText
+                    variant="button"
+                    color={colors.brand.red}
+                  >
+                    {isUploadingPhoto
+                      ? 'Uploading photo...'
+                      : 'Change photo'}
                   </AppText>
                 </Pressable>
 
-                <AppText variant="caption" color={colors.text.tertiary}>
+                <AppText
+                  variant="caption"
+                  color={colors.text.tertiary}
+                >
                   JPEG, PNG or WebP · Maximum 5 MB
                 </AppText>
               </View>
 
               {/* Basic information */}
               <View style={{ gap: spacing.md }}>
-                <AppText variant="h3" color={colors.text.primary}>
+                <AppText
+                  variant="h3"
+                  color={colors.text.primary}
+                >
                   Basic information
                 </AppText>
 
-                {renderTextField('firstName', 'First name', 'Your first name')}
+                {renderTextField(
+                  'firstName',
+                  'First name',
+                  'Your first name',
+                )}
 
-                {renderTextField('lastName', 'Last name', 'Your last name')}
+                {renderTextField(
+                  'lastName',
+                  'Last name',
+                  'Your last name',
+                )}
 
                 {/* Date of birth */}
                 <View style={{ gap: spacing.xs }}>
-                  <AppText variant="body" color={colors.text.primary}>
+                  <AppText
+                    variant="body"
+                    color={colors.text.primary}
+                  >
                     Date of birth
                   </AppText>
 
@@ -443,7 +540,11 @@ export default function GymGoerPersonalInformationScreen() {
                   >
                     <AppText
                       variant="body"
-                      color={dateOfBirth ? colors.text.primary : colors.text.tertiary}
+                      color={
+                        dateOfBirth
+                          ? colors.text.primary
+                          : colors.text.tertiary
+                      }
                     >
                       {dateOfBirth
                         ? formatDate(dateOfBirth)
@@ -455,30 +556,42 @@ export default function GymGoerPersonalInformationScreen() {
                     <DateTimePicker
                       value={parseDate(dateOfBirth)}
                       mode="date"
-                      display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                      display={
+                        Platform.OS === 'ios'
+                          ? 'spinner'
+                          : 'default'
+                      }
                       maximumDate={new Date()}
                       onChange={(event, selectedDate) => {
                         if (Platform.OS === 'android') {
                           setShowDatePicker(false);
                         }
 
-                        if (event.type === 'dismissed' || !selectedDate) {
+                        if (
+                          event.type === 'dismissed' ||
+                          !selectedDate
+                        ) {
                           return;
                         }
 
                         const year = selectedDate.getFullYear();
 
-                        const month = String(selectedDate.getMonth() + 1).padStart(
-                          2,
-                          '0',
+                        const month = String(
+                          selectedDate.getMonth() + 1,
+                        ).padStart(2, '0');
+
+                        const day = String(
+                          selectedDate.getDate(),
+                        ).padStart(2, '0');
+
+                        setValue(
+                          'dateOfBirth',
+                          `${year}-${month}-${day}`,
+                          {
+                            shouldDirty: true,
+                            shouldValidate: true,
+                          },
                         );
-
-                        const day = String(selectedDate.getDate()).padStart(2, '0');
-
-                        setValue('dateOfBirth', `${year}-${month}-${day}`, {
-                          shouldDirty: true,
-                          shouldValidate: true,
-                        });
 
                         setErrorMessage(null);
                         setSuccessMessage(null);
@@ -487,7 +600,10 @@ export default function GymGoerPersonalInformationScreen() {
                   ) : null}
 
                   {errors.dateOfBirth?.message ? (
-                    <AppText variant="bodySmall" color={colors.text.error}>
+                    <AppText
+                      variant="bodySmall"
+                      color={colors.text.error}
+                    >
                       {errors.dateOfBirth.message}
                     </AppText>
                   ) : null}
@@ -510,13 +626,19 @@ export default function GymGoerPersonalInformationScreen() {
               />
 
               <View style={{ gap: spacing.md }}>
-                <AppText variant="h3" color={colors.text.primary}>
+                <AppText
+                  variant="h3"
+                  color={colors.text.primary}
+                >
                   Account information
                 </AppText>
 
                 {/* Read-only email */}
                 <View style={{ gap: spacing.xs }}>
-                  <AppText variant="body" color={colors.text.primary}>
+                  <AppText
+                    variant="body"
+                    color={colors.text.primary}
+                  >
                     Email address
                   </AppText>
 
@@ -533,19 +655,28 @@ export default function GymGoerPersonalInformationScreen() {
                     }}
                   >
                     <View style={{ flex: 1 }}>
-                      <AppText variant="body" color={colors.text.secondary}>
+                      <AppText
+                        variant="body"
+                        color={colors.text.secondary}
+                      >
                         {email || 'No email address available'}
                       </AppText>
                     </View>
 
-                    <AppText variant="caption" color={colors.text.tertiary}>
+                    <AppText
+                      variant="caption"
+                      color={colors.text.tertiary}
+                    >
                       READ ONLY
                     </AppText>
                   </View>
 
-                  <AppText variant="caption" color={colors.text.tertiary}>
-                    Your email address is linked to your TRAINR account and cannot be
-                    edited here.
+                  <AppText
+                    variant="caption"
+                    color={colors.text.tertiary}
+                  >
+                    Your email address is linked to your TRAINR account
+                    and cannot be edited here.
                   </AppText>
                 </View>
               </View>
@@ -590,7 +721,10 @@ export default function GymGoerPersonalInformationScreen() {
                   opacity: isBusy || !isDirty ? 0.45 : 1,
                 }}
               >
-                <AppText variant="buttonLarge" color="#FFFFFF">
+                <AppText
+                  variant="buttonLarge"
+                  color="#FFFFFF"
+                >
                   {isSubmitting ? 'SAVING...' : 'SAVE CHANGES'}
                 </AppText>
               </Pressable>
@@ -606,7 +740,10 @@ export default function GymGoerPersonalInformationScreen() {
                   justifyContent: 'center',
                 }}
               >
-                <AppText variant="button" color={colors.text.secondary}>
+                <AppText
+                  variant="button"
+                  color={colors.text.secondary}
+                >
                   Cancel
                 </AppText>
               </Pressable>

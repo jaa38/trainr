@@ -1,3 +1,4 @@
+
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as DocumentPicker from 'expo-document-picker';
 import { router } from 'expo-router';
@@ -23,7 +24,10 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/AppText';
 import { useAuth } from '@/providers/AuthProvider';
@@ -103,6 +107,10 @@ function formatDateForDisplay(value: string): string {
 export default function TrainerQualificationsScreen() {
   const { colors, spacing } = useTrainrTheme();
   const { user } = useAuth();
+  const insets = useSafeAreaInsets();
+
+  // Reserve space for the floating NativeTabs bar and bottom safe area.
+  const bottomContentPadding = spacing.xxxl + insets.bottom + 100;
 
   const [records, setRecords] = useState<TrainerQualification[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -110,21 +118,26 @@ export default function TrainerQualificationsScreen() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [uploadingId, setUploadingId] = useState<string | null>(null);
   const [viewingId, setViewingId] = useState<string | null>(null);
-  const [removingCertificateId, setRemovingCertificateId] = useState<string | null>(null);
+  const [removingCertificateId, setRemovingCertificateId] =
+    useState<string | null>(null);
 
   const [isModalVisible, setIsModalVisible] = useState(false);
-  const [editingRecord, setEditingRecord] = useState<TrainerQualification | null>(null);
+  const [editingRecord, setEditingRecord] =
+    useState<TrainerQualification | null>(null);
 
   const [formValues, setFormValues] =
     useState<TrainerQualificationFormValues>(INITIAL_FORM);
 
-  const [fieldErrors, setFieldErrors] = useState<Partial<Record<FormField, string>>>({});
+  const [fieldErrors, setFieldErrors] = useState<
+    Partial<Record<FormField, string>>
+  >({});
 
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   // Native date picker state
-  const [datePickerField, setDatePickerField] = useState<DateField | null>(null);
+  const [datePickerField, setDatePickerField] =
+    useState<DateField | null>(null);
 
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [isIOSDatePickerVisible, setIsIOSDatePickerVisible] = useState(false);
@@ -152,7 +165,9 @@ export default function TrainerQualificationsScreen() {
     } catch (error) {
       console.error('[Trainer Qualifications] Failed to load:', error);
 
-      setErrorMessage('Unable to load your qualifications. Please try again.');
+      setErrorMessage(
+        'Unable to load your qualifications. Please try again.',
+      );
     } finally {
       setIsLoading(false);
     }
@@ -179,7 +194,9 @@ export default function TrainerQualificationsScreen() {
         console.error('[Trainer Qualifications] Failed to load:', error);
 
         if (isActive) {
-          setErrorMessage('Unable to load your qualifications. Please try again.');
+          setErrorMessage(
+            'Unable to load your qualifications. Please try again.',
+          );
         }
       } finally {
         if (isActive) {
@@ -349,7 +366,11 @@ export default function TrainerQualificationsScreen() {
 
     try {
       if (editingRecord) {
-        await updateTrainerQualification(user.id, editingRecord.id, result.data);
+        await updateTrainerQualification(
+          user.id,
+          editingRecord.id,
+          result.data,
+        );
       } else {
         await createTrainerQualification(user.id, result.data);
       }
@@ -366,7 +387,9 @@ export default function TrainerQualificationsScreen() {
       setIsIOSDatePickerVisible(false);
 
       setSuccessMessage(
-        editingRecord ? 'Your record has been updated.' : 'Your record has been added.',
+        editingRecord
+          ? 'Your record has been updated.'
+          : 'Your record has been added.',
       );
     } catch (error) {
       console.error('[Trainer Qualifications] Failed to save:', error);
@@ -410,7 +433,10 @@ export default function TrainerQualificationsScreen() {
 
               setSuccessMessage('Your record has been deleted.');
             } catch (error) {
-              console.error('[Trainer Qualifications] Failed to delete:', error);
+              console.error(
+                '[Trainer Qualifications] Failed to delete:',
+                error,
+              );
 
               setErrorMessage(
                 error instanceof Error
@@ -458,7 +484,9 @@ export default function TrainerQualificationsScreen() {
           style={{
             minHeight: options?.multiline ? 90 : 54,
             borderWidth: 1,
-            borderColor: fieldErrors[field] ? colors.text.error : colors.border.default,
+            borderColor: fieldErrors[field]
+              ? colors.text.error
+              : colors.border.default,
             borderRadius: 12,
             paddingHorizontal: spacing.md,
             paddingVertical: spacing.md,
@@ -503,7 +531,9 @@ export default function TrainerQualificationsScreen() {
             alignItems: 'center',
             justifyContent: 'space-between',
             borderWidth: 1,
-            borderColor: fieldErrors[field] ? colors.text.error : colors.border.default,
+            borderColor: fieldErrors[field]
+              ? colors.text.error
+              : colors.border.default,
             borderRadius: 12,
             paddingHorizontal: spacing.md,
             backgroundColor: colors.background.secondary,
@@ -590,15 +620,19 @@ export default function TrainerQualificationsScreen() {
                   justifyContent: 'center',
                   borderRadius: 12,
                   borderWidth: 1,
-                  borderColor: selected ? colors.brand.red : colors.border.default,
+                  borderColor: selected
+                    ? colors.brand.red
+                    : colors.border.default,
                   backgroundColor: selected
-                    ? colors.brand.redLight
-                    : colors.background.secondary,
+                    ? colors.background.secondary
+                    : colors.background.primary,
                 }}
               >
                 <AppText
                   variant="button"
-                  color={selected ? colors.brand.red : colors.text.secondary}
+                  color={
+                    selected ? colors.brand.red : colors.text.secondary
+                  }
                 >
                   {category.label}
                 </AppText>
@@ -615,7 +649,12 @@ export default function TrainerQualificationsScreen() {
   // --------------------------------------------------
 
   async function handleUploadCertificate(record: TrainerQualification) {
-    if (!user?.id || uploadingId || viewingId || removingCertificateId) {
+    if (
+      !user?.id ||
+      uploadingId ||
+      viewingId ||
+      removingCertificateId
+    ) {
       return;
     }
 
@@ -640,14 +679,21 @@ export default function TrainerQualificationsScreen() {
 
       uploadedPath = await uploadTrainerCertificate(user.id, asset);
 
-      await attachTrainerCertificate(user.id, record.id, uploadedPath);
+      await attachTrainerCertificate(
+        user.id,
+        record.id,
+        uploadedPath,
+      );
 
       // The new certificate is attached. Keep it if later cleanup fails.
       const newCertificatePath = uploadedPath;
       uploadedPath = null;
 
       // Remove the previous file only after the new file is attached.
-      if (record.certificate_path && record.certificate_path !== newCertificatePath) {
+      if (
+        record.certificate_path &&
+        record.certificate_path !== newCertificatePath
+      ) {
         try {
           await deleteTrainerCertificateFile(record.certificate_path);
         } catch (cleanupError) {
@@ -662,7 +708,10 @@ export default function TrainerQualificationsScreen() {
       setRecords(updatedRecords);
       setSuccessMessage('Certificate uploaded successfully.');
     } catch (error) {
-      console.error('[Trainer Qualifications] Certificate upload failed:', error);
+      console.error(
+        '[Trainer Qualifications] Certificate upload failed:',
+        error,
+      );
 
       // If attaching failed, remove the newly uploaded orphaned file.
       if (uploadedPath) {
@@ -687,7 +736,12 @@ export default function TrainerQualificationsScreen() {
   }
 
   async function handleViewCertificate(record: TrainerQualification) {
-    if (!record.certificate_path || viewingId || uploadingId || removingCertificateId) {
+    if (
+      !record.certificate_path ||
+      viewingId ||
+      uploadingId ||
+      removingCertificateId
+    ) {
       return;
     }
 
@@ -695,13 +749,20 @@ export default function TrainerQualificationsScreen() {
     setErrorMessage(null);
 
     try {
-      const signedUrl = await getTrainerCertificateUrl(record.certificate_path);
+      const signedUrl = await getTrainerCertificateUrl(
+        record.certificate_path,
+      );
 
       await Linking.openURL(signedUrl);
     } catch (error) {
-      console.error('[Trainer Qualifications] Certificate viewing failed:', error);
+      console.error(
+        '[Trainer Qualifications] Certificate viewing failed:',
+        error,
+      );
 
-      setErrorMessage('Unable to open this certificate. Please try again.');
+      setErrorMessage(
+        'Unable to open this certificate. Please try again.',
+      );
     } finally {
       setViewingId(null);
     }
@@ -722,7 +783,12 @@ export default function TrainerQualificationsScreen() {
           text: 'Remove',
           style: 'destructive',
           onPress: async () => {
-            if (!user?.id || removingCertificateId || uploadingId || viewingId) {
+            if (
+              !user?.id ||
+              removingCertificateId ||
+              uploadingId ||
+              viewingId
+            ) {
               return;
             }
 
@@ -733,7 +799,9 @@ export default function TrainerQualificationsScreen() {
             try {
               await removeTrainerCertificate(user.id, record.id);
 
-              const updatedRecords = await getTrainerQualifications(user.id);
+              const updatedRecords = await getTrainerQualifications(
+                user.id,
+              );
               setRecords(updatedRecords);
 
               setSuccessMessage('Certificate removed successfully.');
@@ -761,6 +829,7 @@ export default function TrainerQualificationsScreen() {
     const isUploading = uploadingId === record.id;
     const isViewing = viewingId === record.id;
     const isRemoving = removingCertificateId === record.id;
+
     const isBusy =
       isUploading ||
       isViewing ||
@@ -774,7 +843,10 @@ export default function TrainerQualificationsScreen() {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={`Upload certificate for ${record.qualification_name}`}
-          accessibilityState={{ disabled: isBusy, busy: isUploading }}
+          accessibilityState={{
+            disabled: isBusy,
+            busy: isUploading,
+          }}
           disabled={isBusy}
           onPress={() => void handleUploadCertificate(record)}
           style={{
@@ -787,7 +859,10 @@ export default function TrainerQualificationsScreen() {
           }}
         >
           {isUploading ? (
-            <ActivityIndicator size="small" color={colors.brand.red} />
+            <ActivityIndicator
+              size="small"
+              color={colors.brand.red}
+            />
           ) : (
             <Upload size={16} color={colors.brand.red} />
           )}
@@ -816,7 +891,10 @@ export default function TrainerQualificationsScreen() {
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={`View certificate for ${record.qualification_name}`}
-            accessibilityState={{ disabled: isBusy, busy: isViewing }}
+            accessibilityState={{
+              disabled: isBusy,
+              busy: isViewing,
+            }}
             disabled={isBusy}
             onPress={() => void handleViewCertificate(record)}
             style={{
@@ -828,7 +906,10 @@ export default function TrainerQualificationsScreen() {
             }}
           >
             {isViewing ? (
-              <ActivityIndicator size="small" color={colors.brand.red} />
+              <ActivityIndicator
+                size="small"
+                color={colors.brand.red}
+              />
             ) : (
               <Eye size={16} color={colors.brand.red} />
             )}
@@ -841,7 +922,10 @@ export default function TrainerQualificationsScreen() {
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={`Replace certificate for ${record.qualification_name}`}
-            accessibilityState={{ disabled: isBusy, busy: isUploading }}
+            accessibilityState={{
+              disabled: isBusy,
+              busy: isUploading,
+            }}
             disabled={isBusy}
             onPress={() => void handleUploadCertificate(record)}
             style={{
@@ -853,7 +937,10 @@ export default function TrainerQualificationsScreen() {
             }}
           >
             {isUploading ? (
-              <ActivityIndicator size="small" color={colors.brand.red} />
+              <ActivityIndicator
+                size="small"
+                color={colors.brand.red}
+              />
             ) : (
               <Upload size={16} color={colors.brand.red} />
             )}
@@ -866,7 +953,10 @@ export default function TrainerQualificationsScreen() {
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={`Remove certificate for ${record.qualification_name}`}
-            accessibilityState={{ disabled: isBusy, busy: isRemoving }}
+            accessibilityState={{
+              disabled: isBusy,
+              busy: isRemoving,
+            }}
             disabled={isBusy}
             onPress={() => confirmRemoveCertificate(record)}
             style={{
@@ -878,7 +968,10 @@ export default function TrainerQualificationsScreen() {
             }}
           >
             {isRemoving ? (
-              <ActivityIndicator size="small" color={colors.text.error} />
+              <ActivityIndicator
+                size="small"
+                color={colors.text.error}
+              />
             ) : (
               <Trash2 size={16} color={colors.text.error} />
             )}
@@ -987,7 +1080,10 @@ export default function TrainerQualificationsScreen() {
             }}
           >
             {deletingId === record.id ? (
-              <ActivityIndicator size="small" color={colors.text.error} />
+              <ActivityIndicator
+                size="small"
+                color={colors.text.error}
+              />
             ) : (
               <Trash2 size={16} color={colors.text.error} />
             )}
@@ -1010,7 +1106,9 @@ export default function TrainerQualificationsScreen() {
     title: string,
     description: string,
   ) {
-    const sectionRecords = records.filter((record) => record.category === category);
+    const sectionRecords = records.filter(
+      (record) => record.category === category,
+    );
 
     return (
       <View style={{ gap: spacing.md }}>
@@ -1025,7 +1123,9 @@ export default function TrainerQualificationsScreen() {
         </View>
 
         {sectionRecords.length > 0 ? (
-          <View style={{ gap: spacing.md }}>{sectionRecords.map(renderRecord)}</View>
+          <View style={{ gap: spacing.md }}>
+            {sectionRecords.map(renderRecord)}
+          </View>
         ) : (
           <View
             style={{
@@ -1038,12 +1138,16 @@ export default function TrainerQualificationsScreen() {
             }}
           >
             <AppText variant="body" color={colors.text.secondary}>
-              No {category === 'qualification' ? 'qualifications' : 'certifications'}{' '}
+              No{' '}
+              {category === 'qualification'
+                ? 'qualifications'
+                : 'certifications'}{' '}
               added yet.
             </AppText>
 
             <AppText variant="caption" color={colors.text.tertiary}>
-              Add your details to help gym-goers understand your professional background.
+              Add your details to help gym-goers understand your
+              professional background.
             </AppText>
           </View>
         )}
@@ -1068,7 +1172,10 @@ export default function TrainerQualificationsScreen() {
           <Plus size={18} color={colors.brand.red} />
 
           <AppText variant="button" color={colors.brand.red}>
-            ADD {category === 'qualification' ? 'QUALIFICATION' : 'CERTIFICATION'}
+            ADD{' '}
+            {category === 'qualification'
+              ? 'QUALIFICATION'
+              : 'CERTIFICATION'}
           </AppText>
         </Pressable>
       </View>
@@ -1087,53 +1194,65 @@ export default function TrainerQualificationsScreen() {
         backgroundColor: colors.background.primary,
       }}
     >
-      <ScrollView
-        contentContainerStyle={{
-          padding: spacing.lg,
-          paddingBottom: spacing.xxl,
-          gap: spacing.lg,
+      {/* Header - Consistent with Trainer Specialities */}
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          paddingHorizontal: spacing.lg,
+          paddingVertical: spacing.md,
+          gap: spacing.md,
         }}
-        showsVerticalScrollIndicator={false}
       >
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Go back"
           onPress={() => router.back()}
           style={{
-            alignSelf: 'flex-start',
-            paddingVertical: spacing.xs,
+            width: 42,
+            height: 42,
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderRadius: 12,
+            borderWidth: 1,
+            borderColor: colors.border.default,
           }}
         >
-          <View
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: spacing.xs,
-            }}
-          >
-            <ArrowLeft size={18} color={colors.brand.red} />
-
-            <AppText variant="button" color={colors.brand.red}>
-              BACK
-            </AppText>
-          </View>
+          <ArrowLeft size={20} color={colors.text.primary} />
         </Pressable>
 
+        <AppText variant="h2" color={colors.text.primary}>
+          Qualifications
+        </AppText>
+      </View>
+
+      {/* Main Content */}
+      <ScrollView
+        contentContainerStyle={{
+          padding: spacing.lg,
+          paddingBottom: bottomContentPadding,
+          gap: spacing.lg,
+        }}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Introduction */}
         <View style={{ gap: spacing.sm }}>
           <AppText variant="caption" color={colors.brand.red}>
             TRAINER PROFILE
           </AppText>
 
           <AppText variant="h1" color={colors.text.primary}>
-            Qualifications.
+            Manage your credentials.
           </AppText>
 
           <AppText variant="body" color={colors.text.secondary}>
-            Showcase your professional education, qualifications and certifications. Keep
-            your credentials up to date.
+            Showcase your professional education, qualifications and
+            certifications. Keep your credentials up to date to help
+            gym-goers understand your experience and expertise.
           </AppText>
         </View>
 
+        {/* Error Message */}
         {errorMessage ? (
           <View
             accessibilityRole="alert"
@@ -1142,6 +1261,8 @@ export default function TrainerQualificationsScreen() {
               borderRadius: 12,
               borderWidth: 1,
               borderColor: colors.text.error,
+              backgroundColor: colors.background.secondary,
+              gap: spacing.sm,
             }}
           >
             <AppText variant="bodySmall" color={colors.text.error}>
@@ -1153,7 +1274,7 @@ export default function TrainerQualificationsScreen() {
               onPress={() => void loadRecords()}
               style={{
                 alignSelf: 'flex-start',
-                paddingTop: spacing.sm,
+                paddingTop: spacing.xs,
               }}
             >
               <AppText variant="button" color={colors.brand.red}>
@@ -1163,16 +1284,23 @@ export default function TrainerQualificationsScreen() {
           </View>
         ) : null}
 
+        {/* Success Message */}
         {successMessage ? (
-          <AppText
-            variant="bodySmall"
-            color={colors.text.secondary}
+          <View
             accessibilityRole="alert"
+            style={{
+              padding: spacing.md,
+              borderRadius: 12,
+              backgroundColor: colors.background.secondary,
+            }}
           >
-            {successMessage}
-          </AppText>
+            <AppText variant="bodySmall" color={colors.brand.red}>
+              {successMessage}
+            </AppText>
+          </View>
         ) : null}
 
+        {/* Loading State */}
         {isLoading ? (
           <View
             style={{
@@ -1190,9 +1318,10 @@ export default function TrainerQualificationsScreen() {
           </View>
         ) : (
           <>
+            {/* Qualifications */}
             {renderSection(
               'qualification',
-              'QUALIFICATIONS.',
+              'QUALIFICATIONS',
               'Add your education, professional training and relevant qualifications.',
             )}
 
@@ -1203,9 +1332,10 @@ export default function TrainerQualificationsScreen() {
               }}
             />
 
+            {/* Certifications */}
             {renderSection(
               'certification',
-              'CERTIFICATIONS.',
+              'CERTIFICATIONS',
               'List your professional certifications and recognised training credentials.',
             )}
           </>
@@ -1239,6 +1369,7 @@ export default function TrainerQualificationsScreen() {
               }}
               showsVerticalScrollIndicator={false}
             >
+              {/* Modal Introduction */}
               <View style={{ gap: spacing.xs }}>
                 <AppText variant="caption" color={colors.brand.red}>
                   TRAINER PROFILE
@@ -1273,70 +1404,82 @@ export default function TrainerQualificationsScreen() {
 
               {renderDateField('expiryDate')}
 
-              {/* iOS native picker - inside the existing form modal */}
-              {Platform.OS === 'ios' && isIOSDatePickerVisible && datePickerField && (
-                <View
-                  style={{
-                    padding: spacing.md,
-                    borderRadius: 12,
-                    borderWidth: 1,
-                    borderColor: colors.border.default,
-                    backgroundColor: colors.background.secondary,
-                    gap: spacing.sm,
-                  }}
-                >
-                  <AppText variant="body" color={colors.text.primary}>
-                    Select {DATE_FIELD_LABELS[datePickerField].toLowerCase()}
-                  </AppText>
-
-                  <DateTimePicker
-                    value={selectedDate}
-                    mode="date"
-                    display="spinner"
-                    onValueChange={handleDateValueChange}
-                    onDismiss={handleDateDismiss}
-                    style={{ alignSelf: 'stretch' }}
-                  />
-
+              {/* iOS Native Date Picker */}
+              {Platform.OS === 'ios' &&
+                isIOSDatePickerVisible &&
+                datePickerField && (
                   <View
                     style={{
-                      flexDirection: 'row',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
+                      padding: spacing.md,
+                      borderRadius: 12,
+                      borderWidth: 1,
+                      borderColor: colors.border.default,
+                      backgroundColor: colors.background.secondary,
+                      gap: spacing.sm,
                     }}
                   >
-                    <Pressable
-                      accessibilityRole="button"
-                      onPress={() => {
-                        if (datePickerField) {
-                          clearDate(datePickerField);
-                        }
-                      }}
-                      style={{ padding: spacing.sm }}
-                    >
-                      <AppText variant="button" color={colors.text.error}>
-                        CLEAR
-                      </AppText>
-                    </Pressable>
+                    <AppText variant="body" color={colors.text.primary}>
+                      Select{' '}
+                      {DATE_FIELD_LABELS[
+                        datePickerField
+                      ].toLowerCase()}
+                    </AppText>
 
-                    <Pressable
-                      accessibilityRole="button"
-                      onPress={confirmIOSDate}
-                      style={{ padding: spacing.sm }}
+                    <DateTimePicker
+                      value={selectedDate}
+                      mode="date"
+                      display="spinner"
+                      onValueChange={handleDateValueChange}
+                      onDismiss={handleDateDismiss}
+                      style={{ alignSelf: 'stretch' }}
+                    />
+
+                    <View
+                      style={{
+                        flexDirection: 'row',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                      }}
                     >
-                      <AppText variant="button" color={colors.brand.red}>
-                        DONE
-                      </AppText>
-                    </Pressable>
+                      <Pressable
+                        accessibilityRole="button"
+                        onPress={() => {
+                          if (datePickerField) {
+                            clearDate(datePickerField);
+                          }
+                        }}
+                        style={{ padding: spacing.sm }}
+                      >
+                        <AppText
+                          variant="button"
+                          color={colors.text.error}
+                        >
+                          CLEAR
+                        </AppText>
+                      </Pressable>
+
+                      <Pressable
+                        accessibilityRole="button"
+                        onPress={confirmIOSDate}
+                        style={{ padding: spacing.sm }}
+                      >
+                        <AppText
+                          variant="button"
+                          color={colors.brand.red}
+                        >
+                          DONE
+                        </AppText>
+                      </Pressable>
+                    </View>
                   </View>
-                </View>
-              )}
+                )}
 
               <AppText variant="caption" color={colors.text.tertiary}>
-                Select dates using your device&apos;s native date picker. Expiry date is
-                optional.
+                Select dates using your device&apos;s native date picker.
+                Expiry date is optional.
               </AppText>
 
+              {/* Modal Error */}
               {errorMessage ? (
                 <AppText
                   variant="bodySmall"
@@ -1347,6 +1490,7 @@ export default function TrainerQualificationsScreen() {
                 </AppText>
               ) : null}
 
+              {/* Save Button */}
               <Pressable
                 accessibilityRole="button"
                 accessibilityState={{
@@ -1373,6 +1517,7 @@ export default function TrainerQualificationsScreen() {
                 )}
               </Pressable>
 
+              {/* Cancel Button */}
               <Pressable
                 accessibilityRole="button"
                 disabled={isSaving}
@@ -1392,16 +1537,18 @@ export default function TrainerQualificationsScreen() {
         </SafeAreaView>
       </Modal>
 
-      {/* Android native date dialog */}
-      {Platform.OS === 'android' && isModalVisible && datePickerField && (
-        <DateTimePicker
-          value={selectedDate}
-          mode="date"
-          display="default"
-          onValueChange={handleDateValueChange}
-          onDismiss={handleDateDismiss}
-        />
-      )}
+      {/* Android Native Date Dialog */}
+      {Platform.OS === 'android' &&
+        isModalVisible &&
+        datePickerField && (
+          <DateTimePicker
+            value={selectedDate}
+            mode="date"
+            display="default"
+            onValueChange={handleDateValueChange}
+            onDismiss={handleDateDismiss}
+          />
+        )}
     </SafeAreaView>
   );
 }
