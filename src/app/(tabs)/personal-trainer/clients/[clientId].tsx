@@ -24,11 +24,6 @@ import {
 import { getPublishedWorkoutPlans, type WorkoutPlan } from '@/services/workout-plans';
 
 import {
-    getClientFitnessProgress,
-    type FitnessProgress,
-} from '@/services/fitness-progress';
-
-import {
     createTrainerFeedback,
     getTrainerFeedback,
     updateTrainerFeedback,
@@ -52,11 +47,6 @@ type ClientProfile = {
   id: string;
   first_name: string | null;
   last_name: string | null;
-};
-
-type FitnessGoal = {
-  user_id: string;
-  goal: string;
 };
 
 type ClientBooking = {
@@ -84,30 +74,18 @@ type ClientPayment = {
 };
 
 type ClientDetailTab =
-  'overview' | 'sessions' | 'payments' | 'programmes' | 'fitness' | 'feedback';
+  'overview' | 'sessions' | 'payments' | 'programmes' | 'feedback';
 
 type ClientDetails = {
   profile: ClientProfile;
-  goals: FitnessGoal[];
   bookings: ClientBooking[];
   payments: ClientPayment[];
   assignments: WorkoutAssignment[];
-  fitnessProgress: FitnessProgress[];
   feedback: TrainerFeedback[];
   sessionNotes: TrainerSessionNote[];
 };
 
 const DEFAULT_TIMEZONE = 'Africa/Lagos';
-
-const FITNESS_GOAL_LABELS: Record<string, string> = {
-  build_muscle: 'Build muscle',
-  lose_weight: 'Lose weight',
-  improve_fitness: 'Improve fitness',
-  increase_strength: 'Increase strength',
-  improve_endurance: 'Improve endurance',
-  improve_health: 'Improve general health',
-  sports_performance: 'Sports performance',
-};
 
 const BOOKING_STATUS_LABELS: Record<BookingStatus, string> = {
   pending: 'Pending',
@@ -172,10 +150,6 @@ function formatMoney(amount: number, currency: string) {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
-}
-
-function getGoalLabel(goal: string) {
-  return FITNESS_GOAL_LABELS[goal] ?? goal.replace(/_/g, ' ');
 }
 
 function getSnapshotPlanName(snapshot: Record<string, unknown>) {
@@ -273,11 +247,9 @@ export default function ClientDetailScreen() {
       try {
         const [
           { data: profileRow, error: profileError },
-          { data: goalRows, error: goalsError },
           { data: bookingRows, error: bookingsError },
           { data: paymentRows, error: paymentsError },
           assignments,
-          fitnessProgress,
           feedback,
           sessionNotes,
         ] = await Promise.all([
@@ -286,11 +258,6 @@ export default function ClientDetailScreen() {
             .select('id, first_name, last_name')
             .eq('id', clientId)
             .maybeSingle(),
-
-          supabase
-            .from('gym_goer_fitness_goals')
-            .select('user_id, goal')
-            .eq('user_id', clientId),
 
           supabase
             .from('trainer_bookings')
@@ -306,13 +273,11 @@ export default function ClientDetailScreen() {
           }),
 
           getClientWorkoutAssignments(clientId),
-          getClientFitnessProgress(clientId),
           getTrainerFeedback(clientId),
           getTrainerSessionNotes(clientId),
         ]);
 
         if (profileError) throw profileError;
-        if (goalsError) throw goalsError;
         if (bookingsError) throw bookingsError;
         if (paymentsError) throw paymentsError;
 
@@ -334,11 +299,9 @@ export default function ClientDetailScreen() {
 
         setDetails({
           profile: profileRow as ClientProfile,
-          goals: (goalRows ?? []) as FitnessGoal[],
           bookings,
           payments: clientPayments,
           assignments,
-          fitnessProgress,
           feedback,
           sessionNotes,
         });
@@ -764,7 +727,6 @@ export default function ClientDetailScreen() {
                     { key: 'sessions', label: 'Sessions' },
                     { key: 'payments', label: 'Payments' },
                     { key: 'programmes', label: 'Programmes' },
-                    { key: 'fitness', label: 'Fitness Progress' },
                     { key: 'feedback', label: 'Feedback' },
                   ] as const
                 ).map((tab) => {
@@ -803,47 +765,6 @@ export default function ClientDetailScreen() {
             {/* Overview tab */}
             {activeTab === 'overview' && (
               <>
-                {/* Fitness goals */}
-                <View
-                  style={{
-                    padding: spacing.md,
-                    borderRadius: 18,
-                    borderWidth: 1,
-                    borderColor: colors.border.default,
-                    backgroundColor: colors.background.secondary,
-                    gap: spacing.sm,
-                  }}
-                >
-                  <AppText variant="h3" color={colors.text.primary}>
-                    FITNESS GOALS
-                  </AppText>
-
-                  {details.goals.length === 0 ? (
-                    <AppText variant="body" color={colors.text.secondary}>
-                      This client hasn&apos;t added any fitness goals yet.
-                    </AppText>
-                  ) : (
-                    <View
-                      style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}
-                    >
-                      {details.goals.map((item, index) => (
-                        <View
-                          key={`${item.goal}-${index}`}
-                          style={{
-                            paddingHorizontal: spacing.md,
-                            paddingVertical: spacing.sm,
-                            borderRadius: 999,
-                            backgroundColor: colors.brand.redLight,
-                          }}
-                        >
-                          <AppText variant="bodySmall" color={colors.brand.red}>
-                            {getGoalLabel(item.goal)}
-                          </AppText>
-                        </View>
-                      ))}
-                    </View>
-                  )}
-                </View>
               </>
             )}
 
@@ -1430,149 +1351,6 @@ export default function ClientDetailScreen() {
                     </View>
                   ))
                 )}
-              </View>
-            )}
-
-            {/* Fitness Progress tab */}
-            {activeTab === 'fitness' && (
-              <View style={{ gap: spacing.md }}>
-                <AppText variant="h3" color={colors.text.primary}>
-                  FITNESS PROGRESS
-                </AppText>
-
-                {(() => {
-                  const measurements = [...details.fitnessProgress].sort(
-                    (a, b) =>
-                      new Date(b.recorded_at).getTime() -
-                      new Date(a.recorded_at).getTime(),
-                  );
-
-                  const weightRecords = measurements.filter(
-                    (item) => item.metric_type === 'body_weight',
-                  );
-
-                  const latestWeight = weightRecords[0];
-                  const previousWeight = weightRecords[1];
-
-                  const metricLabels: Record<string, string> = {
-                    body_weight: 'Body weight',
-                    body_fat: 'Body fat',
-                    waist: 'Waist',
-                    chest: 'Chest',
-                    hips: 'Hips',
-                    arm: 'Arm',
-                    thigh: 'Thigh',
-                  };
-
-                  return (
-                    <>
-                      <View
-                        style={{
-                          padding: spacing.md,
-                          borderRadius: 16,
-                          borderWidth: 1,
-                          borderColor: colors.border.default,
-                          backgroundColor: colors.background.secondary,
-                          gap: spacing.sm,
-                        }}
-                      >
-                        <AppText variant="caption" color={colors.text.secondary}>
-                          CURRENT BODY WEIGHT
-                        </AppText>
-
-                        {latestWeight ? (
-                          <>
-                            <AppText variant="h2" color={colors.text.primary}>
-                              {latestWeight.value.toLocaleString('en-GB', {
-                                maximumFractionDigits: 2,
-                              })}{' '}
-                              {latestWeight.unit}
-                            </AppText>
-
-                            <AppText variant="caption" color={colors.text.tertiary}>
-                              Recorded {formatDate(latestWeight.recorded_at)}
-                            </AppText>
-
-                            {previousWeight &&
-                            previousWeight.unit === latestWeight.unit ? (
-                              <AppText variant="bodySmall" color={colors.text.secondary}>
-                                {`${latestWeight.value - previousWeight.value > 0 ? '+' : ''}${(latestWeight.value - previousWeight.value).toFixed(2)} ${latestWeight.unit} since the previous measurement`}
-                              </AppText>
-                            ) : null}
-                          </>
-                        ) : (
-                          <AppText variant="body" color={colors.text.secondary}>
-                            No body weight measurements have been recorded.
-                          </AppText>
-                        )}
-                      </View>
-
-                      <AppText variant="h3" color={colors.text.primary}>
-                        MEASUREMENT HISTORY
-                      </AppText>
-
-                      {measurements.length === 0 ? (
-                        <View
-                          style={{
-                            padding: spacing.lg,
-                            borderRadius: 16,
-                            borderWidth: 1,
-                            borderColor: colors.border.default,
-                            backgroundColor: colors.background.secondary,
-                          }}
-                        >
-                          <AppText variant="body" color={colors.text.secondary}>
-                            This client hasn&apos;t recorded any fitness measurements yet.
-                          </AppText>
-                        </View>
-                      ) : (
-                        measurements.map((item) => (
-                          <View
-                            key={item.id}
-                            style={{
-                              padding: spacing.md,
-                              borderRadius: 16,
-                              borderWidth: 1,
-                              borderColor: colors.border.default,
-                              backgroundColor: colors.background.secondary,
-                              gap: spacing.xs,
-                            }}
-                          >
-                            <View
-                              style={{
-                                flexDirection: 'row',
-                                justifyContent: 'space-between',
-                                alignItems: 'center',
-                                gap: spacing.sm,
-                              }}
-                            >
-                              <AppText variant="body" color={colors.text.primary}>
-                                {metricLabels[item.metric_type] ?? item.metric_type}
-                              </AppText>
-
-                              <AppText variant="body" color={colors.text.primary}>
-                                {item.value.toLocaleString('en-GB', {
-                                  maximumFractionDigits: 2,
-                                })}{' '}
-                                {item.unit}
-                              </AppText>
-                            </View>
-
-                            <AppText variant="caption" color={colors.text.tertiary}>
-                              {formatDate(item.recorded_at)}
-                            </AppText>
-
-                            {item.notes ? (
-                              <AppText variant="bodySmall" color={colors.text.secondary}>
-                                {item.notes}
-                              </AppText>
-                            ) : null}
-                          </View>
-                        ))
-                      )}
-                    </>
-                  );
-                })()}
               </View>
             )}
 

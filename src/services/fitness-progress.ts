@@ -1,14 +1,7 @@
-
 import { supabase } from '@/lib/supabase';
 
 export type FitnessMetricType =
-  | 'body_weight'
-  | 'body_fat'
-  | 'waist'
-  | 'chest'
-  | 'hips'
-  | 'arm'
-  | 'thigh';
+  'body_weight' | 'body_fat' | 'waist' | 'chest' | 'hips' | 'arm' | 'thigh';
 
 export type FitnessMetricUnit = 'kg' | 'lb' | '%' | 'cm' | 'in';
 
@@ -59,13 +52,7 @@ const VALID_METRICS: FitnessMetricType[] = [
   'thigh',
 ];
 
-const VALID_UNITS: FitnessMetricUnit[] = [
-  'kg',
-  'lb',
-  '%',
-  'cm',
-  'in',
-];
+const VALID_UNITS: FitnessMetricUnit[] = ['kg', 'lb', '%', 'cm', 'in'];
 
 function validateMeasurement({
   metricType,
@@ -86,11 +73,7 @@ function validateMeasurement({
     throw new Error('Please select a valid measurement unit.');
   }
 
-  if (
-    metricType === 'body_weight' &&
-    unit !== 'kg' &&
-    unit !== 'lb'
-  ) {
+  if (metricType === 'body_weight' && unit !== 'kg' && unit !== 'lb') {
     throw new Error('Body weight must use kg or lb.');
   }
 
@@ -240,30 +223,25 @@ export async function createFitnessProgress(
 }
 
 /**
- * Updates an existing body-weight record.
- * The database RLS policy enforces ownership and gym-goer permissions.
+ * Updates any fitness measurement belonging to the authenticated user.
+ * The measurement type and unit are validated together.
  */
-export async function updateBodyWeight(
+export async function updateFitnessProgress(
   progressId: string,
-  input: BodyWeightInput,
+  input: CreateFitnessProgressInput,
 ): Promise<FitnessProgress> {
-  if (!progressId.trim()) {
-    throw new Error('A valid weight record is required.');
+  if (!progressId?.trim()) {
+    throw new Error('A valid fitness measurement is required.');
   }
 
-  validateMeasurement({
-    metricType: 'body_weight',
-    value: input.value,
-    unit: input.unit,
-    recordedAt: input.recordedAt,
-    notes: input.notes,
-  });
+  validateMeasurement(input);
 
   const user = await getAuthenticatedUser();
 
   const { data, error } = await supabase
     .from('fitness_progress')
     .update({
+      metric_type: input.metricType,
       value: input.value,
       unit: input.unit,
       recorded_at: new Date(input.recordedAt).toISOString(),
@@ -271,49 +249,62 @@ export async function updateBodyWeight(
     })
     .eq('id', progressId)
     .eq('user_id', user.id)
-    .eq('metric_type', 'body_weight')
     .select(FITNESS_PROGRESS_COLUMNS)
-    .single();
+    .maybeSingle();
 
   if (error) {
-    console.error('[Fitness Progress] Unable to update weight:', error);
-    throw new Error('Unable to update your weight. Please try again.');
+    console.error('[Fitness Progress] Unable to update measurement:', error);
+    throw new Error('Unable to update your measurement. Please try again.');
+  }
+
+  if (!data) {
+    throw new Error('Fitness measurement not found.');
   }
 
   return data as unknown as FitnessProgress;
 }
 
 /**
- * Retrieves a client's fitness measurements for the authenticated trainer.
- * Trainer access is enforced by database RLS and requires a confirmed
- * trainer-client booking relationship.
- * Results are ordered from newest to oldest.
+ * Maintains compatibility with existing body-weight update callers.
  */
-export async function getClientFitnessProgress(
-  gymGoerId: string,
-): Promise<FitnessProgress[]> {
-  if (!gymGoerId.trim()) {
-    throw new Error('A valid client is required.');
+export async function updateBodyWeight(
+  progressId: string,
+  input: BodyWeightInput,
+): Promise<FitnessProgress> {
+  return updateFitnessProgress(progressId, {
+    metricType: 'body_weight',
+    value: input.value,
+    unit: input.unit,
+    recordedAt: input.recordedAt,
+    notes: input.notes,
+  });
+}
+
+/**
+ * Deletes a fitness measurement belonging to the authenticated user.
+ * Database RLS independently enforces ownership.
+ */
+export async function deleteFitnessProgress(progressId: string): Promise<void> {
+  if (!progressId?.trim()) {
+    throw new Error('A valid fitness measurement is required.');
   }
 
-  await getAuthenticatedUser();
+  const user = await getAuthenticatedUser();
 
   const { data, error } = await supabase
     .from('fitness_progress')
-    .select(FITNESS_PROGRESS_COLUMNS)
-    .eq('user_id', gymGoerId)
-    .order('recorded_at', { ascending: false })
-    .order('created_at', { ascending: false });
+    .delete()
+    .eq('id', progressId)
+    .eq('user_id', user.id)
+    .select('id')
+    .maybeSingle();
 
   if (error) {
-    console.error(
-      '[Fitness Progress] Unable to load client measurements:',
-      error,
-    );
-    throw new Error(
-      'Unable to load this client’s fitness progress. Please try again.',
-    );
+    console.error('[Fitness Progress] Unable to delete measurement:', error);
+    throw new Error('Unable to delete your measurement. Please try again.');
   }
 
-  return (data ?? []) as unknown as FitnessProgress[];
+  if (!data) {
+    throw new Error('Fitness measurement not found.');
+  }
 }

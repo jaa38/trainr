@@ -1,5 +1,5 @@
 import { useFocusEffect, useRouter } from 'expo-router';
-import { ArrowDown, ArrowRight, ArrowUp, Minus } from 'lucide-react-native';
+import { ArrowRight } from 'lucide-react-native';
 import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
@@ -16,7 +16,6 @@ import { NotificationBell } from '@/components/notifications/NotificationBell';
 import {
   getTrainerDashboard,
   type TrainerDashboardData,
-  type TrainerDashboardProgress,
 } from '@/services/trainer-dashboard';
 import { useTrainrTheme } from '@/theme';
 
@@ -29,8 +28,6 @@ const EMPTY_DASHBOARD: TrainerDashboardData = {
   },
   timezone: 'Africa/Lagos',
   upcomingSessions: [],
-  recentWorkouts: [],
-  recentProgress: [],
 };
 
 // -----------------------------------------------------------------------------
@@ -53,42 +50,6 @@ function formatSessionTime(value: string, timezone: string) {
     hourCycle: 'h23',
     timeZone: timezone,
   });
-}
-
-function formatMetricType(value: string) {
-  return value
-    .split('_')
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(' ');
-}
-
-function formatActivityDate(value: string, timezone: string) {
-  return new Date(value).toLocaleDateString('en-GB', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-    timeZone: timezone,
-  });
-}
-
-function formatMeasurement(value: number) {
-  return Number.isInteger(value) ? String(value) : value.toFixed(1);
-}
-
-function getProgressChangeLabel(item: TrainerDashboardProgress) {
-  if (item.change === null) {
-    return 'First measurement';
-  }
-
-  if (item.change > 0) {
-    return `+${formatMeasurement(item.change)} ${item.unit}`;
-  }
-
-  if (item.change < 0) {
-    return `${formatMeasurement(item.change)} ${item.unit}`;
-  }
-
-  return 'No change';
 }
 
 // -----------------------------------------------------------------------------
@@ -166,136 +127,6 @@ function SectionHeading({
           </AppText>
         </Pressable>
       ) : null}
-    </View>
-  );
-}
-
-function ProgressCard({
-  item,
-  timezone,
-}: {
-  item: TrainerDashboardProgress;
-  timezone: string;
-}) {
-  const { colors, spacing } = useTrainrTheme();
-
-  const change = item.change;
-  const hasPreviousMeasurement = item.previous_value !== null;
-  const hasChange = change !== null;
-
-  const changeColor =
-    change === null || change === 0
-      ? colors.text.secondary
-      : change > 0
-        ? colors.brand.red
-        : colors.text.secondary;
-
-  const ChangeIcon =
-    change === null ? Minus : change > 0 ? ArrowUp : change < 0 ? ArrowDown : Minus;
-
-  return (
-    <View
-      style={{
-        padding: spacing.lg,
-        borderRadius: 16,
-        borderWidth: 1,
-        borderColor: colors.border.default,
-        backgroundColor: colors.background.secondary,
-        gap: spacing.md,
-      }}
-    >
-      {/* Client information */}
-      <View
-        style={{
-          flexDirection: 'row',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          gap: spacing.md,
-        }}
-      >
-        <View style={{ flex: 1, gap: spacing.xs }}>
-          <AppText variant="bodyMedium" color={colors.text.primary}>
-            {item.client_name}
-          </AppText>
-
-          <AppText variant="caption" color={colors.text.secondary}>
-            {formatMetricType(item.metric_type)}
-          </AppText>
-        </View>
-
-        <AppText variant="caption" color={colors.text.tertiary}>
-          {formatActivityDate(item.recorded_at, timezone)}
-        </AppText>
-      </View>
-
-      {/* Measurement comparison */}
-      <View
-        style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          gap: spacing.md,
-        }}
-      >
-        <View style={{ flex: 1, gap: spacing.xs }}>
-          <AppText variant="caption" color={colors.text.tertiary}>
-            PREVIOUS
-          </AppText>
-
-          <AppText variant="h3" color={colors.text.secondary}>
-            {hasPreviousMeasurement
-              ? `${formatMeasurement(item.previous_value!)} ${item.unit}`
-              : '--'}
-          </AppText>
-        </View>
-
-        <View
-          style={{
-            width: 1,
-            height: 42,
-            backgroundColor: colors.border.default,
-          }}
-        />
-
-        <View style={{ flex: 1, gap: spacing.xs }}>
-          <AppText variant="caption" color={colors.text.tertiary}>
-            CURRENT
-          </AppText>
-
-          <AppText variant="h2" color={colors.text.primary}>
-            {formatMeasurement(item.value)} {item.unit}
-          </AppText>
-        </View>
-      </View>
-
-      {/* Recorded change */}
-      <View
-        style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          paddingTop: spacing.md,
-          borderTopWidth: 1,
-          borderTopColor: colors.border.default,
-        }}
-      >
-        <AppText variant="caption" color={colors.text.secondary}>
-          RECORDED CHANGE
-        </AppText>
-
-        <View
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: spacing.xs,
-          }}
-        >
-          <ChangeIcon size={16} color={changeColor} />
-
-          <AppText variant="bodyMedium" color={changeColor}>
-            {getProgressChangeLabel(item)}
-          </AppText>
-        </View>
-      </View>
     </View>
   );
 }
@@ -606,103 +437,38 @@ export default function PersonalTrainerHomeScreen() {
           )}
         </View>
 
-        {/* Recent workouts */}
+        {/* Personal training */}
         <View>
-          <SectionHeading
-            title="RECENT WORKOUTS"
-            action="View clients"
-            onPress={() => navigateTo('/(tabs)/personal-trainer/clients')}
-          />
+          <SectionHeading title="MY TRAINING" />
 
-          {dashboard.recentWorkouts.length === 0 ? (
-            <View
-              style={{
-                padding: spacing.lg,
-                borderRadius: 14,
-                borderWidth: 1,
-                borderColor: colors.border.default,
-                backgroundColor: colors.background.secondary,
-              }}
-            >
-              <AppText variant="bodySmall" color={colors.text.secondary}>
-                Completed workouts linked to your assigned plans will appear here.
-              </AppText>
-            </View>
-          ) : (
-            <View style={{ gap: spacing.sm }}>
-              {dashboard.recentWorkouts.map((workout) => (
-                <View
-                  key={workout.id}
-                  style={{
-                    padding: spacing.lg,
-                    borderRadius: 14,
-                    borderWidth: 1,
-                    borderColor: colors.border.default,
-                    backgroundColor: colors.background.secondary,
-                    gap: spacing.xs,
-                  }}
-                >
-                  <AppText variant="bodyMedium" color={colors.text.primary}>
-                    {workout.client_name}
-                  </AppText>
-
-                  {(workout.day_name || workout.day_number) && (
-                    <AppText variant="caption" color={colors.text.secondary}>
-                      {workout.day_name || `Day ${workout.day_number}`}
-                    </AppText>
-                  )}
-
-                  <AppText variant="caption" color={colors.text.secondary}>
-                    {formatActivityDate(workout.started_at, dashboard.timezone)}
-                    {workout.duration_minutes
-                      ? ` · ${workout.duration_minutes} minutes`
-                      : ''}
-                  </AppText>
-
-                  <AppText variant="caption" color={colors.text.tertiary}>
-                    {workout.completed_at ? 'Completed' : 'In progress'}
-                  </AppText>
-                </View>
-              ))}
-            </View>
-          )}
-        </View>
-
-        {/* Client progress */}
-        <View>
-          <SectionHeading title="CLIENT PROGRESS" />
-
-          {dashboard.recentProgress.length === 0 ? (
-            <View
-              style={{
-                padding: spacing.lg,
-                borderRadius: 14,
-                borderWidth: 1,
-                borderColor: colors.border.default,
-                backgroundColor: colors.background.secondary,
-                gap: spacing.xs,
-              }}
-            >
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Open your personal workout and progress tracking"
+            onPress={() => navigateTo('/(tabs)/personal-workout')}
+            style={({ pressed }) => ({
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: spacing.lg,
+              borderRadius: 16,
+              borderWidth: 1,
+              borderColor: colors.border.default,
+              backgroundColor: colors.background.secondary,
+              opacity: pressed ? 0.75 : 1,
+            })}
+          >
+            <View style={{ flex: 1, gap: spacing.xs }}>
               <AppText variant="bodyMedium" color={colors.text.primary}>
-                No client measurements yet
+                Track your own fitness
               </AppText>
 
               <AppText variant="bodySmall" color={colors.text.secondary}>
-                Fitness measurements from your confirmed and completed clients will appear
-                here.
+                Log personal workouts, monitor progress and manage your fitness goals.
               </AppText>
             </View>
-          ) : (
-            <View style={{ gap: spacing.md }}>
-              {dashboard.recentProgress.map((item) => (
-                <ProgressCard
-                  key={`${item.user_id}-${item.metric_type}`}
-                  item={item}
-                  timezone={dashboard.timezone}
-                />
-              ))}
-            </View>
-          )}
+
+            <ArrowRight size={20} color={colors.text.secondary} />
+          </Pressable>
         </View>
 
         {/* Quick actions */}

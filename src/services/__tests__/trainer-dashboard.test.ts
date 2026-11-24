@@ -35,7 +35,6 @@ function createQuery(response: QueryResponse) {
   query.eq = chain;
   query.in = chain;
   query.order = chain;
-  query.limit = chain;
 
   query.maybeSingle = jest.fn(() => Promise.resolve(response));
 
@@ -72,7 +71,7 @@ describe('getTrainerDashboard', () => {
     } as never);
   });
 
-  it('returns dashboard metrics and upcoming sessions', async () => {
+  it('returns dashboard metrics and upcoming sessions without querying client activity', async () => {
     mockTables({
       trainer_bookings: {
         data: [
@@ -143,46 +142,6 @@ describe('getTrainerDashboard', () => {
         ],
         error: null,
       },
-      assigned_workout_plans: {
-        data: [
-          {
-            id: 'assignment-1',
-            gym_goer_id: 'client-1',
-          },
-        ],
-        error: null,
-      },
-      fitness_progress: {
-        data: [],
-        error: null,
-      },
-      workout_logs: {
-        data: [
-          {
-            id: 'workout-day-2',
-            assigned_workout_plan_id: 'assignment-1',
-            gym_goer_id: 'client-1',
-            started_at: '2026-11-10T18:04:22.000Z',
-            completed_at: null,
-            duration_minutes: null,
-            exercise_logs: [
-              { day_name: 'Day 2', day_number: 2 },
-            ],
-          },
-          {
-            id: 'workout-day-1',
-            assigned_workout_plan_id: 'assignment-1',
-            gym_goer_id: 'client-1',
-            started_at: '2026-11-10T18:03:20.000Z',
-            completed_at: null,
-            duration_minutes: null,
-            exercise_logs: [
-              { day_name: 'Day 1', day_number: 1 },
-            ],
-          },
-        ],
-        error: null,
-      },
     });
 
     const dashboard = await getTrainerDashboard();
@@ -196,25 +155,30 @@ describe('getTrainerDashboard', () => {
 
     expect(dashboard.timezone).toBe('Europe/London');
     expect(dashboard.upcomingSessions).toHaveLength(3);
-    expect(dashboard.upcomingSessions[0].client_name).toBe('Alex Smith');
-    expect(dashboard.recentWorkouts).toHaveLength(2);
-    expect(dashboard.recentWorkouts[0]).toEqual(
+    expect(dashboard.upcomingSessions[0]).toEqual(
       expect.objectContaining({
         client_name: 'Alex Smith',
-        day_name: 'Day 2',
-        day_number: 2,
-        completed_at: null,
+        status: 'confirmed',
       }),
     );
-    expect(dashboard.recentWorkouts[1]).toEqual(
-      expect.objectContaining({
-        client_name: 'Alex Smith',
-        day_name: 'Day 1',
-        day_number: 1,
-        completed_at: null,
-      }),
+
+    const queriedTables = mockedFrom.mock.calls.map(([table]) => table);
+
+    expect(queriedTables).toEqual(
+      expect.arrayContaining([
+        'trainer_bookings',
+        'trainer_profiles',
+        'profiles',
+      ]),
     );
-    expect(dashboard.recentProgress).toEqual([]);
+
+    expect(queriedTables).not.toEqual(
+      expect.arrayContaining([
+        'assigned_workout_plans',
+        'workout_logs',
+        'fitness_progress',
+      ]),
+    );
   });
 
   it('returns empty dashboard data when the trainer has no bookings', async () => {
@@ -240,8 +204,7 @@ describe('getTrainerDashboard', () => {
 
     expect(dashboard.timezone).toBe('Africa/Lagos');
     expect(dashboard.upcomingSessions).toEqual([]);
-    expect(dashboard.recentWorkouts).toEqual([]);
-    expect(dashboard.recentProgress).toEqual([]);
+    expect(mockedFrom).toHaveBeenCalledTimes(2);
   });
 
   it('rejects unauthenticated users', async () => {
