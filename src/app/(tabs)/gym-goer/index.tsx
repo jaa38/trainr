@@ -1,7 +1,21 @@
 import { router, useFocusEffect } from 'expo-router';
-import { ArrowRight, Minus, Scale, TrendingDown, TrendingUp } from 'lucide-react-native';
+import {
+  ArrowRight,
+  Dumbbell,
+  Minus,
+  Scale,
+  TrendingDown,
+  TrendingUp,
+} from 'lucide-react-native';
 import { useCallback, useMemo, useState } from 'react';
-import { Image, Pressable, RefreshControl, ScrollView, View } from 'react-native';
+import {
+  Image,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Circle, Line, Path } from 'react-native-svg';
 
@@ -10,6 +24,8 @@ import { Card } from '@/components/Card';
 import { NotificationBell } from '@/components/notifications/NotificationBell';
 import { useAuth } from '@/providers/AuthProvider';
 import { getBodyWeightHistory, type FitnessProgress } from '@/services/fitness-progress';
+import { getPersonalWorkoutHistory } from '@/services/personal-workouts';
+import type { PersonalWorkout } from '@/types/personal-workouts';
 import { useTrainrTheme } from '@/theme';
 
 function formatWeightDate(date: string) {
@@ -139,11 +155,19 @@ function DashboardWeightChart({
 export default function HomeTabScreen() {
   const { colors, spacing, mode } = useTrainrTheme();
   const { user } = useAuth();
+  const { width: windowWidth } = useWindowDimensions();
 
   const [weightRecords, setWeightRecords] = useState<FitnessProgress[]>([]);
   const [isLoadingWeight, setIsLoadingWeight] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [weightError, setWeightError] = useState<string | null>(null);
+
+  const [workoutRecords, setWorkoutRecords] = useState<PersonalWorkout[]>([]);
+  const [isLoadingWorkouts, setIsLoadingWorkouts] = useState(true);
+  const [workoutError, setWorkoutError] = useState<string | null>(null);
+  const [activeProgressPage, setActiveProgressPage] = useState(0);
+
+  const progressPageWidth = Math.max(windowWidth - spacing.lg * 2, 1);
 
   const loadWeightProgress = useCallback(
     async (showLoading = true) => {
@@ -177,11 +201,46 @@ export default function HomeTabScreen() {
     [user?.id],
   );
 
+  const loadPersonalWorkoutProgress = useCallback(
+    async (showLoading = true) => {
+      if (!user?.id) {
+        setWorkoutRecords([]);
+        setIsLoadingWorkouts(false);
+        return;
+      }
+
+      if (showLoading) {
+        setIsLoadingWorkouts(true);
+      }
+
+      setWorkoutError(null);
+
+      try {
+        const result = await getPersonalWorkoutHistory({ limit: 100 });
+        setWorkoutRecords(result);
+      } catch (error) {
+        console.error('[Home] Unable to load personal workout progress:', error);
+
+        setWorkoutError(
+          error instanceof Error
+            ? error.message
+            : 'Unable to load your workout progress.',
+        );
+      } finally {
+        if (showLoading) {
+          setIsLoadingWorkouts(false);
+        }
+      }
+    },
+    [user?.id],
+  );
+
   // Refresh progress whenever the Home screen regains focus.
   useFocusEffect(
     useCallback(() => {
       void loadWeightProgress();
-    }, [loadWeightProgress]),
+      void loadPersonalWorkoutProgress();
+    }, [loadPersonalWorkoutProgress, loadWeightProgress]),
   );
 
   // Pull-to-refresh starts from the Welcome Section.
@@ -191,11 +250,11 @@ export default function HomeTabScreen() {
     setIsRefreshing(true);
 
     try {
-      await loadWeightProgress(false);
+      await Promise.all([loadWeightProgress(false), loadPersonalWorkoutProgress(false)]);
     } finally {
       setIsRefreshing(false);
     }
-  }, [isRefreshing, loadWeightProgress]);
+  }, [isRefreshing, loadPersonalWorkoutProgress, loadWeightProgress]);
 
   const currentWeight = weightRecords[0] ?? null;
   const previousWeight = weightRecords[1] ?? null;
@@ -319,165 +378,399 @@ export default function HomeTabScreen() {
           </AppText>
         </View>
 
-        {/* Fitness Progress */}
+        {/* Fitness and Workout Progress */}
         <View style={{ gap: spacing.md, marginBottom: spacing.xl }}>
+          <View style={{ gap: spacing.xs }}>
+            <AppText variant="caption" color={colors.brand.red}>
+              YOUR JOURNEY
+            </AppText>
+
+            <AppText variant="h2" color={colors.text.primary}>
+              YOUR PROGRESS
+            </AppText>
+
+            <AppText variant="bodySmall" color={colors.text.secondary}>
+              Swipe to explore your fitness and workout progress.
+            </AppText>
+          </View>
+
+          <ScrollView
+            horizontal
+            pagingEnabled
+            nestedScrollEnabled
+            showsHorizontalScrollIndicator={false}
+            onMomentumScrollEnd={(event) => {
+              const page = Math.round(
+                event.nativeEvent.contentOffset.x / progressPageWidth,
+              );
+              setActiveProgressPage(Math.max(0, Math.min(page, 1)));
+            }}
+          >
+            {/* Page 1: Fitness Progress */}
+            <View style={{ width: progressPageWidth, paddingRight: spacing.xs }}>
+              <View style={{ gap: spacing.md }}>
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                  }}
+                >
+                  <AppText variant="h3" color={colors.text.primary}>
+                    FITNESS PROGRESS
+                  </AppText>
+
+                  <Scale size={23} color={colors.brand.red} />
+                </View>
+
+                <Card
+                  variant="outlined"
+                  style={{
+                    padding: spacing.lg,
+                    gap: spacing.md,
+                  }}
+                >
+                  {isLoadingWeight ? (
+                    <AppText variant="bodySmall" color={colors.text.secondary}>
+                      Loading your fitness progress...
+                    </AppText>
+                  ) : weightError ? (
+                    <View style={{ gap: spacing.md }}>
+                      <AppText variant="bodySmall" color={colors.text.error}>
+                        {weightError}
+                      </AppText>
+
+                      <Pressable
+                        accessibilityRole="button"
+                        onPress={() => void loadWeightProgress()}
+                        style={{ alignSelf: 'flex-start' }}
+                      >
+                        <AppText variant="button" color={colors.brand.red}>
+                          Try again
+                        </AppText>
+                      </Pressable>
+                    </View>
+                  ) : currentWeight ? (
+                    <>
+                      <View style={{ gap: spacing.xs }}>
+                        <AppText variant="caption" color={colors.text.secondary}>
+                          CURRENT WEIGHT
+                        </AppText>
+
+                        <View
+                          style={{
+                            flexDirection: 'row',
+                            alignItems: 'baseline',
+                            gap: spacing.sm,
+                          }}
+                        >
+                          <AppText variant="displayLarge" color={colors.text.primary}>
+                            {currentWeight.value}
+                          </AppText>
+
+                          <AppText variant="h3" color={colors.text.secondary}>
+                            {currentWeight.unit}
+                          </AppText>
+                        </View>
+
+                        <AppText variant="caption" color={colors.text.tertiary}>
+                          Last recorded {formatWeightDate(currentWeight.recorded_at)}
+                        </AppText>
+                      </View>
+
+                      {weightDifference !== null ? (
+                        <View
+                          style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            gap: spacing.xs,
+                          }}
+                        >
+                          {weightDifference > 0 ? (
+                            <TrendingUp size={17} color={colors.brand.red} />
+                          ) : weightDifference < 0 ? (
+                            <TrendingDown size={17} color={colors.text.secondary} />
+                          ) : (
+                            <Minus size={17} color={colors.text.tertiary} />
+                          )}
+
+                          <AppText variant="bodySmall" color={colors.text.secondary}>
+                            {weightDifference > 0 ? '+' : ''}
+                            {weightDifference.toFixed(1)} {currentWeight.unit} since
+                            previous measurement
+                          </AppText>
+                        </View>
+                      ) : null}
+
+                      <View
+                        style={{
+                          borderTopWidth: 1,
+                          borderTopColor: colors.border.default,
+                          paddingTop: spacing.md,
+                          gap: spacing.sm,
+                        }}
+                      >
+                        <AppText variant="caption" color={colors.text.secondary}>
+                          WEIGHT TREND
+                        </AppText>
+
+                        <DashboardWeightChart
+                          records={weightRecords}
+                          unit={currentWeight.unit as 'kg' | 'lb'}
+                          colors={colors}
+                        />
+                      </View>
+                    </>
+                  ) : (
+                    <View style={{ gap: spacing.sm }}>
+                      <AppText variant="h3" color={colors.text.primary}>
+                        START TRACKING YOUR PROGRESS
+                      </AppText>
+
+                      <AppText variant="bodySmall" color={colors.text.secondary}>
+                        Record your first weight measurement to see your fitness progress
+                        here.
+                      </AppText>
+                    </View>
+                  )}
+
+                  {!isLoadingWeight && !weightError ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="View weight history"
+                      onPress={() => router.push('/(tabs)/gym-goer-weight/history')}
+                      style={{
+                        borderTopWidth: 1,
+                        borderTopColor: colors.border.default,
+                        paddingTop: spacing.md,
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                      }}
+                    >
+                      <AppText variant="button" color={colors.brand.red}>
+                        {currentWeight ? 'View Weight History' : 'Record Your Weight'}
+                      </AppText>
+
+                      <ArrowRight size={19} color={colors.brand.red} />
+                    </Pressable>
+                  ) : null}
+                </Card>
+              </View>
+            </View>
+
+            {/* Page 2: Workout Progress */}
+            <View style={{ width: progressPageWidth, paddingLeft: spacing.xs }}>
+              <View style={{ gap: spacing.md }}>
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                  }}
+                >
+                  <AppText variant="h3" color={colors.text.primary}>
+                    WORKOUT PROGRESS
+                  </AppText>
+
+                  <Dumbbell size={23} color={colors.brand.red} />
+                </View>
+
+                <Card
+                  variant="outlined"
+                  style={{
+                    padding: spacing.lg,
+                    gap: spacing.lg,
+                  }}
+                >
+                  {isLoadingWorkouts ? (
+                    <AppText variant="bodySmall" color={colors.text.secondary}>
+                      Loading your workout progress...
+                    </AppText>
+                  ) : workoutError ? (
+                    <View style={{ gap: spacing.md }}>
+                      <AppText variant="bodySmall" color={colors.text.error}>
+                        {workoutError}
+                      </AppText>
+
+                      <Pressable
+                        accessibilityRole="button"
+                        onPress={() => void loadPersonalWorkoutProgress()}
+                        style={{ alignSelf: 'flex-start' }}
+                      >
+                        <AppText variant="button" color={colors.brand.red}>
+                          Try again
+                        </AppText>
+                      </Pressable>
+                    </View>
+                  ) : (
+                    <>
+                      <View style={{ gap: spacing.xs }}>
+                        <AppText variant="caption" color={colors.text.secondary}>
+                          PERSONAL WORKOUTS
+                        </AppText>
+
+                        <AppText variant="displayLarge" color={colors.text.primary}>
+                          {workoutRecords.length}
+                        </AppText>
+
+                        <AppText variant="bodySmall" color={colors.text.secondary}>
+                          {workoutRecords.length === 100
+                            ? 'Workouts in your latest 100 records'
+                            : 'Workouts recorded so far'}
+                        </AppText>
+                      </View>
+
+                      <View
+                        style={{
+                          flexDirection: 'row',
+                          gap: spacing.sm,
+                        }}
+                      >
+                        {[
+                          {
+                            label: 'COMPLETED',
+                            value: workoutRecords.filter(
+                              (workout) => workout.status === 'completed',
+                            ).length,
+                          },
+                          {
+                            label: 'IN PROGRESS',
+                            value: workoutRecords.filter(
+                              (workout) => workout.status === 'in_progress',
+                            ).length,
+                          },
+                          {
+                            label: 'DRAFTS',
+                            value: workoutRecords.filter(
+                              (workout) => workout.status === 'draft',
+                            ).length,
+                          },
+                        ].map((item) => (
+                          <View
+                            key={item.label}
+                            style={{
+                              flex: 1,
+                              padding: spacing.sm,
+                              borderRadius: 12,
+                              backgroundColor: colors.background.secondary,
+                              gap: spacing.xs,
+                            }}
+                          >
+                            <AppText variant="h2" color={colors.text.primary}>
+                              {item.value}
+                            </AppText>
+
+                            <AppText
+                              variant="caption"
+                              color={colors.text.secondary}
+                              style={{ fontSize: 9 }}
+                            >
+                              {item.label}
+                            </AppText>
+                          </View>
+                        ))}
+                      </View>
+
+                      {workoutRecords[0] ? (
+                        <View
+                          style={{
+                            borderTopWidth: 1,
+                            borderTopColor: colors.border.default,
+                            paddingTop: spacing.md,
+                            gap: spacing.xs,
+                          }}
+                        >
+                          <AppText variant="caption" color={colors.text.secondary}>
+                            MOST RECENT WORKOUT
+                          </AppText>
+
+                          <AppText variant="h3" color={colors.text.primary}>
+                            {workoutRecords[0].workout_name}
+                          </AppText>
+
+                          <AppText variant="bodySmall" color={colors.text.secondary}>
+                            {new Date(
+                              `${workoutRecords[0].workout_date}T00:00:00`,
+                            ).toLocaleDateString(undefined, {
+                              day: 'numeric',
+                              month: 'short',
+                              year: 'numeric',
+                            })}
+                            {' · '}
+                            {workoutRecords[0].status.replace('_', ' ')}
+                          </AppText>
+                        </View>
+                      ) : (
+                        <View
+                          style={{
+                            borderTopWidth: 1,
+                            borderTopColor: colors.border.default,
+                            paddingTop: spacing.md,
+                            gap: spacing.xs,
+                          }}
+                        >
+                          <AppText variant="h3" color={colors.text.primary}>
+                            YOUR TRAINING STARTS HERE
+                          </AppText>
+
+                          <AppText variant="bodySmall" color={colors.text.secondary}>
+                            Create your first personal workout and start recording your
+                            training sessions.
+                          </AppText>
+                        </View>
+                      )}
+                    </>
+                  )}
+
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="View personal workouts"
+                    onPress={() => router.push('/(tabs)/personal-workout')}
+                    style={{
+                      borderTopWidth: 1,
+                      borderTopColor: colors.border.default,
+                      paddingTop: spacing.md,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                    }}
+                  >
+                    <AppText variant="button" color={colors.brand.red}>
+                      View Personal Workouts
+                    </AppText>
+
+                    <ArrowRight size={19} color={colors.brand.red} />
+                  </Pressable>
+                </Card>
+              </View>
+            </View>
+          </ScrollView>
+
+          {/* Progress pagination */}
           <View
             style={{
               flexDirection: 'row',
+              justifyContent: 'center',
               alignItems: 'center',
-              justifyContent: 'space-between',
+              gap: spacing.sm,
             }}
           >
-            <View style={{ gap: spacing.xs }}>
-              <AppText variant="caption" color={colors.brand.red}>
-                YOUR JOURNEY
-              </AppText>
-
-              <AppText variant="h2" color={colors.text.primary}>
-                FITNESS PROGRESS
-              </AppText>
-            </View>
-
-            <Scale size={23} color={colors.brand.red} />
-          </View>
-
-          <Card
-            variant="outlined"
-            style={{
-              padding: spacing.lg,
-              gap: spacing.md,
-            }}
-          >
-            {isLoadingWeight ? (
-              <AppText variant="bodySmall" color={colors.text.secondary}>
-                Loading your fitness progress...
-              </AppText>
-            ) : weightError ? (
-              <View style={{ gap: spacing.md }}>
-                <AppText variant="bodySmall" color={colors.text.error}>
-                  {weightError}
-                </AppText>
-
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={() => void loadWeightProgress()}
-                  style={{ alignSelf: 'flex-start' }}
-                >
-                  <AppText variant="button" color={colors.brand.red}>
-                    Try again
-                  </AppText>
-                </Pressable>
-              </View>
-            ) : currentWeight ? (
-              <>
-                {/* Current Weight */}
-                <View style={{ gap: spacing.xs }}>
-                  <AppText variant="caption" color={colors.text.secondary}>
-                    CURRENT WEIGHT
-                  </AppText>
-
-                  <View
-                    style={{
-                      flexDirection: 'row',
-                      alignItems: 'baseline',
-                      gap: spacing.sm,
-                    }}
-                  >
-                    <AppText variant="displayLarge" color={colors.text.primary}>
-                      {currentWeight.value}
-                    </AppText>
-
-                    <AppText variant="h3" color={colors.text.secondary}>
-                      {currentWeight.unit}
-                    </AppText>
-                  </View>
-
-                  <AppText variant="caption" color={colors.text.tertiary}>
-                    Last recorded {formatWeightDate(currentWeight.recorded_at)}
-                  </AppText>
-                </View>
-
-                {/* Weight Difference */}
-                {weightDifference !== null ? (
-                  <View
-                    style={{
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      gap: spacing.xs,
-                    }}
-                  >
-                    {weightDifference > 0 ? (
-                      <TrendingUp size={17} color={colors.brand.red} />
-                    ) : weightDifference < 0 ? (
-                      <TrendingDown size={17} color={colors.text.secondary} />
-                    ) : (
-                      <Minus size={17} color={colors.text.tertiary} />
-                    )}
-
-                    <AppText variant="bodySmall" color={colors.text.secondary}>
-                      {weightDifference > 0 ? '+' : ''}
-                      {weightDifference.toFixed(1)} {currentWeight.unit} since previous
-                      measurement
-                    </AppText>
-                  </View>
-                ) : null}
-
-                {/* Weight Trend */}
-                <View
-                  style={{
-                    borderTopWidth: 1,
-                    borderTopColor: colors.border.default,
-                    paddingTop: spacing.md,
-                    gap: spacing.sm,
-                  }}
-                >
-                  <AppText variant="caption" color={colors.text.secondary}>
-                    WEIGHT TREND
-                  </AppText>
-
-                  <DashboardWeightChart
-                    records={weightRecords}
-                    unit={currentWeight.unit as 'kg' | 'lb'}
-                    colors={colors}
-                  />
-                </View>
-              </>
-            ) : (
-              /* Empty State */
-              <View style={{ gap: spacing.sm }}>
-                <AppText variant="h3" color={colors.text.primary}>
-                  START TRACKING YOUR PROGRESS
-                </AppText>
-
-                <AppText variant="bodySmall" color={colors.text.secondary}>
-                  Record your first weight measurement to see your fitness progress here.
-                </AppText>
-              </View>
-            )}
-
-            {/* Weight History Navigation */}
-            {!isLoadingWeight && !weightError ? (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="View weight history"
-                onPress={() => router.push('/(tabs)/gym-goer-weight/history')}
+            {[0, 1].map((page) => (
+              <View
+                key={page}
                 style={{
-                  borderTopWidth: 1,
-                  borderTopColor: colors.border.default,
-                  paddingTop: spacing.md,
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
+                  width: activeProgressPage === page ? 22 : 7,
+                  height: 7,
+                  borderRadius: 4,
+                  backgroundColor:
+                    activeProgressPage === page
+                      ? colors.brand.red
+                      : colors.border.default,
                 }}
-              >
-                <AppText variant="button" color={colors.brand.red}>
-                  {currentWeight ? 'View Weight History' : 'Record Your Weight'}
-                </AppText>
-
-                <ArrowRight size={19} color={colors.brand.red} />
-              </Pressable>
-            ) : null}
-          </Card>
+              />
+            ))}
+          </View>
         </View>
 
         {/* Fitness Feature Card */}

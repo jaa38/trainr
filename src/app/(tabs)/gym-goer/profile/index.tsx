@@ -313,6 +313,40 @@ export default function GymGoerProfileScreen() {
               Manage your fitness goals, training preferences and experience.
             </AppText>
           </Pressable>
+
+          {/* Personal Workouts */}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="View personal workouts"
+            onPress={() => router.push('/(tabs)/personal-workout')}
+            style={({ pressed }) => ({
+              padding: spacing.lg,
+              borderRadius: 16,
+              borderWidth: 1,
+              borderColor: colors.border.default,
+              backgroundColor: colors.background.secondary,
+              gap: spacing.sm,
+              opacity: pressed ? 0.75 : 1,
+            })}
+          >
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+              }}
+            >
+              <AppText variant="h3" color={colors.text.primary}>
+                PERSONAL WORKOUTS
+              </AppText>
+
+              <ArrowRight size={20} color={colors.text.secondary} />
+            </View>
+
+            <AppText variant="body" color={colors.text.secondary}>
+              Create your own workouts, record exercises and track your training progress.
+            </AppText>
+          </Pressable>
         </View>
 
         {/* App Preferences */}

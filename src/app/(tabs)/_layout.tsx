@@ -10,6 +10,9 @@ export default function TabsLayout() {
       <Stack.Screen name="notifications" />
       <Stack.Screen name="trainer-profile/[id]" />
       <Stack.Screen name="booking/[trainerId]" />
+      <Stack.Screen name="personal-workout" />
+      <Stack.Screen name="personal-workout/new" />
+      <Stack.Screen name="personal-workout/[id]" />
     </Stack>
   );
 }
