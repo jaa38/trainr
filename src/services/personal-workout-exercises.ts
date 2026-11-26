@@ -99,13 +99,13 @@ function handleError(action: string, error: { message: string }): never {
 // =========================================================
 
 /**
- * Verifies that a workout belongs to the authenticated user
- * and has not been completed.
+ * Verifies that a workout belongs to the authenticated user.
+ * Completed workouts can be corrected by their owner.
  */
-async function assertEditableWorkout(workoutId: string, userId: string): Promise<void> {
+async function assertOwnedWorkout(workoutId: string, userId: string): Promise<void> {
   const { data, error } = await supabase
     .from('workouts')
-    .select('id, status')
+    .select('id')
     .eq('id', workoutId)
     .eq('user_id', userId)
     .maybeSingle();
@@ -116,10 +116,6 @@ async function assertEditableWorkout(workoutId: string, userId: string): Promise
 
   if (!data) {
     throw new Error('Workout not found.');
-  }
-
-  if (data.status === 'completed') {
-    throw new Error('Completed workouts cannot be modified.');
   }
 }
 
@@ -179,7 +175,7 @@ export async function createWorkoutExercise(
 
   const userId = await getAuthenticatedUserId();
 
-  await assertEditableWorkout(input.workout_id, userId);
+  await assertOwnedWorkout(input.workout_id, userId);
 
   const { data, error } = await supabase
     .from('workout_exercises')
@@ -238,7 +234,7 @@ export async function updateWorkoutExercise(
 
   const exercise = await getOwnedWorkoutExercise(workoutExerciseId);
 
-  await assertEditableWorkout(exercise.workout_id, userId);
+  await assertOwnedWorkout(exercise.workout_id, userId);
 
   const { data, error } = await supabase
     .from('workout_exercises')
@@ -273,7 +269,7 @@ export async function deleteWorkoutExercise(workoutExerciseId: string): Promise<
 
   const exercise = await getOwnedWorkoutExercise(workoutExerciseId);
 
-  await assertEditableWorkout(exercise.workout_id, userId);
+  await assertOwnedWorkout(exercise.workout_id, userId);
 
   const { data, error } = await supabase
     .from('workout_exercises')

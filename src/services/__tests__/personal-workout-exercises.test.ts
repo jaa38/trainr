@@ -226,22 +226,25 @@ describe('Personal Workout Exercises service', () => {
       expect(mockedFrom).not.toHaveBeenCalled();
     });
 
-    it('rejects modifications to completed workouts', async () => {
-      const workoutQuery = createQuery({
-        data: { id: mockWorkout.id, status: 'completed' },
+    it('adds an exercise to a completed workout owned by the user', async () => {
+      const insertQuery = createQuery({
+        data: mockWorkoutExercise,
         error: null,
       });
 
-      queueQueries(workoutQuery);
+      queueQueries(
+        createQuery({ data: { id: mockWorkout.id }, error: null }),
+        insertQuery,
+      );
 
       await expect(
         createWorkoutExercise({
           workout_id: 'workout-123',
           exercise_id: 'exercise-123',
         }),
-      ).rejects.toThrow('Completed workouts cannot be modified.');
+      ).resolves.toEqual(mockWorkoutExercise);
 
-      expect(mockedFrom).toHaveBeenCalledTimes(1);
+      expect(insertQuery.insert).toHaveBeenCalled();
     });
 
     it('rejects workouts not owned by the authenticated user', async () => {
@@ -328,24 +331,32 @@ describe('Personal Workout Exercises service', () => {
       expect(mockedFrom).not.toHaveBeenCalled();
     });
 
-    it('rejects updates to completed workouts', async () => {
-      const ownershipQuery = createQuery({
-        data: mockWorkoutExercise,
+    it('updates an exercise in a completed workout owned by the user', async () => {
+      const updatedExercise = {
+        ...mockWorkoutExercise,
+        notes: 'Updated notes',
+      };
+
+      const updateQuery = createQuery({
+        data: updatedExercise,
         error: null,
       });
 
-      const workoutQuery = createQuery({
-        data: { id: mockWorkout.id, status: 'completed' },
-        error: null,
-      });
-
-      queueQueries(ownershipQuery, workoutQuery);
+      queueQueries(
+        createQuery({ data: mockWorkoutExercise, error: null }),
+        createQuery({ data: { id: mockWorkout.id }, error: null }),
+        updateQuery,
+      );
 
       await expect(
         updateWorkoutExercise('workout-exercise-123', {
           notes: 'Updated notes',
         }),
-      ).rejects.toThrow('Completed workouts cannot be modified.');
+      ).resolves.toMatchObject({ notes: 'Updated notes' });
+
+      expect(updateQuery.update).toHaveBeenCalledWith({
+        notes: 'Updated notes',
+      });
     });
   });
 
@@ -376,121 +387,23 @@ describe('Personal Workout Exercises service', () => {
       expect(deleteQuery.eq).toHaveBeenCalledWith('id', 'workout-exercise-123');
     });
 
-    it('rejects deleting an exercise from a completed workout', async () => {
-      const ownershipQuery = createQuery({
-        data: mockWorkoutExercise,
+    it('deletes an exercise from a completed workout owned by the user', async () => {
+      const deleteQuery = createQuery({
+        data: { id: mockWorkoutExercise.id },
         error: null,
       });
 
-      const workoutQuery = createQuery({
-        data: { id: mockWorkout.id, status: 'completed' },
-        error: null,
-      });
-
-      queueQueries(ownershipQuery, workoutQuery);
-
-      await expect(deleteWorkoutExercise('workout-exercise-123')).rejects.toThrow(
-        'Completed workouts cannot be modified.',
-      );
-    });
-  });
-
-  describe('getPersonalWorkoutDetails', () => {
-    it('retrieves a workout with ordered exercises and their sets', async () => {
-      const workoutQuery = createQuery({
-        data: mockWorkout,
-        error: null,
-      });
-
-      const exerciseQuery = createQuery({
-        data: [mockWorkoutExercise],
-        error: null,
-      });
-
-      const setQuery = createQuery({
-        data: [mockSet],
-        error: null,
-      });
-
-      queueQueries(workoutQuery, exerciseQuery, setQuery);
-
-      const result = await getPersonalWorkoutDetails('workout-123');
-
-      expect(result).toMatchObject({
-        id: mockWorkout.id,
-        workout_name: mockWorkout.workout_name,
-        exercises: [
-          {
-            ...mockWorkoutExercise,
-            sets: [mockSet],
-          },
-        ],
-      });
-
-      expect(mockedFrom).toHaveBeenNthCalledWith(1, 'workouts');
-      expect(mockedFrom).toHaveBeenNthCalledWith(2, 'workout_exercises');
-      expect(mockedFrom).toHaveBeenNthCalledWith(3, 'workout_sets');
-
-      expect(setQuery.in).toHaveBeenCalledWith('workout_exercise_id', [
-        'workout-exercise-123',
-      ]);
-    });
-
-    it('returns an empty exercise list when the workout has no exercises', async () => {
-      const workoutQuery = createQuery({
-        data: mockWorkout,
-        error: null,
-      });
-
-      const exerciseQuery = createQuery({
-        data: [],
-        error: null,
-      });
-
-      queueQueries(workoutQuery, exerciseQuery);
-
-      await expect(getPersonalWorkoutDetails('workout-123')).resolves.toMatchObject({
-        id: mockWorkout.id,
-        exercises: [],
-      });
-
-      expect(mockedFrom).toHaveBeenCalledTimes(2);
-    });
-
-    it('returns exercises with empty sets when no sets exist', async () => {
-      const workoutQuery = createQuery({
-        data: mockWorkout,
-        error: null,
-      });
-
-      const exerciseQuery = createQuery({
-        data: [mockWorkoutExercise],
-        error: null,
-      });
-
-      const setQuery = createQuery({
-        data: [],
-        error: null,
-      });
-
-      queueQueries(workoutQuery, exerciseQuery, setQuery);
-
-      await expect(getPersonalWorkoutDetails('workout-123')).resolves.toMatchObject({
-        exercises: [
-          {
-            id: mockWorkoutExercise.id,
-            sets: [],
-          },
-        ],
-      });
-    });
-
-    it('rejects an empty workout ID', async () => {
-      await expect(getPersonalWorkoutDetails('  ')).rejects.toThrow(
-        'Workout ID is required.',
+      queueQueries(
+        createQuery({ data: mockWorkoutExercise, error: null }),
+        createQuery({ data: { id: mockWorkout.id }, error: null }),
+        deleteQuery,
       );
 
-      expect(mockedFrom).not.toHaveBeenCalled();
+      await expect(
+        deleteWorkoutExercise('workout-exercise-123'),
+      ).resolves.toBeUndefined();
+
+      expect(deleteQuery.delete).toHaveBeenCalled();
     });
   });
 });

@@ -199,15 +199,15 @@ async function getOwnedWorkoutSet(setId: string): Promise<WorkoutSet> {
 }
 
 /**
- * Confirms that the workout belongs to the authenticated user
- * and is not completed.
+ * Confirms that the workout belongs to the authenticated user.
+ * Completed workouts can be corrected by their owner.
  *
  * RLS independently enforces ownership at database level.
  */
-async function assertEditableWorkout(workoutId: string, userId: string): Promise<void> {
+async function assertOwnedWorkout(workoutId: string, userId: string): Promise<void> {
   const { data, error } = await supabase
     .from('workouts')
-    .select('id, status')
+    .select('id')
     .eq('id', workoutId)
     .eq('user_id', userId)
     .maybeSingle();
@@ -219,27 +219,23 @@ async function assertEditableWorkout(workoutId: string, userId: string): Promise
   if (!data) {
     throw new Error('Workout not found.');
   }
-
-  if (data.status === 'completed') {
-    throw new Error('Completed workouts cannot be modified.');
-  }
 }
 
-async function assertEditableWorkoutExercise(
+async function assertOwnedWorkoutExercise(
   workoutExerciseId: string,
   userId: string,
 ): Promise<OwnedWorkoutExercise> {
   const exercise = await getOwnedWorkoutExercise(workoutExerciseId);
 
-  await assertEditableWorkout(exercise.workout_id, userId);
+  await assertOwnedWorkout(exercise.workout_id, userId);
 
   return exercise;
 }
 
-async function assertEditableSet(setId: string, userId: string): Promise<WorkoutSet> {
+async function assertOwnedSet(setId: string, userId: string): Promise<WorkoutSet> {
   const set = await getOwnedWorkoutSet(setId);
 
-  await assertEditableWorkoutExercise(set.workout_exercise_id, userId);
+  await assertOwnedWorkoutExercise(set.workout_exercise_id, userId);
 
   return set;
 }
@@ -269,7 +265,7 @@ export async function createWorkoutSet(
 
   const userId = await getAuthenticatedUserId();
 
-  await assertEditableWorkoutExercise(input.workout_exercise_id, userId);
+  await assertOwnedWorkoutExercise(input.workout_exercise_id, userId);
 
   const { data, error } = await supabase
     .from('workout_sets')
@@ -337,7 +333,7 @@ export async function updateWorkoutSet(
 
   const userId = await getAuthenticatedUserId();
 
-  const existingSet = await assertEditableSet(setId, userId);
+  const existingSet = await assertOwnedSet(setId, userId);
 
   const mergedSet: SetMeasurements = {
     set_number: input.set_number ?? existingSet.set_number,
@@ -408,7 +404,7 @@ export async function deleteWorkoutSet(setId: string): Promise<void> {
 
   const userId = await getAuthenticatedUserId();
 
-  await assertEditableSet(setId, userId);
+  await assertOwnedSet(setId, userId);
 
   const { data, error } = await supabase
     .from('workout_sets')

@@ -23,10 +23,28 @@ import { AppText } from '@/components/AppText';
 import { Card } from '@/components/Card';
 import { NotificationBell } from '@/components/notifications/NotificationBell';
 import { useAuth } from '@/providers/AuthProvider';
+import {
+  getExercisePerformanceHistory,
+  type ExercisePerformanceHistoryItem,
+} from '@/services/exercise-performance-history';
 import { getBodyWeightHistory, type FitnessProgress } from '@/services/fitness-progress';
 import { getPersonalWorkoutHistory } from '@/services/personal-workouts';
-import type { PersonalWorkout } from '@/types/personal-workouts';
+import {
+  getPersonalWorkoutStatistics,
+  type PersonalWorkoutStatistics,
+} from '@/services/workout-statistics';
 import { useTrainrTheme } from '@/theme';
+import type { PersonalWorkout } from '@/types/personal-workouts';
+
+function formatWorkoutDuration(seconds: number | null) {
+  if (seconds === null) return 'Not recorded';
+
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  return `${minutes} min`;
+}
 
 function formatWeightDate(date: string) {
   return new Date(date).toLocaleDateString('en-GB', {
@@ -162,7 +180,12 @@ export default function HomeTabScreen() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [weightError, setWeightError] = useState<string | null>(null);
 
-  const [workoutRecords, setWorkoutRecords] = useState<PersonalWorkout[]>([]);
+  const [workoutStatistics, setWorkoutStatistics] =
+    useState<PersonalWorkoutStatistics | null>(null);
+  const [recentWorkout, setRecentWorkout] = useState<PersonalWorkout | null>(null);
+  const [exercisePerformanceHistory, setExercisePerformanceHistory] = useState<
+    ExercisePerformanceHistoryItem[]
+  >([]);
   const [isLoadingWorkouts, setIsLoadingWorkouts] = useState(true);
   const [workoutError, setWorkoutError] = useState<string | null>(null);
   const [activeProgressPage, setActiveProgressPage] = useState(0);
@@ -204,7 +227,9 @@ export default function HomeTabScreen() {
   const loadPersonalWorkoutProgress = useCallback(
     async (showLoading = true) => {
       if (!user?.id) {
-        setWorkoutRecords([]);
+        setWorkoutStatistics(null);
+        setRecentWorkout(null);
+        setExercisePerformanceHistory([]);
         setIsLoadingWorkouts(false);
         return;
       }
@@ -216,8 +241,36 @@ export default function HomeTabScreen() {
       setWorkoutError(null);
 
       try {
-        const result = await getPersonalWorkoutHistory({ limit: 100 });
-        setWorkoutRecords(result);
+        const [statisticsResult, recentWorkoutsResult, exerciseHistoryResult] =
+          await Promise.allSettled([
+            getPersonalWorkoutStatistics(),
+            getPersonalWorkoutHistory({ limit: 1 }),
+            getExercisePerformanceHistory(),
+          ]);
+
+        const failedSections: string[] = [];
+
+        if (statisticsResult.status === 'fulfilled') {
+          setWorkoutStatistics(statisticsResult.value);
+        } else {
+          failedSections.push('workout statistics');
+        }
+
+        if (recentWorkoutsResult.status === 'fulfilled') {
+          setRecentWorkout(recentWorkoutsResult.value[0] ?? null);
+        } else {
+          failedSections.push('recent workouts');
+        }
+
+        if (exerciseHistoryResult.status === 'fulfilled') {
+          setExercisePerformanceHistory(exerciseHistoryResult.value);
+        } else {
+          failedSections.push('exercise performance history');
+        }
+
+        if (failedSections.length > 0) {
+          throw new Error(`Unable to load ${failedSections.join(', ')}.`);
+        }
       } catch (error) {
         console.error('[Home] Unable to load personal workout progress:', error);
 
@@ -607,44 +660,31 @@ export default function HomeTabScreen() {
                     <>
                       <View style={{ gap: spacing.xs }}>
                         <AppText variant="caption" color={colors.text.secondary}>
-                          PERSONAL WORKOUTS
+                          COMPLETED WORKOUTS
                         </AppText>
 
                         <AppText variant="displayLarge" color={colors.text.primary}>
-                          {workoutRecords.length}
+                          {workoutStatistics?.completedWorkoutCount ?? 0}
                         </AppText>
 
                         <AppText variant="bodySmall" color={colors.text.secondary}>
-                          {workoutRecords.length === 100
-                            ? 'Workouts in your latest 100 records'
-                            : 'Workouts recorded so far'}
+                          All completed personal workouts
                         </AppText>
                       </View>
 
-                      <View
-                        style={{
-                          flexDirection: 'row',
-                          gap: spacing.sm,
-                        }}
-                      >
+                      <View style={{ flexDirection: 'row', gap: spacing.sm }}>
                         {[
                           {
-                            label: 'COMPLETED',
-                            value: workoutRecords.filter(
-                              (workout) => workout.status === 'completed',
-                            ).length,
+                            label: 'THIS WEEK',
+                            value: workoutStatistics?.workoutsThisWeek ?? 0,
                           },
                           {
-                            label: 'IN PROGRESS',
-                            value: workoutRecords.filter(
-                              (workout) => workout.status === 'in_progress',
-                            ).length,
+                            label: 'THIS MONTH',
+                            value: workoutStatistics?.workoutsThisMonth ?? 0,
                           },
                           {
-                            label: 'DRAFTS',
-                            value: workoutRecords.filter(
-                              (workout) => workout.status === 'draft',
-                            ).length,
+                            label: 'ACTIVE DAYS',
+                            value: workoutStatistics?.activeDaysThisWeek ?? 0,
                           },
                         ].map((item) => (
                           <View
@@ -660,7 +700,6 @@ export default function HomeTabScreen() {
                             <AppText variant="h2" color={colors.text.primary}>
                               {item.value}
                             </AppText>
-
                             <AppText
                               variant="caption"
                               color={colors.text.secondary}
@@ -672,7 +711,46 @@ export default function HomeTabScreen() {
                         ))}
                       </View>
 
-                      {workoutRecords[0] ? (
+                      <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+                        {[
+                          {
+                            label: 'TOTAL RECORDED TIME',
+                            value: formatWorkoutDuration(
+                              workoutStatistics?.recordedDurationSeconds ?? null,
+                            ),
+                          },
+                          {
+                            label: 'AVERAGE DURATION',
+                            value: formatWorkoutDuration(
+                              workoutStatistics?.averageDurationSeconds ?? null,
+                            ),
+                          },
+                        ].map((item) => (
+                          <View
+                            key={item.label}
+                            style={{
+                              flex: 1,
+                              padding: spacing.md,
+                              borderRadius: 12,
+                              backgroundColor: colors.background.secondary,
+                              gap: spacing.xs,
+                            }}
+                          >
+                            <AppText variant="h3" color={colors.text.primary}>
+                              {item.value}
+                            </AppText>
+                            <AppText
+                              variant="caption"
+                              color={colors.text.secondary}
+                              style={{ fontSize: 9 }}
+                            >
+                              {item.label}
+                            </AppText>
+                          </View>
+                        ))}
+                      </View>
+
+                      {recentWorkout ? (
                         <View
                           style={{
                             borderTopWidth: 1,
@@ -684,21 +762,19 @@ export default function HomeTabScreen() {
                           <AppText variant="caption" color={colors.text.secondary}>
                             MOST RECENT WORKOUT
                           </AppText>
-
                           <AppText variant="h3" color={colors.text.primary}>
-                            {workoutRecords[0].workout_name}
+                            {recentWorkout.workout_name}
                           </AppText>
-
                           <AppText variant="bodySmall" color={colors.text.secondary}>
                             {new Date(
-                              `${workoutRecords[0].workout_date}T00:00:00`,
+                              `${recentWorkout.workout_date}T00:00:00`,
                             ).toLocaleDateString(undefined, {
                               day: 'numeric',
                               month: 'short',
                               year: 'numeric',
                             })}
                             {' · '}
-                            {workoutRecords[0].status.replace('_', ' ')}
+                            {recentWorkout.status.replace('_', ' ')}
                           </AppText>
                         </View>
                       ) : (
@@ -713,15 +789,136 @@ export default function HomeTabScreen() {
                           <AppText variant="h3" color={colors.text.primary}>
                             YOUR TRAINING STARTS HERE
                           </AppText>
-
                           <AppText variant="bodySmall" color={colors.text.secondary}>
-                            Create your first personal workout and start recording your
-                            training sessions.
+                            Complete your first personal workout to start tracking your
+                            progress.
                           </AppText>
                         </View>
                       )}
                     </>
                   )}
+
+                  {/* Exercise performance history */}
+                  <View
+                    style={{
+                      borderTopWidth: 1,
+                      borderTopColor: colors.border.default,
+                      paddingTop: spacing.md,
+                      gap: spacing.md,
+                    }}
+                  >
+                    <View style={{ gap: spacing.xs }}>
+                      <AppText variant="h3" color={colors.text.primary}>
+                        EXERCISE PERFORMANCE
+                      </AppText>
+                      <AppText variant="caption" color={colors.text.secondary}>
+                        Your latest recorded exercise sessions
+                      </AppText>
+                    </View>
+
+                    {isLoadingWorkouts ? (
+                      <AppText variant="bodySmall" color={colors.text.secondary}>
+                        Loading exercise history...
+                      </AppText>
+                    ) : exercisePerformanceHistory.length === 0 ? (
+                      <AppText variant="bodySmall" color={colors.text.secondary}>
+                        Complete workouts with recorded sets to build your exercise
+                        history.
+                      </AppText>
+                    ) : (
+                      <View style={{ gap: spacing.sm }}>
+                        {exercisePerformanceHistory.map((exercise) => (
+                          <View
+                            key={exercise.exerciseKey}
+                            style={{
+                              padding: spacing.md,
+                              borderRadius: 12,
+                              backgroundColor: colors.background.secondary,
+                              gap: spacing.sm,
+                            }}
+                          >
+                            <View
+                              style={{
+                                flexDirection: 'row',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                gap: spacing.sm,
+                              }}
+                            >
+                              <View style={{ flex: 1, gap: spacing.xs }}>
+                                <AppText variant="bodyMedium" color={colors.text.primary}>
+                                  {exercise.exerciseName}
+                                </AppText>
+                                <AppText variant="caption" color={colors.text.tertiary}>
+                                  {exercise.exerciseSource === 'personal'
+                                    ? 'Personal exercise'
+                                    : 'TRAINR exercise'}
+                                  {' · '}
+                                  {exercise.totalSessions}{' '}
+                                  {exercise.totalSessions === 1 ? 'session' : 'sessions'}
+                                </AppText>
+                              </View>
+                            </View>
+
+                            {exercise.sessions.slice(0, 2).map((session) => (
+                              <View
+                                key={session.workoutId}
+                                style={{
+                                  borderTopWidth: 1,
+                                  borderTopColor: colors.border.default,
+                                  paddingTop: spacing.sm,
+                                  gap: spacing.xs,
+                                }}
+                              >
+                                <AppText variant="bodySmall" color={colors.text.primary}>
+                                  {session.workoutName}
+                                </AppText>
+                                <AppText variant="caption" color={colors.text.secondary}>
+                                  {new Date(
+                                    `${session.workoutDate}T00:00:00`,
+                                  ).toLocaleDateString(undefined, {
+                                    day: 'numeric',
+                                    month: 'short',
+                                    year: 'numeric',
+                                  })}
+                                </AppText>
+
+                                {session.sets.map((set) => {
+                                  const measurements = [
+                                    set.repetitions !== null
+                                      ? `${set.repetitions} reps`
+                                      : null,
+                                    set.weight !== null
+                                      ? `${set.weight}${set.weight_unit ? ` ${set.weight_unit}` : ''}`
+                                      : null,
+                                    set.duration_seconds !== null
+                                      ? formatWorkoutDuration(set.duration_seconds)
+                                      : null,
+                                    set.distance !== null
+                                      ? `${set.distance}${set.distance_unit ? ` ${set.distance_unit}` : ''}`
+                                      : null,
+                                  ].filter(Boolean);
+
+                                  return (
+                                    <AppText
+                                      key={set.id}
+                                      variant="caption"
+                                      color={colors.text.secondary}
+                                    >
+                                      Set {set.set_number}:{' '}
+                                      {measurements.length > 0
+                                        ? measurements.join(' · ')
+                                        : (set.notes ?? 'Not recorded')}
+                                    </AppText>
+                                  );
+                                })}
+                              </View>
+                            ))}
+                          </View>
+                        ))}
+                      </View>
+                    )}
+                  </View>
 
                   <Pressable
                     accessibilityRole="button"

@@ -54,8 +54,6 @@ type QueryResponse = {
 function createQuery(response: QueryResponse) {
   const query: Record<string, any> = {};
 
-  const chain = jest.fn(() => query);
-
   [
     'select',
     'insert',
@@ -70,7 +68,7 @@ function createQuery(response: QueryResponse) {
     'order',
     'range',
   ].forEach((method) => {
-    query[method] = chain;
+    query[method] = jest.fn(() => query);
   });
 
   query.single = jest.fn().mockResolvedValue(response);
@@ -322,10 +320,12 @@ describe('Personal Workouts service', () => {
   });
 
   describe('updatePersonalWorkout', () => {
-    it('updates the authenticated user’s workout', async () => {
+    it('updates a completed workout belonging to the authenticated user', async () => {
       const query = createQuery({
         data: {
           ...mockWorkout,
+          status: 'completed',
+          completed_at: '2026-11-24T10:00:00.000Z',
           workout_name: 'Updated Workout',
         },
         error: null,
@@ -338,15 +338,16 @@ describe('Personal Workouts service', () => {
           workout_name: 'Updated Workout',
         }),
       ).resolves.toMatchObject({
+        status: 'completed',
+        completed_at: '2026-11-24T10:00:00.000Z',
         workout_name: 'Updated Workout',
       });
 
       expect(query.update).toHaveBeenCalledWith({
         workout_name: 'Updated Workout',
       });
-
       expect(query.eq).toHaveBeenCalledWith('user_id', mockUser.id);
-      expect(query.neq).toHaveBeenCalledWith('status', 'completed');
+      expect(query.neq).not.toHaveBeenCalled();
     });
 
     it('rejects an empty update', async () => {
@@ -357,7 +358,7 @@ describe('Personal Workouts service', () => {
       expect(mockedFrom).not.toHaveBeenCalled();
     });
 
-    it('does not update a missing or completed workout', async () => {
+    it('does not update a missing workout', async () => {
       queueQueries(
         createQuery({
           data: null,
@@ -369,7 +370,7 @@ describe('Personal Workouts service', () => {
         updatePersonalWorkout('workout-123', {
           workout_name: 'Updated Workout',
         }),
-      ).rejects.toThrow('Workout not found or it has already been completed.');
+      ).rejects.toThrow('Workout not found.');
     });
   });
 
@@ -449,7 +450,7 @@ describe('Personal Workouts service', () => {
   });
 
   describe('deletePersonalWorkout', () => {
-    it('deletes a workout belonging to the authenticated user', async () => {
+    it('deletes a completed workout belonging to the authenticated user', async () => {
       const query = createQuery({
         data: { id: 'workout-123' },
         error: null,
@@ -462,23 +463,7 @@ describe('Personal Workouts service', () => {
       expect(query.delete).toHaveBeenCalled();
       expect(query.eq).toHaveBeenCalledWith('id', 'workout-123');
       expect(query.eq).toHaveBeenCalledWith('user_id', mockUser.id);
-      expect(query.neq).toHaveBeenCalledWith('status', 'completed');
-    });
-
-    it('does not delete a completed workout', async () => {
-      const query = createQuery({
-        data: null,
-        error: null,
-      });
-
-      queueQueries(query);
-
-      await expect(deletePersonalWorkout('workout-123')).rejects.toThrow(
-        'Workout not found or it has already been completed.',
-      );
-
-      expect(query.delete).toHaveBeenCalled();
-      expect(query.neq).toHaveBeenCalledWith('status', 'completed');
+      expect(query.neq).not.toHaveBeenCalled();
     });
 
     it('throws when the workout does not exist', async () => {
@@ -490,7 +475,7 @@ describe('Personal Workouts service', () => {
       );
 
       await expect(deletePersonalWorkout('missing-workout')).rejects.toThrow(
-        'Workout not found or it has already been completed.',
+        'Workout not found.',
       );
     });
   });

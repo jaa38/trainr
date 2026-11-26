@@ -2,8 +2,10 @@ import React from 'react';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 
 import { getFitnessGoals } from '@/services/fitness-goals';
+import { getExercisePerformanceHistory } from '@/services/exercise-performance-history';
 import { getPersonalRecords } from '@/services/personal-records';
 import { getPersonalWorkoutHistory } from '@/services/personal-workouts';
+import { getPersonalWorkoutStatistics } from '@/services/workout-statistics';
 import { getTrainerDashboard } from '@/services/trainer-dashboard';
 import { TrainrThemeProvider } from '@/theme/ThemeProvider';
 
@@ -36,6 +38,10 @@ jest.mock('@/services/personal-workouts', () => ({
   getPersonalWorkoutHistory: jest.fn(),
 }));
 
+jest.mock('@/services/workout-statistics', () => ({
+  getPersonalWorkoutStatistics: jest.fn(),
+}));
+
 jest.mock('@/services/fitness-goals', () => ({
   getFitnessGoals: jest.fn(),
 }));
@@ -44,12 +50,91 @@ jest.mock('@/services/personal-records', () => ({
   getPersonalRecords: jest.fn(),
 }));
 
+jest.mock('@/services/exercise-performance-history', () => ({
+  getExercisePerformanceHistory: jest.fn(),
+}));
+
 import PersonalTrainerHomeScreen from '../index';
 
 const mockedGetTrainerDashboard = jest.mocked(getTrainerDashboard);
 const mockedGetPersonalWorkoutHistory = jest.mocked(getPersonalWorkoutHistory);
+const mockedGetPersonalWorkoutStatistics = jest.mocked(getPersonalWorkoutStatistics);
 const mockedGetFitnessGoals = jest.mocked(getFitnessGoals);
 const mockedGetPersonalRecords = jest.mocked(getPersonalRecords);
+const mockedGetExercisePerformanceHistory = jest.mocked(
+  getExercisePerformanceHistory,
+);
+
+const exercisePerformanceHistory = [
+  {
+    exerciseKey: 'shared:bench-press',
+    exerciseId: 'bench-press',
+    exerciseSource: 'shared',
+    exerciseName: 'Bench Press',
+    totalSessions: 1,
+    latestPerformanceAt: '2026-11-25T10:00:00.000Z',
+    sessions: [
+      {
+        workoutId: 'workout-1',
+        workoutName: 'Upper body strength',
+        workoutDate: '2026-11-25',
+        completedAt: '2026-11-25T10:00:00.000Z',
+        exerciseOrder: 0,
+        notes: null,
+        sets: [
+          {
+            id: 'set-1',
+            workout_exercise_id: 'workout-exercise-1',
+            set_number: 1,
+            repetitions: 8,
+            weight: 60,
+            weight_unit: 'kg',
+            duration_seconds: null,
+            distance: null,
+            distance_unit: null,
+            notes: null,
+            created_at: '2026-11-25T09:30:00.000Z',
+          },
+        ],
+      },
+    ],
+  },
+  {
+    exerciseKey: 'personal:bench-press',
+    exerciseId: 'personal-bench-press',
+    exerciseSource: 'personal',
+    exerciseName: 'Bench Press',
+    totalSessions: 1,
+    latestPerformanceAt: '2026-11-25T10:00:00.000Z',
+    sessions: [
+      {
+        workoutId: 'workout-1',
+        workoutName: 'Upper body strength',
+        workoutDate: '2026-11-25',
+        completedAt: '2026-11-25T10:00:00.000Z',
+        exerciseOrder: 1,
+        notes: null,
+        sets: [
+          {
+            id: 'set-2',
+            workout_exercise_id: 'workout-exercise-2',
+            set_number: 1,
+            repetitions: 12,
+            weight: null,
+            weight_unit: null,
+            duration_seconds: null,
+            distance: null,
+            distance_unit: null,
+            notes: 'Bodyweight',
+            created_at: '2026-11-25T09:40:00.000Z',
+          },
+        ],
+      },
+    ],
+  },
+];
+
+
 
 const dashboard = {
   metrics: {
@@ -86,6 +171,17 @@ const personalWorkouts = [
     updated_at: '2026-11-25T10:00:00.000Z',
   },
 ];
+
+const personalWorkoutStatistics = {
+  completedWorkoutCount: 1,
+  recordedDurationSeconds: 3600,
+  averageDurationSeconds: 3600,
+  workoutsWithRecordedDuration: 1,
+  workoutsThisWeek: 1,
+  workoutsThisMonth: 1,
+  activeDaysThisWeek: 1,
+  activeDaysThisMonth: 1,
+};
 
 const fitnessGoals = [
   {
@@ -135,8 +231,14 @@ describe('Personal Trainer Dashboard', () => {
 
     mockedGetTrainerDashboard.mockResolvedValue(dashboard as never);
     mockedGetPersonalWorkoutHistory.mockResolvedValue(personalWorkouts as never);
+    mockedGetPersonalWorkoutStatistics.mockResolvedValue(
+      personalWorkoutStatistics as never,
+    );
     mockedGetFitnessGoals.mockResolvedValue(fitnessGoals as never);
     mockedGetPersonalRecords.mockResolvedValue(personalRecords as never);
+    mockedGetExercisePerformanceHistory.mockResolvedValue(
+      exercisePerformanceHistory as never,
+    );
   });
 
   it('renders the three dashboard tabs and defaults to Clients', async () => {
@@ -183,23 +285,37 @@ describe('Personal Trainer Dashboard', () => {
   });
 
   it('loads and displays the trainer’s own workouts, goals and personal records', async () => {
-    const { getByRole, getByText } = await renderScreen();
+    const { getByRole, getByText, getAllByText } = await renderScreen();
 
     await fireEvent.press(getByRole('tab', { name: 'My Progress tab' }));
 
     await waitFor(() => {
       expect(getByText('Your personal fitness')).toBeTruthy();
+      expect(getByText('PERSONAL WORKOUT STATISTICS')).toBeTruthy();
+      expect(getByText('COMPLETED WORKOUTS')).toBeTruthy();
+      expect(getByText('THIS WEEK')).toBeTruthy();
+      expect(getByText('THIS MONTH')).toBeTruthy();
+      expect(getByText('ACTIVE DAYS')).toBeTruthy();
+      expect(getByText('TOTAL RECORDED DURATION')).toBeTruthy();
+      expect(getByText('AVERAGE WORKOUT DURATION')).toBeTruthy();
+      expect(getByText('Across 1 workouts')).toBeTruthy();
       expect(getByText('RECENT WORKOUTS')).toBeTruthy();
-      expect(getByText('Upper body strength')).toBeTruthy();
+      expect(getAllByText('Upper body strength')).toHaveLength(3);
       expect(getByText('ACTIVE FITNESS GOALS')).toBeTruthy();
       expect(getByText('Improve squat strength')).toBeTruthy();
       expect(getByText('PERSONAL RECORDS')).toBeTruthy();
       expect(getByText('80 kg')).toBeTruthy();
+      expect(getByText('EXERCISE PERFORMANCE')).toBeTruthy();
+      expect(getAllByText('Bench Press')).toHaveLength(2);
+      expect(getByText(/TRAINR exercise/)).toBeTruthy();
+      expect(getByText('Set 1: 8 reps · 60 kg')).toBeTruthy();
     });
 
     expect(mockedGetPersonalWorkoutHistory).toHaveBeenCalledWith({ limit: 3 });
+    expect(mockedGetPersonalWorkoutStatistics).toHaveBeenCalledTimes(1);
     expect(mockedGetFitnessGoals).toHaveBeenCalledWith({ status: 'active' });
     expect(mockedGetPersonalRecords).toHaveBeenCalledWith({ limit: 3 });
+    expect(mockedGetExercisePerformanceHistory).toHaveBeenCalledTimes(1);
   });
 
   it('keeps successful personal sections visible when another section fails', async () => {

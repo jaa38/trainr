@@ -378,7 +378,6 @@ export async function updatePersonalWorkout(
     .update(updatePayload)
     .eq('id', workoutId)
     .eq('user_id', user.id)
-    .neq('status', 'completed')
     .select(PERSONAL_WORKOUT_COLUMNS)
     .maybeSingle();
 
@@ -389,7 +388,7 @@ export async function updatePersonalWorkout(
   }
 
   if (!data) {
-    throw new Error('Workout not found or it has already been completed.');
+    throw new Error('Workout not found.');
   }
 
   return data as unknown as PersonalWorkout;
@@ -502,7 +501,6 @@ export async function deletePersonalWorkout(workoutId: string): Promise<void> {
     .delete()
     .eq('id', workoutId)
     .eq('user_id', user.id)
-    .neq('status', 'completed')
     .select('id')
     .maybeSingle();
 
@@ -513,6 +511,6 @@ export async function deletePersonalWorkout(workoutId: string): Promise<void> {
   }
 
   if (!data) {
-    throw new Error('Workout not found or it has already been completed.');
+    throw new Error('Workout not found.');
   }
 }

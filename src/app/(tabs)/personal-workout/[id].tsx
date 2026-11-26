@@ -23,7 +23,7 @@ import {
   createWorkoutExercise,
   deleteWorkoutExercise,
 } from '@/services/personal-workout-exercises';
-import { createWorkoutSet } from '@/services/personal-workout-sets';
+import { createWorkoutSet, updateWorkoutSet } from '@/services/personal-workout-sets';
 import { getExercises, type Exercise } from '@/services/exercises';
 import { useTrainrTheme } from '@/theme';
 import type {
@@ -84,6 +84,11 @@ export default function PersonalWorkoutDetailScreen() {
     useState<PersonalWorkoutCategory>('strength');
   const [newExerciseMuscleGroup, setNewExerciseMuscleGroup] = useState('');
   const [setDrafts, setSetDrafts] = useState<Record<string, SetDraft>>({});
+  const [editingSetId, setEditingSetId] = useState<string | null>(null);
+  const [editSetDraft, setEditSetDraft] = useState<SetDraft>({
+    repetitions: "",
+    weight: "",
+  });
   const [isEditingWorkout, setIsEditingWorkout] = useState(false);
   const [editWorkoutName, setEditWorkoutName] = useState('');
   const [editWorkoutType, setEditWorkoutType] =
@@ -143,7 +148,7 @@ export default function PersonalWorkoutDetailScreen() {
   const isCompleted = workout?.status === 'completed';
 
   function beginWorkoutEdit() {
-    if (!workout || isCompleted) return;
+    if (!workout) return;
 
     setEditWorkoutName(workout.workout_name);
     setEditWorkoutType(workout.workout_type);
@@ -154,7 +159,7 @@ export default function PersonalWorkoutDetailScreen() {
   }
 
   async function handleSaveWorkout() {
-    if (!workout || isSaving || isCompleted) return;
+    if (!workout || isSaving) return;
 
     if (!editWorkoutName.trim()) {
       setErrorMessage('Enter a workout name to continue.');
@@ -188,7 +193,7 @@ export default function PersonalWorkoutDetailScreen() {
   }
 
   function confirmDeleteWorkout() {
-    if (!workout || isCompleted || isSaving) return;
+    if (!workout || isSaving) return;
 
     Alert.alert(
       'Delete workout?',
@@ -222,7 +227,7 @@ export default function PersonalWorkoutDetailScreen() {
   }
 
   function confirmRemoveExercise(exerciseId: string, exerciseName: string) {
-    if (!workout || isCompleted || isSaving) return;
+    if (!workout || isSaving) return;
 
     Alert.alert(
       'Remove exercise?',
@@ -353,6 +358,58 @@ export default function PersonalWorkoutDetailScreen() {
         [field]: value,
       },
     }));
+  }
+
+  function beginSetEdit(set: { id: string; repetitions: number | null; weight: number | null }) {
+    setEditingSetId(set.id);
+    setEditSetDraft({
+      repetitions: set.repetitions == null ? "" : String(set.repetitions),
+      weight: set.weight == null ? "" : String(set.weight),
+    });
+    setExerciseError(null);
+  }
+
+  async function handleSaveSetEdit(setId: string) {
+    if (isSaving) return;
+
+    const repetitions = editSetDraft.repetitions.trim()
+      ? Number(editSetDraft.repetitions)
+      : null;
+    const weight = editSetDraft.weight.trim()
+      ? Number(editSetDraft.weight)
+      : null;
+
+    if (
+      (repetitions !== null && (!Number.isInteger(repetitions) || repetitions < 0)) ||
+      (weight !== null && (!Number.isFinite(weight) || weight < 0))
+    ) {
+      setExerciseError("Enter valid non-negative repetitions and weight.");
+      return;
+    }
+
+    if (repetitions === null && weight === null) {
+      setExerciseError("Enter repetitions or weight before saving.");
+      return;
+    }
+
+    setIsSaving(true);
+    setExerciseError(null);
+
+    try {
+      await updateWorkoutSet(setId, {
+        repetitions,
+        weight,
+        weight_unit: weight === null ? null : "kg",
+      });
+      setEditingSetId(null);
+      await loadWorkout();
+    } catch (error) {
+      setExerciseError(
+        error instanceof Error ? error.message : "Unable to update this set.",
+      );
+    } finally {
+      setIsSaving(false);
+    }
   }
 
   async function handleAddSet(exerciseId: string, existingSetCount: number) {
@@ -513,8 +570,8 @@ export default function PersonalWorkoutDetailScreen() {
               {workout.notes}
             </AppText>
           ) : null}
-          {!isCompleted ? (
-            <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+
+          <View style={{ flexDirection: 'row', gap: spacing.sm }}>
               <Button
                 size="small"
                 variant="outline"
@@ -532,10 +589,9 @@ export default function PersonalWorkoutDetailScreen() {
                 Delete workout
               </Button>
             </View>
-          ) : null}
         </View>
 
-        {isEditingWorkout && !isCompleted ? (
+        {isEditingWorkout ? (
           <Card variant="outlined" style={{ gap: spacing.md }}>
             <AppText variant="h3" color={colors.text.primary}>
               Edit workout
@@ -658,12 +714,11 @@ export default function PersonalWorkoutDetailScreen() {
             <AppText variant="h2" color={colors.text.primary}>
               Exercises
             </AppText>
-            {!isCompleted ? (
-              <Button
-                size="small"
-                variant="outline"
-                leftIcon={<Plus size={16} color={colors.text.primary} />}
-                onPress={() => {
+            <Button
+              size="small"
+              variant="outline"
+              leftIcon={<Plus size={16} color={colors.text.primary} />}
+              onPress={() => {
                   setShowExercisePicker((visible) => !visible);
                   setShowCreateExercise(false);
                   setExerciseError(null);
@@ -671,10 +726,9 @@ export default function PersonalWorkoutDetailScreen() {
               >
                 Add exercise
               </Button>
-            ) : null}
           </View>
 
-          {showExercisePicker && !isCompleted ? (
+          {showExercisePicker ? (
             <Card variant="outlined" style={{ gap: spacing.md }}>
               <AppText variant="bodyMedium" color={colors.text.primary}>
                 Choose an exercise
@@ -876,13 +930,12 @@ export default function PersonalWorkoutDetailScreen() {
                         exercise.exercise_id,
                       )}
                     </AppText>
-                    {!isCompleted ? (
-                      <Button
-                        size="small"
-                        variant="ghost"
-                        disabled={isSaving}
-                        onPress={() =>
-                          confirmRemoveExercise(
+                    <Button
+                      size="small"
+                      variant="ghost"
+                      disabled={isSaving}
+                      onPress={() =>
+                        confirmRemoveExercise(
                             exercise.id,
                             getExerciseName(
                               exercise.personal_exercise_id,
@@ -893,7 +946,6 @@ export default function PersonalWorkoutDetailScreen() {
                       >
                         Remove exercise
                       </Button>
-                    ) : null}
                   </View>
 
                   {exercise.sets.length > 0 ? (
@@ -902,24 +954,93 @@ export default function PersonalWorkoutDetailScreen() {
                         <View
                           key={set.id}
                           style={{
-                            flexDirection: 'row',
-                            justifyContent: 'space-between',
-                            paddingVertical: spacing.xs,
+                            gap: spacing.xs,
+                            paddingVertical: spacing.sm,
                             borderBottomWidth: 1,
                             borderBottomColor: colors.border.default,
                           }}
                         >
-                          <AppText variant="bodySmall" color={colors.text.secondary}>
-                            Set {set.set_number}
-                          </AppText>
-                          <AppText variant="bodySmall" color={colors.text.primary}>
-                            {set.repetitions != null ? `${set.repetitions} reps` : ''}
-                            {set.repetitions != null && set.weight != null ? ' · ' : ''}
-                            {set.weight != null ? `${set.weight} ${set.weight_unit}` : ''}
-                            {set.repetitions == null && set.weight == null
-                              ? 'Recorded'
-                              : ''}
-                          </AppText>
+                          <View
+                            style={{
+                              flexDirection: 'row',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              gap: spacing.sm,
+                            }}
+                          >
+                            <AppText variant="bodySmall" color={colors.text.secondary}>
+                              Set {set.set_number}
+                            </AppText>
+
+                            {editingSetId === set.id ? (
+                              <View style={{ flexDirection: 'row', gap: spacing.xs }}>
+                                <Button
+                                  size="small"
+                                  variant="ghost"
+                                  disabled={isSaving}
+                                  onPress={() => setEditingSetId(null)}
+                                >
+                                  Cancel
+                                </Button>
+                                <Button
+                                  size="small"
+                                  disabled={isSaving}
+                                  onPress={() => void handleSaveSetEdit(set.id)}
+                                >
+                                  Save
+                                </Button>
+                              </View>
+                            ) : (
+                              <Button
+                                size="small"
+                                variant="ghost"
+                                disabled={isSaving || editingSetId !== null}
+                                onPress={() => beginSetEdit(set)}
+                              >
+                                Edit
+                              </Button>
+                            )}
+                          </View>
+
+                          {editingSetId === set.id ? (
+                            <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+                              <View style={{ flex: 1 }}>
+                                <Input
+                                  label="Repetitions"
+                                  keyboardType="number-pad"
+                                  value={editSetDraft.repetitions}
+                                  onChangeText={(value) =>
+                                    setEditSetDraft((current) => ({
+                                      ...current,
+                                      repetitions: value,
+                                    }))
+                                  }
+                                />
+                              </View>
+                              <View style={{ flex: 1 }}>
+                                <Input
+                                  label="Weight (kg)"
+                                  keyboardType="decimal-pad"
+                                  value={editSetDraft.weight}
+                                  onChangeText={(value) =>
+                                    setEditSetDraft((current) => ({
+                                      ...current,
+                                      weight: value,
+                                    }))
+                                  }
+                                />
+                              </View>
+                            </View>
+                          ) : (
+                            <AppText variant="bodySmall" color={colors.text.primary}>
+                              {set.repetitions != null ? `${set.repetitions} reps` : ''}
+                              {set.repetitions != null && set.weight != null ? ' · ' : ''}
+                              {set.weight != null ? `${set.weight} ${set.weight_unit}` : ''}
+                              {set.repetitions == null && set.weight == null
+                                ? 'Recorded'
+                                : ''}
+                            </AppText>
+                          )}
                         </View>
                       ))}
                     </View>
@@ -929,10 +1050,9 @@ export default function PersonalWorkoutDetailScreen() {
                     </AppText>
                   )}
 
-                  {!isCompleted ? (
-                    <View style={{ gap: spacing.sm }}>
-                      <AppText variant="label" color={colors.text.primary}>
-                        Log next set
+                  <View style={{ gap: spacing.sm }}>
+                    <AppText variant="label" color={colors.text.primary}>
+                      Log next set
                       </AppText>
                       <View style={{ flexDirection: 'row', gap: spacing.sm }}>
                         <View style={{ flex: 1 }}>
@@ -972,7 +1092,6 @@ export default function PersonalWorkoutDetailScreen() {
                         Add set
                       </Button>
                     </View>
-                  ) : null}
                 </Card>
               ))}
             </View>

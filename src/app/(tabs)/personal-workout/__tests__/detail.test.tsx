@@ -306,19 +306,20 @@ describe('Personal Workout Detail screen', () => {
     });
   });
 
-  it('keeps completed workouts read-only', async () => {
+  it('allows completed workouts to be updated without completing them again', async () => {
     mockedGetWorkout.mockResolvedValue(completedWorkout);
 
-    const { getByText, queryByRole, queryByLabelText } = await renderScreen();
+    const { getByText, getByRole, getByLabelText, queryByRole } =
+      await renderScreen();
 
     await waitFor(() => {
       expect(getByText('Completed')).toBeTruthy();
     });
 
-    expect(queryByRole('button', { name: 'Add exercise' })).toBeNull();
+    expect(getByRole('button', { name: 'Add exercise' })).toBeTruthy();
+    expect(getByRole('button', { name: 'Add set' })).toBeTruthy();
+    expect(getByLabelText('Repetitions for Dumbbell press')).toBeTruthy();
     expect(queryByRole('button', { name: 'Complete workout' })).toBeNull();
-    expect(queryByRole('button', { name: 'Add set' })).toBeNull();
-    expect(queryByLabelText('Repetitions for Dumbbell press')).toBeNull();
   });
 
   it('edits workout details and saves the changes', async () => {
@@ -416,18 +417,18 @@ describe('Personal Workout Detail screen', () => {
     alertSpy.mockRestore();
   });
 
-  it('keeps completed workouts free of edit and delete controls', async () => {
+  it('allows completed workouts and their exercises to be edited or deleted', async () => {
     mockedGetWorkout.mockResolvedValue(completedWorkout);
 
-    const { getByText, queryByRole } = await renderScreen();
+    const { getByText, getByRole } = await renderScreen();
 
     await waitFor(() => {
       expect(getByText('Completed')).toBeTruthy();
     });
 
-    expect(queryByRole('button', { name: 'Edit workout' })).toBeNull();
-    expect(queryByRole('button', { name: 'Delete workout' })).toBeNull();
-    expect(queryByRole('button', { name: 'Remove exercise' })).toBeNull();
+    expect(getByRole('button', { name: 'Edit workout' })).toBeTruthy();
+    expect(getByRole('button', { name: 'Delete workout' })).toBeTruthy();
+    expect(getByRole('button', { name: 'Remove exercise' })).toBeTruthy();
   });
 
   it('displays a loading error and allows retrying', async () => {

@@ -15,7 +15,15 @@ import { AppText } from '@/components/AppText';
 import { NotificationBell } from '@/components/notifications/NotificationBell';
 import { getFitnessGoals } from '@/services/fitness-goals';
 import { getPersonalRecords } from '@/services/personal-records';
+import {
+  getExercisePerformanceHistory,
+  type ExercisePerformanceHistoryItem,
+} from '@/services/exercise-performance-history';
 import { getPersonalWorkoutHistory } from '@/services/personal-workouts';
+import {
+  getPersonalWorkoutStatistics,
+  type PersonalWorkoutStatistics,
+} from '@/services/workout-statistics';
 import {
   getTrainerDashboard,
   type TrainerDashboardData,
@@ -66,6 +74,19 @@ function formatWorkoutDate(value: string) {
     month: 'short',
     year: 'numeric',
   });
+}
+
+function formatWorkoutDuration(seconds: number | null) {
+  if (seconds === null) return 'Not recorded';
+  if (seconds < 60) return '<1 min';
+
+  const totalMinutes = Math.floor(seconds / 60);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+
+  if (hours === 0) return `${totalMinutes} min`;
+  if (minutes === 0) return `${hours} hr`;
+  return `${hours} hr ${minutes} min`;
 }
 
 function formatLabel(value: string) {
@@ -168,6 +189,10 @@ export default function PersonalTrainerHomeScreen() {
   );
 
   const [personalWorkouts, setPersonalWorkouts] = useState<PersonalWorkout[]>([]);
+  const [personalWorkoutStatistics, setPersonalWorkoutStatistics] =
+    useState<PersonalWorkoutStatistics | null>(null);
+  const [exercisePerformanceHistory, setExercisePerformanceHistory] =
+    useState<ExercisePerformanceHistoryItem[]>([]);
   const [fitnessGoals, setFitnessGoals] = useState<FitnessGoal[]>([]);
   const [personalRecords, setPersonalRecords] = useState<PersonalRecord[]>([]);
   const [isPersonalProgressLoading, setIsPersonalProgressLoading] = useState(false);
@@ -212,8 +237,16 @@ export default function PersonalTrainerHomeScreen() {
     setIsPersonalProgressLoading(true);
     setPersonalProgressError(null);
 
-    const [workoutsResult, goalsResult, recordsResult] = await Promise.allSettled([
+    const [
+      workoutsResult,
+      statisticsResult,
+      exerciseHistoryResult,
+      goalsResult,
+      recordsResult,
+    ] = await Promise.allSettled([
       getPersonalWorkoutHistory({ limit: 3 }),
+      getPersonalWorkoutStatistics(),
+      getExercisePerformanceHistory(),
       getFitnessGoals({ status: 'active' }),
       getPersonalRecords({ limit: 3 }),
     ]);
@@ -224,6 +257,18 @@ export default function PersonalTrainerHomeScreen() {
       setPersonalWorkouts(workoutsResult.value);
     } else {
       failedSections.push('workout history');
+    }
+
+    if (statisticsResult.status === 'fulfilled') {
+      setPersonalWorkoutStatistics(statisticsResult.value);
+    } else {
+      failedSections.push('workout statistics');
+    }
+
+    if (exerciseHistoryResult.status === 'fulfilled') {
+      setExercisePerformanceHistory(exerciseHistoryResult.value);
+    } else {
+      failedSections.push('exercise performance history');
     }
 
     if (goalsResult.status === 'fulfilled') {
@@ -813,6 +858,93 @@ export default function PersonalTrainerHomeScreen() {
                   </View>
                 ) : null}
 
+                {/* Personal workout statistics */}
+                <View style={{ gap: spacing.md }}>
+                  <SectionHeading title="PERSONAL WORKOUT STATISTICS" />
+
+                  {personalWorkoutStatistics ? (
+                    <>
+                      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
+                        <MetricCard
+                          label="COMPLETED WORKOUTS"
+                          value={personalWorkoutStatistics.completedWorkoutCount}
+                          description="All-time completed workouts"
+                        />
+                        <MetricCard
+                          label="THIS WEEK"
+                          value={personalWorkoutStatistics.workoutsThisWeek}
+                          description="Completed workouts"
+                        />
+                        <MetricCard
+                          label="THIS MONTH"
+                          value={personalWorkoutStatistics.workoutsThisMonth}
+                          description="Completed workouts"
+                        />
+                        <MetricCard
+                          label="ACTIVE DAYS"
+                          value={personalWorkoutStatistics.activeDaysThisWeek}
+                          description="Distinct days this week"
+                        />
+                      </View>
+
+                      <View
+                        style={{
+                          flexDirection: 'row',
+                          flexWrap: 'wrap',
+                          gap: spacing.sm,
+                          padding: spacing.lg,
+                          borderRadius: 14,
+                          borderWidth: 1,
+                          borderColor: colors.border.default,
+                          backgroundColor: colors.background.secondary,
+                        }}
+                      >
+                        <View style={{ flex: 1, minWidth: '45%', gap: spacing.xs }}>
+                          <AppText variant="caption" color={colors.text.secondary}>
+                            TOTAL RECORDED DURATION
+                          </AppText>
+                          <AppText variant="h3" color={colors.text.primary}>
+                            {formatWorkoutDuration(
+                              personalWorkoutStatistics.recordedDurationSeconds,
+                            )}
+                          </AppText>
+                          <AppText variant="caption" color={colors.text.tertiary}>
+                            Across {personalWorkoutStatistics.workoutsWithRecordedDuration} workouts
+                          </AppText>
+                        </View>
+
+                        <View style={{ flex: 1, minWidth: '45%', gap: spacing.xs }}>
+                          <AppText variant="caption" color={colors.text.secondary}>
+                            AVERAGE WORKOUT DURATION
+                          </AppText>
+                          <AppText variant="h3" color={colors.text.primary}>
+                            {formatWorkoutDuration(
+                              personalWorkoutStatistics.averageDurationSeconds,
+                            )}
+                          </AppText>
+                          <AppText variant="caption" color={colors.text.tertiary}>
+                            Based on recorded durations
+                          </AppText>
+                        </View>
+                      </View>
+                    </>
+                  ) : (
+                    <View
+                      style={{
+                        padding: spacing.lg,
+                        borderRadius: 14,
+                        borderWidth: 1,
+                        borderColor: colors.border.default,
+                        backgroundColor: colors.background.secondary,
+                      }}
+                    >
+                      <AppText variant="bodySmall" color={colors.text.secondary}>
+                        Workout statistics are currently unavailable.
+                      </AppText>
+                    </View>
+                  )}
+                </View>
+
                 {/* Recent personal workouts */}
                 <View>
                   <SectionHeading
@@ -939,6 +1071,104 @@ export default function PersonalTrainerHomeScreen() {
                               Target date: {formatWorkoutDate(goal.target_date)}
                             </AppText>
                           ) : null}
+                        </View>
+                      ))}
+                    </View>
+                  )}
+                </View>
+
+                {/* Exercise performance history */}
+                <View style={{ gap: spacing.md }}>
+                  <SectionHeading title="EXERCISE PERFORMANCE" />
+
+                  {exercisePerformanceHistory.length === 0 ? (
+                    <View
+                      style={{
+                        padding: spacing.lg,
+                        borderRadius: 14,
+                        borderWidth: 1,
+                        borderColor: colors.border.default,
+                        backgroundColor: colors.background.secondary,
+                      }}
+                    >
+                      <AppText variant="bodySmall" color={colors.text.secondary}>
+                        Complete workouts with recorded sets to build your exercise history.
+                      </AppText>
+                    </View>
+                  ) : (
+                    <View style={{ gap: spacing.sm }}>
+                      {exercisePerformanceHistory.map((exercise) => (
+                        <View
+                          key={exercise.exerciseKey}
+                          style={{
+                            padding: spacing.lg,
+                            borderRadius: 14,
+                            borderWidth: 1,
+                            borderColor: colors.border.default,
+                            backgroundColor: colors.background.secondary,
+                            gap: spacing.sm,
+                          }}
+                        >
+                          <AppText variant="bodyMedium" color={colors.text.primary}>
+                            {exercise.exerciseName}
+                          </AppText>
+
+                          <AppText variant="caption" color={colors.text.tertiary}>
+                            {exercise.exerciseSource === 'personal'
+                              ? 'Personal exercise'
+                              : 'TRAINR exercise'}
+                            {' · '}
+                            {exercise.totalSessions} {exercise.totalSessions === 1 ? 'session' : 'sessions'}
+                          </AppText>
+
+                          {exercise.sessions.slice(0, 2).map((session) => (
+                            <View
+                              key={session.workoutId}
+                              style={{
+                                borderTopWidth: 1,
+                                borderTopColor: colors.border.default,
+                                paddingTop: spacing.sm,
+                                gap: spacing.xs,
+                              }}
+                            >
+                              <AppText variant="bodySmall" color={colors.text.primary}>
+                                {session.workoutName}
+                              </AppText>
+
+                              <AppText variant="caption" color={colors.text.secondary}>
+                                {formatWorkoutDate(session.workoutDate)}
+                              </AppText>
+
+                              {session.sets.map((set) => {
+                                const measurements = [
+                                  set.repetitions !== null
+                                    ? `${set.repetitions} reps`
+                                    : null,
+                                  set.weight !== null
+                                    ? `${set.weight}${set.weight_unit ? ` ${set.weight_unit}` : ''}`
+                                    : null,
+                                  set.duration_seconds !== null
+                                    ? formatWorkoutDuration(set.duration_seconds)
+                                    : null,
+                                  set.distance !== null
+                                    ? `${set.distance}${set.distance_unit ? ` ${set.distance_unit}` : ''}`
+                                    : null,
+                                ].filter(Boolean);
+
+                                return (
+                                  <AppText
+                                    key={set.id}
+                                    variant="caption"
+                                    color={colors.text.secondary}
+                                  >
+                                    Set {set.set_number}: {measurements.length > 0
+                                      ? measurements.join(' · ')
+                                      : set.notes ?? 'Not recorded'}
+                                  </AppText>
+                                );
+                              })}
+                            </View>
+                          ))}
                         </View>
                       ))}
                     </View>

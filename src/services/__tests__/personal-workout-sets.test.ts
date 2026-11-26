@@ -293,19 +293,16 @@ describe('Personal Workout Sets service', () => {
       ).rejects.toThrow('Please sign in to continue.');
     });
 
-    it('rejects sets added to completed workouts', async () => {
+    it('adds a set to a completed workout owned by the user', async () => {
+      const insertQuery = createQuery({
+        data: mockSet,
+        error: null,
+      });
+
       queueQueries(
-        createQuery({
-          data: mockWorkoutExercise,
-          error: null,
-        }),
-        createQuery({
-          data: {
-            id: mockWorkout.id,
-            status: 'completed',
-          },
-          error: null,
-        }),
+        createQuery({ data: mockWorkoutExercise, error: null }),
+        createQuery({ data: { id: mockWorkout.id }, error: null }),
+        insertQuery,
       );
 
       await expect(
@@ -313,7 +310,9 @@ describe('Personal Workout Sets service', () => {
           workout_exercise_id: 'workout-exercise-123',
           set_number: 1,
         }),
-      ).rejects.toThrow('Completed workouts cannot be modified.');
+      ).resolves.toEqual(mockSet);
+
+      expect(insertQuery.insert).toHaveBeenCalled();
     });
 
     it('rejects exercises belonging to another user', async () => {
@@ -516,21 +515,25 @@ describe('Personal Workout Sets service', () => {
       ).rejects.toThrow('Weight unit must be empty when weight is not provided.');
     });
 
-    it('rejects updates to completed workouts', async () => {
+    it('updates a set in a completed workout owned by the user', async () => {
+      const updatedSet = { ...mockSet, repetitions: 12 };
+      const updateQuery = createQuery({
+        data: updatedSet,
+        error: null,
+      });
+
       queueQueries(
         createQuery({ data: mockSet, error: null }),
         createQuery({ data: mockWorkoutExercise, error: null }),
-        createQuery({
-          data: { id: mockWorkout.id, status: 'completed' },
-          error: null,
-        }),
+        createQuery({ data: { id: mockWorkout.id }, error: null }),
+        updateQuery,
       );
 
       await expect(
-        updateWorkoutSet('set-123', {
-          repetitions: 12,
-        }),
-      ).rejects.toThrow('Completed workouts cannot be modified.');
+        updateWorkoutSet('set-123', { repetitions: 12 }),
+      ).resolves.toMatchObject({ repetitions: 12 });
+
+      expect(updateQuery.update).toHaveBeenCalledWith({ repetitions: 12 });
     });
 
     it('rejects a set that does not belong to the user', async () => {
@@ -606,19 +609,22 @@ describe('Personal Workout Sets service', () => {
       await expect(deleteWorkoutSet('')).rejects.toThrow('Workout set ID is required.');
     });
 
-    it('rejects deleting a set from a completed workout', async () => {
+    it('deletes a set from a completed workout owned by the user', async () => {
+      const deleteQuery = createQuery({
+        data: { id: mockSet.id },
+        error: null,
+      });
+
       queueQueries(
         createQuery({ data: mockSet, error: null }),
         createQuery({ data: mockWorkoutExercise, error: null }),
-        createQuery({
-          data: { id: mockWorkout.id, status: 'completed' },
-          error: null,
-        }),
+        createQuery({ data: { id: mockWorkout.id }, error: null }),
+        deleteQuery,
       );
 
-      await expect(deleteWorkoutSet('set-123')).rejects.toThrow(
-        'Completed workouts cannot be modified.',
-      );
+      await expect(deleteWorkoutSet('set-123')).resolves.toBeUndefined();
+
+      expect(deleteQuery.delete).toHaveBeenCalled();
     });
   });
 });
