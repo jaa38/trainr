@@ -1,12 +1,8 @@
 import React from 'react';
 import { Linking } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
-import {
-  act,
-  fireEvent,
-  render,
-  waitFor,
-} from '@testing-library/react-native';
+import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 
 import NotificationSettingsScreen from '@/app/(tabs)/notification-settings';
 import { useAuth } from '@/providers/AuthProvider';
@@ -98,11 +94,22 @@ const mockUseAuth = jest.mocked(useAuth);
 const mockUseNotifications = jest.mocked(useNotifications);
 const mockGetPreferences = jest.mocked(getNotificationPreferences);
 const mockUpdatePreference = jest.mocked(updateNotificationPreference);
-const mockScheduleTestNotification = jest.mocked(
-  scheduleLocalTestNotification,
-);
+const mockScheduleTestNotification = jest.mocked(scheduleLocalTestNotification);
 
 const userId = 'test-user-id';
+
+function renderNotificationSettingsScreen() {
+  return render(
+    <SafeAreaProvider
+      initialMetrics={{
+        frame: { x: 0, y: 0, width: 390, height: 844 },
+        insets: { top: 0, right: 0, bottom: 0, left: 0 },
+      }}
+    >
+      <NotificationSettingsScreen />
+    </SafeAreaProvider>,
+  );
+}
 
 const mockPreferences = {
   user_id: userId,
@@ -142,7 +149,10 @@ function setupMocks({
   requestPermissionAndRegister = jest.fn().mockResolvedValue(null),
   refreshPermissionStatus = jest.fn().mockResolvedValue(grantedPermission),
 }: {
-  permissionStatus?: typeof grantedPermission | typeof requestableDeniedPermission | typeof permanentlyDeniedPermission;
+  permissionStatus?:
+    | typeof grantedPermission
+    | typeof requestableDeniedPermission
+    | typeof permanentlyDeniedPermission;
   isRegistered?: boolean;
   isCheckingPermission?: boolean;
   isRegistering?: boolean;
@@ -185,14 +195,14 @@ describe('NotificationSettingsScreen', () => {
   it('loads and displays notification preferences', async () => {
     setupMocks();
 
-    const { getByText, getByRole } = await render(
-      <NotificationSettingsScreen />,
-    );
+    const { getByText, getByRole } = await renderNotificationSettingsScreen();
 
     await waitFor(() => {
       expect(getByText('Notification Preferences')).toBeTruthy();
       expect(getByRole('switch', { name: 'Booking Updates notifications' })).toBeTruthy();
-      expect(getByRole('switch', { name: 'Session Reminders notifications' })).toBeTruthy();
+      expect(
+        getByRole('switch', { name: 'Session Reminders notifications' }),
+      ).toBeTruthy();
       expect(getByRole('switch', { name: 'Workout Updates notifications' })).toBeTruthy();
     });
 
@@ -208,9 +218,7 @@ describe('NotificationSettingsScreen', () => {
       },
     });
 
-    const { getByText, getByLabelText } = await render(
-      <NotificationSettingsScreen />,
-    );
+    const { getByText, getByLabelText } = await renderNotificationSettingsScreen();
 
     await waitFor(() => {
       expect(getByText('Not requested')).toBeTruthy();
@@ -223,9 +231,7 @@ describe('NotificationSettingsScreen', () => {
       permissionStatus: requestableDeniedPermission,
     });
 
-    const { getByLabelText } = await render(
-      <NotificationSettingsScreen />,
-    );
+    const { getByLabelText } = await renderNotificationSettingsScreen();
 
     await waitFor(() => {
       expect(getByLabelText('Enable TRAINR notifications')).toBeTruthy();
@@ -243,9 +249,8 @@ describe('NotificationSettingsScreen', () => {
       permissionStatus: permanentlyDeniedPermission,
     });
 
-    const { getByText, getByLabelText, queryByLabelText } = await render(
-      <NotificationSettingsScreen />,
-    );
+    const { getByText, getByLabelText, queryByLabelText } =
+      await renderNotificationSettingsScreen();
 
     await waitFor(() => {
       expect(getByText('Not enabled')).toBeTruthy();
@@ -264,9 +269,7 @@ describe('NotificationSettingsScreen', () => {
       .spyOn(Linking, 'openSettings')
       .mockResolvedValue(undefined);
 
-    const { getByLabelText } = await render(
-      <NotificationSettingsScreen />,
-    );
+    const { getByLabelText } = await renderNotificationSettingsScreen();
 
     await waitFor(() => {
       expect(getByLabelText('Open device settings')).toBeTruthy();
@@ -288,9 +291,7 @@ describe('NotificationSettingsScreen', () => {
       isRegistered: true,
     });
 
-    const { getByText, getByLabelText } = await render(
-      <NotificationSettingsScreen />,
-    );
+    const { getByText, getByLabelText } = await renderNotificationSettingsScreen();
 
     await waitFor(() => {
       expect(getByText('Enabled')).toBeTruthy();
@@ -304,12 +305,12 @@ describe('NotificationSettingsScreen', () => {
       permissionStatus: requestableDeniedPermission,
       requestPermissionAndRegister: jest
         .fn()
-        .mockRejectedValue(new Error('Unable to register this device. Please try again.')),
+        .mockRejectedValue(
+          new Error('Unable to register this device. Please try again.'),
+        ),
     });
 
-    const { getByLabelText, getByText } = await render(
-      <NotificationSettingsScreen />,
-    );
+    const { getByLabelText, getByText } = await renderNotificationSettingsScreen();
 
     await waitFor(() => {
       expect(getByLabelText('Enable TRAINR notifications')).toBeTruthy();
@@ -322,9 +323,7 @@ describe('NotificationSettingsScreen', () => {
     expect(requestPermissionAndRegister).toHaveBeenCalledTimes(1);
 
     await waitFor(() => {
-      expect(
-        getByText('Unable to register this device. Please try again.'),
-      ).toBeTruthy();
+      expect(getByText('Unable to register this device. Please try again.')).toBeTruthy();
     });
   });
 
@@ -333,9 +332,7 @@ describe('NotificationSettingsScreen', () => {
       isCheckingPermission: true,
     });
 
-    const { getByLabelText } = await render(
-      <NotificationSettingsScreen />,
-    );
+    const { getByLabelText } = await renderNotificationSettingsScreen();
 
     const enableButton = getByLabelText('Enable TRAINR notifications');
 

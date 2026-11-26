@@ -1,15 +1,29 @@
-import { router } from 'expo-router';
-import { useFocusEffect } from 'expo-router';
-import { Activity, Dumbbell, Flag, Trophy } from 'lucide-react-native';
+
+import { router, useFocusEffect } from 'expo-router';
+import {
+  Activity,
+  ArrowLeft,
+  Dumbbell,
+  Flag,
+  Trophy,
+} from 'lucide-react-native';
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, Pressable, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  View,
+} from 'react-native';
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/AppText';
 import { Badge } from '@/components/Badge';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { Input } from '@/components/Input';
-import { Screen } from '@/components/Screen';
 import { getFitnessGoals } from '@/services/fitness-goals';
 import { getPersonalRecords } from '@/services/personal-records';
 import { getPersonalWorkoutHistory } from '@/services/personal-workouts';
@@ -72,24 +86,25 @@ function formatCategory(value: PersonalWorkout['workout_type']) {
 
 export default function PersonalWorkoutOverviewScreen() {
   const { colors, spacing, radius } = useTrainrTheme();
+  const insets = useSafeAreaInsets();
 
-  const [activeTab, setActiveTab] = useState<'overview' | 'history'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'history'>(
+    'overview',
+  );
 
   const [workouts, setWorkouts] = useState<PersonalWorkout[]>([]);
   const [goals, setGoals] = useState<FitnessGoal[]>([]);
   const [records, setRecords] = useState<PersonalRecord[]>([]);
 
   const [searchDraft, setSearchDraft] = useState('');
-  const [categoryDraft, setCategoryDraft] = useState<PersonalWorkoutCategory | null>(
-    null,
-  );
+  const [categoryDraft, setCategoryDraft] =
+    useState<PersonalWorkoutCategory | null>(null);
   const [startDateDraft, setStartDateDraft] = useState('');
   const [endDateDraft, setEndDateDraft] = useState('');
 
   const [appliedSearch, setAppliedSearch] = useState('');
-  const [appliedCategory, setAppliedCategory] = useState<PersonalWorkoutCategory | null>(
-    null,
-  );
+  const [appliedCategory, setAppliedCategory] =
+    useState<PersonalWorkoutCategory | null>(null);
   const [appliedStartDate, setAppliedStartDate] = useState('');
   const [appliedEndDate, setAppliedEndDate] = useState('');
 
@@ -102,6 +117,9 @@ export default function PersonalWorkoutOverviewScreen() {
   const [workoutError, setWorkoutError] = useState<string | null>(null);
   const [goalError, setGoalError] = useState<string | null>(null);
   const [recordError, setRecordError] = useState<string | null>(null);
+
+  // Reserve space for the floating NativeTabs bar and bottom safe area.
+  const bottomContentPadding = spacing.xxxl + insets.bottom + 100;
 
   const loadOverview = useCallback(async () => {
     setIsLoading(true);
@@ -156,11 +174,16 @@ export default function PersonalWorkoutOverviewScreen() {
           end_date: appliedEndDate || undefined,
         });
 
-        setWorkouts((current) => (append ? [...current, ...result] : result));
+        setWorkouts((current) =>
+          append ? [...current, ...result] : result,
+        );
+
         setHasMore(result.length === HISTORY_PAGE_SIZE);
       } catch (error) {
         setHistoryError(
-          error instanceof Error ? error.message : 'Unable to load your workout history.',
+          error instanceof Error
+            ? error.message
+            : 'Unable to load your workout history.',
         );
       } finally {
         setHistoryLoading(false);
@@ -194,6 +217,7 @@ export default function PersonalWorkoutOverviewScreen() {
     setCategoryDraft(null);
     setStartDateDraft('');
     setEndDateDraft('');
+
     setAppliedSearch('');
     setAppliedCategory(null);
     setAppliedStartDate('');
@@ -205,18 +229,63 @@ export default function PersonalWorkoutOverviewScreen() {
   } as const;
 
   return (
-    <Screen
-      key={activeTab}
-      scroll
-      contentContainerStyle={{
-        paddingTop: spacing.lg,
-        paddingBottom: spacing.xxxl,
+    <SafeAreaView
+      edges={['top']}
+      style={{
+        flex: 1,
+        backgroundColor: colors.background.primary,
       }}
     >
-      <View style={{ gap: spacing.xl }}>
-        {/* Header */}
+      {/* Header */}
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          paddingHorizontal: spacing.lg,
+          paddingVertical: spacing.md,
+          gap: spacing.md,
+        }}
+      >
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+          onPress={() => router.back()}
+          style={{
+            width: 42,
+            height: 42,
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderRadius: 12,
+            borderWidth: 1,
+            borderColor: colors.border.default,
+          }}
+        >
+          <ArrowLeft size={20} color={colors.text.primary} />
+        </Pressable>
+
+        <AppText variant="h2" color={colors.text.primary}>
+          Personal Training
+        </AppText>
+      </View>
+
+      {/* Content */}
+      <ScrollView
+        contentContainerStyle={{
+          flexGrow: 1,
+          padding: spacing.lg,
+          paddingBottom: bottomContentPadding,
+          gap: spacing.xl,
+        }}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        {/* Introduction */}
         <View style={{ gap: spacing.xs }}>
-          <AppText variant="caption" color={colors.brand.red} weight="700">
+          <AppText
+            variant="caption"
+            color={colors.brand.red}
+            weight="700"
+          >
             YOUR FITNESS. YOUR JOURNEY.
           </AppText>
 
@@ -229,7 +298,7 @@ export default function PersonalWorkoutOverviewScreen() {
           </AppText>
         </View>
 
-        {/* Personal workout tabs */}
+        {/* Personal Workout Tabs */}
         <View
           accessibilityRole="tablist"
           style={{
@@ -244,7 +313,9 @@ export default function PersonalWorkoutOverviewScreen() {
         >
           <Pressable
             accessibilityRole="tab"
-            accessibilityState={{ selected: activeTab === 'overview' }}
+            accessibilityState={{
+              selected: activeTab === 'overview',
+            }}
             accessibilityLabel="Overview tab"
             onPress={() => setActiveTab('overview')}
             style={{
@@ -255,13 +326,19 @@ export default function PersonalWorkoutOverviewScreen() {
               paddingVertical: spacing.md,
               borderRadius: radius.pill,
               backgroundColor:
-                activeTab === 'overview' ? colors.surface.default : 'transparent',
+                activeTab === 'overview'
+                  ? colors.surface.default
+                  : 'transparent',
             }}
           >
             <AppText
               variant="label"
               weight="600"
-              color={activeTab === 'overview' ? colors.brand.red : colors.text.secondary}
+              color={
+                activeTab === 'overview'
+                  ? colors.brand.red
+                  : colors.text.secondary
+              }
             >
               Overview
             </AppText>
@@ -269,7 +346,9 @@ export default function PersonalWorkoutOverviewScreen() {
 
           <Pressable
             accessibilityRole="tab"
-            accessibilityState={{ selected: activeTab === 'history' }}
+            accessibilityState={{
+              selected: activeTab === 'history',
+            }}
             accessibilityLabel="Workout History tab"
             onPress={() => setActiveTab('history')}
             style={{
@@ -280,13 +359,19 @@ export default function PersonalWorkoutOverviewScreen() {
               paddingVertical: spacing.md,
               borderRadius: radius.pill,
               backgroundColor:
-                activeTab === 'history' ? colors.surface.default : 'transparent',
+                activeTab === 'history'
+                  ? colors.surface.default
+                  : 'transparent',
             }}
           >
             <AppText
               variant="label"
               weight="600"
-              color={activeTab === 'history' ? colors.brand.red : colors.text.secondary}
+              color={
+                activeTab === 'history'
+                  ? colors.brand.red
+                  : colors.text.secondary
+              }
             >
               Workout History
             </AppText>
@@ -296,7 +381,12 @@ export default function PersonalWorkoutOverviewScreen() {
         {activeTab === 'overview' ? (
           <>
             {/* Summary */}
-            <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+            <View
+              style={{
+                flexDirection: 'row',
+                gap: spacing.sm,
+              }}
+            >
               <View
                 style={{
                   flex: 1,
@@ -309,9 +399,11 @@ export default function PersonalWorkoutOverviewScreen() {
                 }}
               >
                 <Dumbbell size={20} color={colors.brand.red} />
+
                 <AppText variant="h2" color={colors.text.primary}>
                   {historyLoading ? '—' : workouts.length}
                 </AppText>
+
                 <AppText variant="caption" color={colors.text.secondary}>
                   Loaded workouts
                 </AppText>
@@ -329,9 +421,11 @@ export default function PersonalWorkoutOverviewScreen() {
                 }}
               >
                 <Flag size={20} color={colors.brand.red} />
+
                 <AppText variant="h2" color={colors.text.primary}>
                   {isLoading ? '—' : goals.length}
                 </AppText>
+
                 <AppText variant="caption" color={colors.text.secondary}>
                   Active goals
                 </AppText>
@@ -349,18 +443,24 @@ export default function PersonalWorkoutOverviewScreen() {
                 }}
               >
                 <Trophy size={20} color={colors.brand.red} />
+
                 <AppText variant="h2" color={colors.text.primary}>
                   {isLoading ? '—' : records.length}
                 </AppText>
+
                 <AppText variant="caption" color={colors.text.secondary}>
                   Recent records
                 </AppText>
               </View>
             </View>
 
-            {/* Active goals */}
+            {/* Active Goals */}
             <View>
-              <AppText variant="h3" color={colors.text.primary} style={sectionTitleStyle}>
+              <AppText
+                variant="h3"
+                color={colors.text.primary}
+                style={sectionTitleStyle}
+              >
                 Active fitness goals
               </AppText>
 
@@ -368,34 +468,59 @@ export default function PersonalWorkoutOverviewScreen() {
                 <ActivityIndicator color={colors.brand.red} />
               ) : goalError ? (
                 <Card variant="outlined">
-                  <AppText variant="bodySmall" color={colors.text.error}>
+                  <AppText
+                    variant="bodySmall"
+                    color={colors.text.error}
+                  >
                     {goalError}
                   </AppText>
                 </Card>
               ) : goals.length === 0 ? (
                 <Card variant="outlined" style={{ gap: spacing.xs }}>
-                  <AppText variant="bodyMedium" color={colors.text.primary}>
+                  <AppText
+                    variant="bodyMedium"
+                    color={colors.text.primary}
+                  >
                     Set your next target
                   </AppText>
-                  <AppText variant="bodySmall" color={colors.text.secondary}>
+
+                  <AppText
+                    variant="bodySmall"
+                    color={colors.text.secondary}
+                  >
                     Measurable fitness goals you create will appear here.
                   </AppText>
                 </Card>
               ) : (
                 <View style={{ gap: spacing.sm }}>
                   {goals.slice(0, 5).map((goal) => (
-                    <Card key={goal.id} variant="outlined" style={{ gap: spacing.xs }}>
-                      <AppText variant="bodyMedium" color={colors.text.primary}>
+                    <Card
+                      key={goal.id}
+                      variant="outlined"
+                      style={{ gap: spacing.xs }}
+                    >
+                      <AppText
+                        variant="bodyMedium"
+                        color={colors.text.primary}
+                      >
                         {goal.goal_name}
                       </AppText>
 
-                      <AppText variant="bodySmall" color={colors.text.secondary}>
+                      <AppText
+                        variant="bodySmall"
+                        color={colors.text.secondary}
+                      >
                         Target: {goal.target_value}
-                        {goal.measurement_unit ? ` ${goal.measurement_unit}` : ''}
+                        {goal.measurement_unit
+                          ? ` ${goal.measurement_unit}`
+                          : ''}
                       </AppText>
 
                       {goal.target_date ? (
-                        <AppText variant="caption" color={colors.text.tertiary}>
+                        <AppText
+                          variant="caption"
+                          color={colors.text.tertiary}
+                        >
                           Target date: {formatDate(goal.target_date)}
                         </AppText>
                       ) : null}
@@ -405,9 +530,13 @@ export default function PersonalWorkoutOverviewScreen() {
               )}
             </View>
 
-            {/* Personal records */}
+            {/* Personal Records */}
             <View>
-              <AppText variant="h3" color={colors.text.primary} style={sectionTitleStyle}>
+              <AppText
+                variant="h3"
+                color={colors.text.primary}
+                style={sectionTitleStyle}
+              >
                 Personal records
               </AppText>
 
@@ -415,32 +544,56 @@ export default function PersonalWorkoutOverviewScreen() {
                 <ActivityIndicator color={colors.brand.red} />
               ) : recordError ? (
                 <Card variant="outlined">
-                  <AppText variant="bodySmall" color={colors.text.error}>
+                  <AppText
+                    variant="bodySmall"
+                    color={colors.text.error}
+                  >
                     {recordError}
                   </AppText>
                 </Card>
               ) : records.length === 0 ? (
                 <Card variant="outlined" style={{ gap: spacing.xs }}>
-                  <AppText variant="bodyMedium" color={colors.text.primary}>
+                  <AppText
+                    variant="bodyMedium"
+                    color={colors.text.primary}
+                  >
                     Your achievements will appear here
                   </AppText>
-                  <AppText variant="bodySmall" color={colors.text.secondary}>
-                    Complete logged workouts to start building your personal records.
+
+                  <AppText
+                    variant="bodySmall"
+                    color={colors.text.secondary}
+                  >
+                    Complete logged workouts to start building your personal
+                    records.
                   </AppText>
                 </Card>
               ) : (
                 <View style={{ gap: spacing.sm }}>
                   {records.map((record) => (
-                    <Card key={record.id} variant="outlined" style={{ gap: spacing.xs }}>
-                      <AppText variant="bodySmall" color={colors.text.secondary}>
+                    <Card
+                      key={record.id}
+                      variant="outlined"
+                      style={{ gap: spacing.xs }}
+                    >
+                      <AppText
+                        variant="bodySmall"
+                        color={colors.text.secondary}
+                      >
                         {formatRecordType(record.record_type)}
                       </AppText>
 
-                      <AppText variant="h3" color={colors.text.primary}>
+                      <AppText
+                        variant="h3"
+                        color={colors.text.primary}
+                      >
                         {record.record_value} {record.measurement_unit}
                       </AppText>
 
-                      <AppText variant="caption" color={colors.text.tertiary}>
+                      <AppText
+                        variant="caption"
+                        color={colors.text.tertiary}
+                      >
                         Achieved {formatDate(record.achieved_at)}
                       </AppText>
                     </Card>
@@ -448,13 +601,20 @@ export default function PersonalWorkoutOverviewScreen() {
                 </View>
               )}
             </View>
-            <Button fullWidth onPress={() => router.push('/(tabs)/personal-workout/new')}>
+
+            {/* Create Workout */}
+            <Button
+              fullWidth
+              onPress={() =>
+                router.push('/(tabs)/personal-workout/new')
+              }
+            >
               Create personal workout
             </Button>
           </>
         ) : (
           <>
-            {/* Workout history */}
+            {/* Workout History */}
             <View style={{ gap: spacing.md }}>
               <View
                 style={{
@@ -464,11 +624,13 @@ export default function PersonalWorkoutOverviewScreen() {
                 }}
               >
                 <Activity size={19} color={colors.brand.red} />
+
                 <AppText variant="h3" color={colors.text.primary}>
                   Workout history
                 </AppText>
               </View>
 
+              {/* Search and Filters */}
               <View style={{ gap: spacing.md }}>
                 <Input
                   label="Search workouts"
@@ -479,8 +641,12 @@ export default function PersonalWorkoutOverviewScreen() {
                   accessibilityLabel="Search workouts by name"
                 />
 
+                {/* Workout Categories */}
                 <View style={{ gap: spacing.sm }}>
-                  <AppText variant="label" color={colors.text.primary}>
+                  <AppText
+                    variant="label"
+                    color={colors.text.primary}
+                  >
                     Workout category
                   </AppText>
 
@@ -492,7 +658,8 @@ export default function PersonalWorkoutOverviewScreen() {
                     }}
                   >
                     {CATEGORIES.map((category) => {
-                      const selected = categoryDraft === category.value;
+                      const selected =
+                        categoryDraft === category.value;
 
                       return (
                         <Pressable
@@ -500,7 +667,9 @@ export default function PersonalWorkoutOverviewScreen() {
                           accessibilityRole="button"
                           accessibilityState={{ selected }}
                           accessibilityLabel={`Filter by ${category.label}`}
-                          onPress={() => setCategoryDraft(category.value)}
+                          onPress={() =>
+                            setCategoryDraft(category.value)
+                          }
                           style={{
                             paddingHorizontal: spacing.md,
                             paddingVertical: spacing.sm,
@@ -517,7 +686,11 @@ export default function PersonalWorkoutOverviewScreen() {
                           <AppText
                             variant="caption"
                             weight="600"
-                            color={selected ? colors.brand.red : colors.text.secondary}
+                            color={
+                              selected
+                                ? colors.brand.red
+                                : colors.text.secondary
+                            }
                           >
                             {category.label}
                           </AppText>
@@ -527,7 +700,13 @@ export default function PersonalWorkoutOverviewScreen() {
                   </View>
                 </View>
 
-                <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+                {/* Date Filters */}
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    gap: spacing.sm,
+                  }}
+                >
                   <View style={{ flex: 1 }}>
                     <Input
                       label="From date"
@@ -551,7 +730,13 @@ export default function PersonalWorkoutOverviewScreen() {
                   </View>
                 </View>
 
-                <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+                {/* Filter Actions */}
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    gap: spacing.sm,
+                  }}
+                >
                   <View style={{ flex: 1 }}>
                     <Button fullWidth onPress={applyFilters}>
                       Apply filters
@@ -559,37 +744,65 @@ export default function PersonalWorkoutOverviewScreen() {
                   </View>
 
                   <View style={{ flex: 1 }}>
-                    <Button fullWidth variant="outline" onPress={clearFilters}>
+                    <Button
+                      fullWidth
+                      variant="outline"
+                      onPress={clearFilters}
+                    >
                       Clear filters
                     </Button>
                   </View>
                 </View>
               </View>
 
+              {/* History Results */}
               {historyLoading ? (
                 <ActivityIndicator color={colors.brand.red} />
               ) : historyError ? (
-                <Card variant="outlined" style={{ gap: spacing.sm }}>
-                  <AppText variant="bodySmall" color={colors.text.error}>
+                <Card
+                  variant="outlined"
+                  style={{ gap: spacing.sm }}
+                >
+                  <AppText
+                    variant="bodySmall"
+                    color={colors.text.error}
+                  >
                     {historyError}
                   </AppText>
-                  <Button variant="outline" onPress={() => void loadHistory()}>
+
+                  <Button
+                    variant="outline"
+                    onPress={() => void loadHistory()}
+                  >
                     Try again
                   </Button>
                 </Card>
               ) : workouts.length === 0 ? (
-                <Card variant="outlined" style={{ gap: spacing.xs }}>
-                  <AppText variant="bodyMedium" color={colors.text.primary}>
+                <Card
+                  variant="outlined"
+                  style={{ gap: spacing.xs }}
+                >
+                  <AppText
+                    variant="bodyMedium"
+                    color={colors.text.primary}
+                  >
                     No workouts found
                   </AppText>
-                  <AppText variant="bodySmall" color={colors.text.secondary}>
-                    Try changing your search or filters, or create a personal workout to
-                    start building your history.
+
+                  <AppText
+                    variant="bodySmall"
+                    color={colors.text.secondary}
+                  >
+                    Try changing your search or filters, or create a
+                    personal workout to start building your history.
                   </AppText>
                 </Card>
               ) : (
                 <View style={{ gap: spacing.sm }}>
-                  <AppText variant="caption" color={colors.text.secondary}>
+                  <AppText
+                    variant="caption"
+                    color={colors.text.secondary}
+                  >
                     Showing {workouts.length} workout
                     {workouts.length === 1 ? '' : 's'}
                   </AppText>
@@ -599,7 +812,9 @@ export default function PersonalWorkoutOverviewScreen() {
                       key={workout.id}
                       variant="interactive"
                       onPress={() =>
-                        router.push(`/(tabs)/personal-workout/${workout.id}`)
+                        router.push(
+                          `/(tabs)/personal-workout/${workout.id}`,
+                        )
                       }
                       accessibilityLabel={`View ${workout.workout_name}`}
                       style={{ gap: spacing.sm }}
@@ -633,24 +848,33 @@ export default function PersonalWorkoutOverviewScreen() {
                         </Badge>
                       </View>
 
-                      <AppText variant="caption" color={colors.text.secondary}>
+                      <AppText
+                        variant="caption"
+                        color={colors.text.secondary}
+                      >
                         {formatCategory(workout.workout_type)} ·{' '}
                         {formatDate(workout.workout_date)}
                       </AppText>
 
-                      <AppText variant="caption" color={colors.text.tertiary}>
+                      <AppText
+                        variant="caption"
+                        color={colors.text.tertiary}
+                      >
                         {formatDuration(workout.duration_seconds)}
                       </AppText>
                     </Card>
                   ))}
 
+                  {/* Pagination */}
                   {hasMore ? (
                     <Button
                       fullWidth
                       variant="outline"
                       loading={historyLoadingMore}
                       disabled={historyLoadingMore}
-                      onPress={() => void loadHistory(workouts.length, true)}
+                      onPress={() =>
+                        void loadHistory(workouts.length, true)
+                      }
                     >
                       Load more workouts
                     </Button>
@@ -660,7 +884,7 @@ export default function PersonalWorkoutOverviewScreen() {
             </View>
           </>
         )}
-      </View>
-    </Screen>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
