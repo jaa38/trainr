@@ -44,6 +44,12 @@ export default function TrainerProfileScreen() {
         'Create personalised training programmes and assign workout plans to your clients.',
       route: '/(tabs)/personal-trainer/more/workout-plans',
     },
+    {
+      title: 'Personal Workouts',
+      description:
+        'Log your own workouts, review training history, track fitness goals and monitor personal records.',
+      route: '/(tabs)/personal-workout',
+    },
   ] as const;
 
   const financialSections = [

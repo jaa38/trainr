@@ -56,11 +56,22 @@ function createQuery(response: QueryResponse) {
 
   const chain = jest.fn(() => query);
 
-  ['select', 'insert', 'update', 'delete', 'eq', 'neq', 'is', 'order', 'range'].forEach(
-    (method) => {
-      query[method] = chain;
-    },
-  );
+  [
+    'select',
+    'insert',
+    'update',
+    'delete',
+    'eq',
+    'neq',
+    'is',
+    'ilike',
+    'gte',
+    'lte',
+    'order',
+    'range',
+  ].forEach((method) => {
+    query[method] = chain;
+  });
 
   query.single = jest.fn().mockResolvedValue(response);
   query.maybeSingle = jest.fn().mockResolvedValue(response);
@@ -216,6 +227,49 @@ describe('Personal Workouts service', () => {
 
       expect(query.eq).toHaveBeenCalledWith('status', 'in_progress');
       expect(query.range).toHaveBeenCalledWith(20, 29);
+    });
+
+    it('supports search, category and date range filters', async () => {
+      const query = createQuery({
+        data: [mockWorkout],
+        error: null,
+      });
+
+      queueQueries(query);
+
+      await getPersonalWorkoutHistory({
+        search: '  Upper Body  ',
+        workout_type: 'strength',
+        start_date: '2026-11-01',
+        end_date: '2026-11-30',
+      });
+
+      expect(query.ilike).toHaveBeenCalledWith('workout_name', '%Upper Body%');
+      expect(query.eq).toHaveBeenCalledWith('workout_type', 'strength');
+      expect(query.gte).toHaveBeenCalledWith('workout_date', '2026-11-01');
+      expect(query.lte).toHaveBeenCalledWith('workout_date', '2026-11-30');
+      expect(query.eq).toHaveBeenCalledWith('user_id', mockUser.id);
+    });
+
+    it('rejects an invalid workout category before querying', async () => {
+      await expect(
+        getPersonalWorkoutHistory({
+          workout_type: 'invalid' as never,
+        }),
+      ).rejects.toThrow('Please select a valid workout category.');
+
+      expect(mockedFrom).not.toHaveBeenCalled();
+    });
+
+    it('rejects a date range where the start is after the end', async () => {
+      await expect(
+        getPersonalWorkoutHistory({
+          start_date: '2026-11-30',
+          end_date: '2026-11-01',
+        }),
+      ).rejects.toThrow('Start date cannot be after the end date.');
+
+      expect(mockedFrom).not.toHaveBeenCalled();
     });
 
     it('returns an empty array when no workouts exist', async () => {
@@ -408,6 +462,23 @@ describe('Personal Workouts service', () => {
       expect(query.delete).toHaveBeenCalled();
       expect(query.eq).toHaveBeenCalledWith('id', 'workout-123');
       expect(query.eq).toHaveBeenCalledWith('user_id', mockUser.id);
+      expect(query.neq).toHaveBeenCalledWith('status', 'completed');
+    });
+
+    it('does not delete a completed workout', async () => {
+      const query = createQuery({
+        data: null,
+        error: null,
+      });
+
+      queueQueries(query);
+
+      await expect(deletePersonalWorkout('workout-123')).rejects.toThrow(
+        'Workout not found or it has already been completed.',
+      );
+
+      expect(query.delete).toHaveBeenCalled();
+      expect(query.neq).toHaveBeenCalledWith('status', 'completed');
     });
 
     it('throws when the workout does not exist', async () => {
@@ -419,7 +490,7 @@ describe('Personal Workouts service', () => {
       );
 
       await expect(deletePersonalWorkout('missing-workout')).rejects.toThrow(
-        'Workout not found.',
+        'Workout not found or it has already been completed.',
       );
     });
   });

@@ -4,6 +4,7 @@ import type {
   CompletePersonalWorkoutInput,
   CreatePersonalWorkoutInput,
   PersonalWorkout,
+  PersonalWorkoutCategory,
   PersonalWorkoutStatus,
   UpdatePersonalWorkoutInput,
 } from '@/types/personal-workouts';
@@ -179,6 +180,10 @@ export type PersonalWorkoutHistoryOptions = {
   limit?: number;
   offset?: number;
   status?: PersonalWorkoutStatus;
+  search?: string;
+  workout_type?: PersonalWorkoutCategory;
+  start_date?: string;
+  end_date?: string;
 };
 
 const DEFAULT_HISTORY_LIMIT = 20;
@@ -206,6 +211,28 @@ export async function getPersonalWorkoutHistory(
     validateStatus(options.status);
   }
 
+  if (options.workout_type) {
+    validateWorkoutType(options.workout_type);
+  }
+
+  if (options.start_date) {
+    validateDate(options.start_date, 'start date');
+  }
+
+  if (options.end_date) {
+    validateDate(options.end_date, 'end date');
+  }
+
+  if (
+    options.start_date &&
+    options.end_date &&
+    Date.parse(options.start_date) > Date.parse(options.end_date)
+  ) {
+    throw new Error('Start date cannot be after the end date.');
+  }
+
+  const search = options.search?.trim();
+
   const user = await getAuthenticatedUser();
 
   let query = supabase
@@ -215,6 +242,22 @@ export async function getPersonalWorkoutHistory(
 
   if (options.status) {
     query = query.eq('status', options.status);
+  }
+
+  if (options.workout_type) {
+    query = query.eq('workout_type', options.workout_type);
+  }
+
+  if (options.start_date) {
+    query = query.gte('workout_date', options.start_date);
+  }
+
+  if (options.end_date) {
+    query = query.lte('workout_date', options.end_date);
+  }
+
+  if (search) {
+    query = query.ilike('workout_name', `%${search}%`);
   }
 
   const { data, error } = await query
@@ -459,6 +502,7 @@ export async function deletePersonalWorkout(workoutId: string): Promise<void> {
     .delete()
     .eq('id', workoutId)
     .eq('user_id', user.id)
+    .neq('status', 'completed')
     .select('id')
     .maybeSingle();
 
@@ -469,6 +513,6 @@ export async function deletePersonalWorkout(workoutId: string): Promise<void> {
   }
 
   if (!data) {
-    throw new Error('Workout not found.');
+    throw new Error('Workout not found or it has already been completed.');
   }
 }

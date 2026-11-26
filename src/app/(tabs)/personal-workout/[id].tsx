@@ -1,7 +1,7 @@
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, CheckCircle2, Plus, Dumbbell } from 'lucide-react-native';
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, Pressable, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, View } from 'react-native';
 
 import { AppText } from '@/components/AppText';
 import { Badge } from '@/components/Badge';
@@ -9,14 +9,22 @@ import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { Input } from '@/components/Input';
 import { Screen } from '@/components/Screen';
-import { completePersonalWorkout } from '@/services/personal-workouts';
+import {
+  completePersonalWorkout,
+  deletePersonalWorkout,
+  updatePersonalWorkout,
+} from '@/services/personal-workouts';
 import { getPersonalWorkoutDetails } from '@/services/personal-workout-exercises';
 import {
   createPersonalExercise,
   getPersonalExercises,
 } from '@/services/personal-exercises';
-import { createWorkoutExercise } from '@/services/personal-workout-exercises';
+import {
+  createWorkoutExercise,
+  deleteWorkoutExercise,
+} from '@/services/personal-workout-exercises';
 import { createWorkoutSet } from '@/services/personal-workout-sets';
+import { getExercises, type Exercise } from '@/services/exercises';
 import { useTrainrTheme } from '@/theme';
 import type {
   PersonalExercise,
@@ -63,6 +71,7 @@ export default function PersonalWorkoutDetailScreen() {
 
   const [workout, setWorkout] = useState<PersonalWorkoutDetails | null>(null);
   const [personalExercises, setPersonalExercises] = useState<PersonalExercise[]>([]);
+  const [sharedExercises, setSharedExercises] = useState<Exercise[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isCompleting, setIsCompleting] = useState(false);
@@ -75,6 +84,12 @@ export default function PersonalWorkoutDetailScreen() {
     useState<PersonalWorkoutCategory>('strength');
   const [newExerciseMuscleGroup, setNewExerciseMuscleGroup] = useState('');
   const [setDrafts, setSetDrafts] = useState<Record<string, SetDraft>>({});
+  const [isEditingWorkout, setIsEditingWorkout] = useState(false);
+  const [editWorkoutName, setEditWorkoutName] = useState('');
+  const [editWorkoutType, setEditWorkoutType] =
+    useState<PersonalWorkoutCategory>('strength');
+  const [editWorkoutDate, setEditWorkoutDate] = useState('');
+  const [editWorkoutNotes, setEditWorkoutNotes] = useState('');
 
   const loadWorkout = useCallback(async () => {
     if (!id) {
@@ -90,12 +105,25 @@ export default function PersonalWorkoutDetailScreen() {
       const result = await getPersonalWorkoutDetails(id);
       setWorkout(result);
 
-      try {
-        const exercises = await getPersonalExercises();
-        setPersonalExercises(exercises);
-        setExerciseError(null);
-      } catch {
+      const [personalResult, sharedResult] = await Promise.allSettled([
+        getPersonalExercises(),
+        getExercises(),
+      ]);
+
+      if (personalResult.status === 'fulfilled') {
+        setPersonalExercises(personalResult.value);
+      } else {
         setExerciseError('Your personal exercise library could not be loaded.');
+      }
+
+      if (sharedResult.status === 'fulfilled') {
+        setSharedExercises(sharedResult.value);
+      } else {
+        setExerciseError((current) =>
+          current
+            ? `${current} The Exercise Library could not be loaded.`
+            : 'The Exercise Library could not be loaded.',
+        );
       }
     } catch (error) {
       setErrorMessage(
@@ -114,15 +142,144 @@ export default function PersonalWorkoutDetailScreen() {
 
   const isCompleted = workout?.status === 'completed';
 
-  function getExerciseName(personalExerciseId: string | null) {
-    if (!personalExerciseId) return 'Shared exercise';
-    return (
-      personalExercises.find((exercise) => exercise.id === personalExerciseId)?.name ??
-      'Personal exercise'
+  function beginWorkoutEdit() {
+    if (!workout || isCompleted) return;
+
+    setEditWorkoutName(workout.workout_name);
+    setEditWorkoutType(workout.workout_type);
+    setEditWorkoutDate(workout.workout_date);
+    setEditWorkoutNotes(workout.notes ?? '');
+    setIsEditingWorkout(true);
+    setErrorMessage(null);
+  }
+
+  async function handleSaveWorkout() {
+    if (!workout || isSaving || isCompleted) return;
+
+    if (!editWorkoutName.trim()) {
+      setErrorMessage('Enter a workout name to continue.');
+      return;
+    }
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(editWorkoutDate.trim())) {
+      setErrorMessage('Enter the workout date in YYYY-MM-DD format.');
+      return;
+    }
+
+    setIsSaving(true);
+    setErrorMessage(null);
+
+    try {
+      await updatePersonalWorkout(workout.id, {
+        workout_name: editWorkoutName.trim(),
+        workout_type: editWorkoutType,
+        workout_date: editWorkoutDate.trim(),
+        notes: editWorkoutNotes.trim() || null,
+      });
+      setIsEditingWorkout(false);
+      await loadWorkout();
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : 'Unable to update this workout.',
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  function confirmDeleteWorkout() {
+    if (!workout || isCompleted || isSaving) return;
+
+    Alert.alert(
+      'Delete workout?',
+      'This will permanently delete this workout, its exercises and logged sets.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            void (async () => {
+              setIsSaving(true);
+              setErrorMessage(null);
+              try {
+                await deletePersonalWorkout(workout.id);
+                router.back();
+              } catch (error) {
+                setErrorMessage(
+                  error instanceof Error
+                    ? error.message
+                    : 'Unable to delete this workout.',
+                );
+              } finally {
+                setIsSaving(false);
+              }
+            })();
+          },
+        },
+      ],
     );
   }
 
-  async function handleAddExercise(exercise: PersonalExercise) {
+  function confirmRemoveExercise(exerciseId: string, exerciseName: string) {
+    if (!workout || isCompleted || isSaving) return;
+
+    Alert.alert(
+      'Remove exercise?',
+      `Remove ${exerciseName} and its logged sets from this workout?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: () => {
+            void (async () => {
+              setIsSaving(true);
+              setExerciseError(null);
+              try {
+                await deleteWorkoutExercise(exerciseId);
+                await loadWorkout();
+              } catch (error) {
+                setExerciseError(
+                  error instanceof Error
+                    ? error.message
+                    : 'Unable to remove this exercise.',
+                );
+              } finally {
+                setIsSaving(false);
+              }
+            })();
+          },
+        },
+      ],
+    );
+  }
+
+  function getExerciseName(
+    personalExerciseId: string | null,
+    sharedExerciseId: string | null,
+  ) {
+    if (personalExerciseId) {
+      return (
+        personalExercises.find((exercise) => exercise.id === personalExerciseId)?.name ??
+        'Personal exercise'
+      );
+    }
+
+    if (sharedExerciseId) {
+      return (
+        sharedExercises.find((exercise) => exercise.id === sharedExerciseId)?.name ??
+        'Exercise Library item'
+      );
+    }
+
+    return 'Exercise';
+  }
+
+  async function handleAddExercise(
+    exercise: PersonalExercise | Exercise,
+    source: 'personal' | 'shared',
+  ) {
     if (!workout || isSaving) return;
 
     setIsSaving(true);
@@ -131,7 +288,9 @@ export default function PersonalWorkoutDetailScreen() {
     try {
       await createWorkoutExercise({
         workout_id: workout.id,
-        personal_exercise_id: exercise.id,
+        ...(source === 'shared'
+          ? { exercise_id: exercise.id }
+          : { personal_exercise_id: exercise.id }),
         exercise_order: workout.exercises.length,
       });
 
@@ -354,7 +513,115 @@ export default function PersonalWorkoutDetailScreen() {
               {workout.notes}
             </AppText>
           ) : null}
+          {!isCompleted ? (
+            <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+              <Button
+                size="small"
+                variant="outline"
+                disabled={isSaving}
+                onPress={beginWorkoutEdit}
+              >
+                Edit workout
+              </Button>
+              <Button
+                size="small"
+                variant="destructive"
+                disabled={isSaving}
+                onPress={confirmDeleteWorkout}
+              >
+                Delete workout
+              </Button>
+            </View>
+          ) : null}
         </View>
+
+        {isEditingWorkout && !isCompleted ? (
+          <Card variant="outlined" style={{ gap: spacing.md }}>
+            <AppText variant="h3" color={colors.text.primary}>
+              Edit workout
+            </AppText>
+            <Input
+              label="Workout name"
+              value={editWorkoutName}
+              onChangeText={setEditWorkoutName}
+              maxLength={120}
+            />
+            <Input
+              label="Workout date (YYYY-MM-DD)"
+              value={editWorkoutDate}
+              onChangeText={setEditWorkoutDate}
+              placeholder="2026-11-26"
+              autoCapitalize="none"
+            />
+            <AppText variant="label" color={colors.text.primary}>
+              Workout category
+            </AppText>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs }}>
+              {CATEGORIES.map((category) => {
+                const selected = editWorkoutType === category.value;
+                return (
+                  <Pressable
+                    key={`edit-${category.value}`}
+                    accessibilityRole="radio"
+                    accessibilityLabel={`Edit category ${category.label}`}
+                    accessibilityState={{ selected }}
+                    onPress={() => setEditWorkoutType(category.value)}
+                    style={{
+                      paddingHorizontal: spacing.md,
+                      paddingVertical: spacing.sm,
+                      borderRadius: radius.pill,
+                      borderWidth: 1,
+                      borderColor: selected ? colors.brand.red : colors.border.default,
+                      backgroundColor: selected
+                        ? colors.brand.redLight
+                        : colors.surface.default,
+                    }}
+                  >
+                    <AppText
+                      variant="caption"
+                      color={selected ? colors.brand.red : colors.text.secondary}
+                    >
+                      {category.label}
+                    </AppText>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <Input
+              label="Notes (optional)"
+              value={editWorkoutNotes}
+              onChangeText={setEditWorkoutNotes}
+              multiline
+              numberOfLines={3}
+              textAlignVertical="top"
+            />
+            <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+              <View style={{ flex: 1 }}>
+                <Button
+                  fullWidth
+                  variant="secondary"
+                  disabled={isSaving}
+                  onPress={() => {
+                    setIsEditingWorkout(false);
+                    setErrorMessage(null);
+                  }}
+                >
+                  Cancel
+                </Button>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Button
+                  fullWidth
+                  loading={isSaving}
+                  disabled={isSaving}
+                  onPress={() => void handleSaveWorkout()}
+                >
+                  Save changes
+                </Button>
+              </View>
+            </View>
+          </Card>
+        ) : null}
 
         <View style={{ flexDirection: 'row', gap: spacing.sm }}>
           <Card style={{ flex: 1, gap: spacing.xs }}>
@@ -410,21 +677,74 @@ export default function PersonalWorkoutDetailScreen() {
           {showExercisePicker && !isCompleted ? (
             <Card variant="outlined" style={{ gap: spacing.md }}>
               <AppText variant="bodyMedium" color={colors.text.primary}>
-                Choose from your personal exercises
+                Choose an exercise
               </AppText>
               {exerciseError ? (
                 <AppText variant="bodySmall" color={colors.text.error}>
                   {exerciseError}
                 </AppText>
               ) : null}
-              {personalExercises.length === 0 ? (
-                <AppText variant="bodySmall" color={colors.text.secondary}>
-                  Your personal exercise library is empty. Create an exercise to get
-                  started.
+
+              <View style={{ gap: spacing.sm }}>
+                <AppText variant="label" color={colors.text.primary}>
+                  EXERCISE LIBRARY
                 </AppText>
-              ) : (
-                <View style={{ gap: spacing.xs }}>
-                  {personalExercises
+                {sharedExercises.filter(
+                  (exercise) =>
+                    !workout.exercises.some((entry) => entry.exercise_id === exercise.id),
+                ).length === 0 ? (
+                  <AppText variant="bodySmall" color={colors.text.secondary}>
+                    No additional Exercise Library entries available.
+                  </AppText>
+                ) : (
+                  sharedExercises
+                    .filter(
+                      (exercise) =>
+                        !workout.exercises.some(
+                          (entry) => entry.exercise_id === exercise.id,
+                        ),
+                    )
+                    .map((exercise) => (
+                      <Pressable
+                        key={`shared-${exercise.id}`}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Add ${exercise.name} from Exercise Library`}
+                        disabled={isSaving}
+                        onPress={() => void handleAddExercise(exercise, 'shared')}
+                        style={{
+                          padding: spacing.md,
+                          borderRadius: radius.md,
+                          backgroundColor: colors.background.secondary,
+                        }}
+                      >
+                        <AppText variant="bodyMedium" color={colors.text.primary}>
+                          {exercise.name}
+                        </AppText>
+                        <AppText variant="caption" color={colors.text.secondary}>
+                          {exercise.muscle_group ??
+                            exercise.category ??
+                            'Exercise Library'}
+                        </AppText>
+                      </Pressable>
+                    ))
+                )}
+              </View>
+
+              <View style={{ gap: spacing.sm }}>
+                <AppText variant="label" color={colors.text.primary}>
+                  PERSONAL EXERCISES
+                </AppText>
+                {personalExercises.filter(
+                  (exercise) =>
+                    !workout.exercises.some(
+                      (entry) => entry.personal_exercise_id === exercise.id,
+                    ),
+                ).length === 0 ? (
+                  <AppText variant="bodySmall" color={colors.text.secondary}>
+                    No additional personal exercises available.
+                  </AppText>
+                ) : (
+                  personalExercises
                     .filter(
                       (exercise) =>
                         !workout.exercises.some(
@@ -433,10 +753,11 @@ export default function PersonalWorkoutDetailScreen() {
                     )
                     .map((exercise) => (
                       <Pressable
-                        key={exercise.id}
+                        key={`personal-${exercise.id}`}
                         accessibilityRole="button"
-                        accessibilityLabel={`Add ${exercise.name}`}
-                        onPress={() => void handleAddExercise(exercise)}
+                        accessibilityLabel={`Add ${exercise.name} from personal exercises`}
+                        disabled={isSaving}
+                        onPress={() => void handleAddExercise(exercise, 'personal')}
                         style={{
                           padding: spacing.md,
                           borderRadius: radius.md,
@@ -450,9 +771,9 @@ export default function PersonalWorkoutDetailScreen() {
                           {exercise.muscle_group ?? exercise.category}
                         </AppText>
                       </Pressable>
-                    ))}
-                </View>
-              )}
+                    ))
+                )}
+              </View>
 
               <Button
                 fullWidth
@@ -550,8 +871,29 @@ export default function PersonalWorkoutDetailScreen() {
                       EXERCISE {index + 1}
                     </AppText>
                     <AppText variant="h3" color={colors.text.primary}>
-                      {getExerciseName(exercise.personal_exercise_id)}
+                      {getExerciseName(
+                        exercise.personal_exercise_id,
+                        exercise.exercise_id,
+                      )}
                     </AppText>
+                    {!isCompleted ? (
+                      <Button
+                        size="small"
+                        variant="ghost"
+                        disabled={isSaving}
+                        onPress={() =>
+                          confirmRemoveExercise(
+                            exercise.id,
+                            getExerciseName(
+                              exercise.personal_exercise_id,
+                              exercise.exercise_id,
+                            ),
+                          )
+                        }
+                      >
+                        Remove exercise
+                      </Button>
+                    ) : null}
                   </View>
 
                   {exercise.sets.length > 0 ? (
@@ -596,7 +938,7 @@ export default function PersonalWorkoutDetailScreen() {
                         <View style={{ flex: 1 }}>
                           <Input
                             label="Repetitions"
-                            accessibilityLabel={`Repetitions for ${getExerciseName(exercise.personal_exercise_id)}`}
+                            accessibilityLabel={`Repetitions for ${getExerciseName(exercise.personal_exercise_id, exercise.exercise_id)}`}
                             placeholder="e.g. 10"
                             keyboardType="number-pad"
                             value={setDrafts[exercise.id]?.repetitions ?? ''}
@@ -608,7 +950,7 @@ export default function PersonalWorkoutDetailScreen() {
                         <View style={{ flex: 1 }}>
                           <Input
                             label="Weight (kg)"
-                            accessibilityLabel={`Weight in kg for ${getExerciseName(exercise.personal_exercise_id)}`}
+                            accessibilityLabel={`Weight in kg for ${getExerciseName(exercise.personal_exercise_id, exercise.exercise_id)}`}
                             placeholder="e.g. 20"
                             keyboardType="decimal-pad"
                             value={setDrafts[exercise.id]?.weight ?? ''}

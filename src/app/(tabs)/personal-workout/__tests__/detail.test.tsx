@@ -1,9 +1,15 @@
 import React from 'react';
+import { Alert } from 'react-native';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 
-import { completePersonalWorkout } from '@/services/personal-workouts';
+import {
+  completePersonalWorkout,
+  deletePersonalWorkout,
+  updatePersonalWorkout,
+} from '@/services/personal-workouts';
 import {
   createWorkoutExercise,
+  deleteWorkoutExercise,
   getPersonalWorkoutDetails,
 } from '@/services/personal-workout-exercises';
 import {
@@ -11,6 +17,7 @@ import {
   getPersonalExercises,
 } from '@/services/personal-exercises';
 import { createWorkoutSet } from '@/services/personal-workout-sets';
+import { getExercises } from '@/services/exercises';
 import { TrainrThemeProvider } from '@/theme/ThemeProvider';
 import type { PersonalExercise, PersonalWorkoutDetails } from '@/types/personal-workouts';
 
@@ -37,16 +44,23 @@ jest.mock('expo-router', () => {
 
 jest.mock('@/services/personal-workouts', () => ({
   completePersonalWorkout: jest.fn(),
+  deletePersonalWorkout: jest.fn(),
+  updatePersonalWorkout: jest.fn(),
 }));
 
 jest.mock('@/services/personal-workout-exercises', () => ({
   getPersonalWorkoutDetails: jest.fn(),
   createWorkoutExercise: jest.fn(),
+  deleteWorkoutExercise: jest.fn(),
 }));
 
 jest.mock('@/services/personal-exercises', () => ({
   createPersonalExercise: jest.fn(),
   getPersonalExercises: jest.fn(),
+}));
+
+jest.mock('@/services/exercises', () => ({
+  getExercises: jest.fn(),
 }));
 
 jest.mock('@/services/personal-workout-sets', () => ({
@@ -57,10 +71,14 @@ import PersonalWorkoutDetailScreen from '../[id]';
 
 const mockedGetWorkout = jest.mocked(getPersonalWorkoutDetails);
 const mockedGetPersonalExercises = jest.mocked(getPersonalExercises);
+const mockedGetExercises = jest.mocked(getExercises);
 const mockedCreatePersonalExercise = jest.mocked(createPersonalExercise);
 const mockedCreateWorkoutExercise = jest.mocked(createWorkoutExercise);
 const mockedCreateWorkoutSet = jest.mocked(createWorkoutSet);
 const mockedCompleteWorkout = jest.mocked(completePersonalWorkout);
+const mockedUpdateWorkout = jest.mocked(updatePersonalWorkout);
+const mockedDeleteWorkout = jest.mocked(deletePersonalWorkout);
+const mockedDeleteWorkoutExercise = jest.mocked(deleteWorkoutExercise);
 
 const personalExercise: PersonalExercise = {
   id: 'exercise-1',
@@ -124,10 +142,14 @@ describe('Personal Workout Detail screen', () => {
 
     mockedGetWorkout.mockResolvedValue(workout);
     mockedGetPersonalExercises.mockResolvedValue([personalExercise]);
+    mockedGetExercises.mockResolvedValue([]);
     mockedCreatePersonalExercise.mockResolvedValue(personalExercise);
     mockedCreateWorkoutExercise.mockResolvedValue({} as never);
     mockedCreateWorkoutSet.mockResolvedValue({} as never);
     mockedCompleteWorkout.mockResolvedValue(completedWorkout);
+    mockedUpdateWorkout.mockResolvedValue(workout);
+    mockedDeleteWorkout.mockResolvedValue(undefined);
+    mockedDeleteWorkoutExercise.mockResolvedValue(undefined);
   });
 
   it('loads and displays workout details and exercises', async () => {
@@ -170,7 +192,9 @@ describe('Personal Workout Detail screen', () => {
     });
 
     await fireEvent.press(getByRole('button', { name: 'Add exercise' }));
-    await fireEvent.press(getByRole('button', { name: 'Add Dumbbell press' }));
+    await fireEvent.press(
+      getByRole('button', { name: 'Add Dumbbell press from personal exercises' }),
+    );
 
     await waitFor(() => {
       expect(mockedCreateWorkoutExercise).toHaveBeenCalledWith({
@@ -295,6 +319,115 @@ describe('Personal Workout Detail screen', () => {
     expect(queryByRole('button', { name: 'Complete workout' })).toBeNull();
     expect(queryByRole('button', { name: 'Add set' })).toBeNull();
     expect(queryByLabelText('Repetitions for Dumbbell press')).toBeNull();
+  });
+
+  it('edits workout details and saves the changes', async () => {
+    const { getByRole, getByLabelText } = await renderScreen();
+
+    await waitFor(() => {
+      expect(getByRole('button', { name: 'Edit workout' })).toBeTruthy();
+    });
+
+    await fireEvent.press(getByRole('button', { name: 'Edit workout' }));
+    await fireEvent.changeText(getByLabelText('Workout name'), 'Updated upper body');
+    await fireEvent.changeText(getByLabelText('Workout date (YYYY-MM-DD)'), '2026-11-26');
+    await fireEvent.changeText(
+      getByLabelText('Notes (optional)'),
+      'Updated training notes',
+    );
+    await fireEvent.press(getByRole('button', { name: 'Save changes' }));
+
+    await waitFor(() => {
+      expect(mockedUpdateWorkout).toHaveBeenCalledWith('workout-123', {
+        workout_name: 'Updated upper body',
+        workout_type: 'strength',
+        workout_date: '2026-11-26',
+        notes: 'Updated training notes',
+      });
+    });
+  });
+
+  it('rejects an empty workout name before saving', async () => {
+    const { getByRole, getByLabelText, getByText } = await renderScreen();
+
+    await waitFor(() => {
+      expect(getByRole('button', { name: 'Edit workout' })).toBeTruthy();
+    });
+
+    await fireEvent.press(getByRole('button', { name: 'Edit workout' }));
+    await fireEvent.changeText(getByLabelText('Workout name'), '');
+    await fireEvent.press(getByRole('button', { name: 'Save changes' }));
+
+    expect(getByText('Enter a workout name to continue.')).toBeTruthy();
+    expect(mockedUpdateWorkout).not.toHaveBeenCalled();
+  });
+
+  it('deletes the workout only after confirmation', async () => {
+    const alertSpy = jest
+      .spyOn(Alert, 'alert')
+      .mockImplementation((_title, _message, buttons) => {
+        buttons?.find((button) => button.text === 'Delete')?.onPress?.();
+      });
+
+    const { getByRole } = await renderScreen();
+
+    await waitFor(() => {
+      expect(getByRole('button', { name: 'Delete workout' })).toBeTruthy();
+    });
+
+    await fireEvent.press(getByRole('button', { name: 'Delete workout' }));
+
+    await waitFor(() => {
+      expect(alertSpy).toHaveBeenCalledWith(
+        'Delete workout?',
+        expect.any(String),
+        expect.any(Array),
+      );
+      expect(mockedDeleteWorkout).toHaveBeenCalledWith('workout-123');
+    });
+
+    alertSpy.mockRestore();
+  });
+
+  it('removes an exercise only after confirmation', async () => {
+    const alertSpy = jest
+      .spyOn(Alert, 'alert')
+      .mockImplementation((_title, _message, buttons) => {
+        buttons?.find((button) => button.text === 'Remove')?.onPress?.();
+      });
+
+    const { getByRole } = await renderScreen();
+
+    await waitFor(() => {
+      expect(getByRole('button', { name: 'Remove exercise' })).toBeTruthy();
+    });
+
+    await fireEvent.press(getByRole('button', { name: 'Remove exercise' }));
+
+    await waitFor(() => {
+      expect(alertSpy).toHaveBeenCalledWith(
+        'Remove exercise?',
+        expect.stringContaining('Dumbbell press'),
+        expect.any(Array),
+      );
+      expect(mockedDeleteWorkoutExercise).toHaveBeenCalledWith('workout-exercise-1');
+    });
+
+    alertSpy.mockRestore();
+  });
+
+  it('keeps completed workouts free of edit and delete controls', async () => {
+    mockedGetWorkout.mockResolvedValue(completedWorkout);
+
+    const { getByText, queryByRole } = await renderScreen();
+
+    await waitFor(() => {
+      expect(getByText('Completed')).toBeTruthy();
+    });
+
+    expect(queryByRole('button', { name: 'Edit workout' })).toBeNull();
+    expect(queryByRole('button', { name: 'Delete workout' })).toBeNull();
+    expect(queryByRole('button', { name: 'Remove exercise' })).toBeNull();
   });
 
   it('displays a loading error and allows retrying', async () => {

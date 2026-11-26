@@ -1,14 +1,10 @@
-
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { ArrowLeft } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, TextInput, View } from 'react-native';
 import ReanimatedSwipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
-import {
-  SafeAreaView,
-  useSafeAreaInsets,
-} from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/AppText';
 import { BottomSheet } from '@/components/BottomSheet';
@@ -124,9 +120,7 @@ export default function ExerciseLibraryScreen() {
       setExercises(result);
     } catch (error) {
       setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : 'Unable to load your exercise library.',
+        error instanceof Error ? error.message : 'Unable to load your exercise library.',
       );
     } finally {
       setIsLoading(false);
@@ -163,9 +157,7 @@ export default function ExerciseLibraryScreen() {
     });
   }, [exercises, search, activeFilter, user?.id]);
 
-  const sharedCount = exercises.filter(
-    (exercise) => exercise.created_by === null,
-  ).length;
+  const sharedCount = exercises.filter((exercise) => exercise.created_by === null).length;
 
   const personalCount = exercises.filter(
     (exercise) => exercise.created_by === user?.id,
@@ -242,17 +234,13 @@ export default function ExerciseLibraryScreen() {
         const updated = await updateExercise(editingExercise.id, input);
 
         setExercises((current) =>
-          current.map((exercise) =>
-            exercise.id === updated.id ? updated : exercise,
-          ),
+          current.map((exercise) => (exercise.id === updated.id ? updated : exercise)),
         );
       } else {
         const created = await createExercise(input);
 
         setExercises((current) =>
-          [...current, created].sort((a, b) =>
-            a.name.localeCompare(b.name),
-          ),
+          [...current, created].sort((a, b) => a.name.localeCompare(b.name)),
         );
       }
 
@@ -283,17 +271,13 @@ export default function ExerciseLibraryScreen() {
       await deleteExercise(exerciseToDelete.id);
 
       setExercises((current) =>
-        current.filter(
-          (exercise) => exercise.id !== exerciseToDelete.id,
-        ),
+        current.filter((exercise) => exercise.id !== exerciseToDelete.id),
       );
 
       setExerciseToDelete(null);
     } catch (error) {
       setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : 'Unable to delete this exercise.',
+        error instanceof Error ? error.message : 'Unable to delete this exercise.',
       );
 
       setExerciseToDelete(null);
@@ -348,9 +332,7 @@ export default function ExerciseLibraryScreen() {
           multiline={multiline}
           textAlignVertical={multiline ? 'top' : 'center'}
           autoCapitalize={
-            field === 'image_url' || field === 'video_url'
-              ? 'none'
-              : 'sentences'
+            field === 'image_url' || field === 'video_url' ? 'none' : 'sentences'
           }
           style={{
             ...inputStyle,
@@ -430,12 +412,12 @@ export default function ExerciseLibraryScreen() {
           </AppText>
 
           <AppText variant="h1" color={colors.text.primary}>
-            Your exercise library.
+            Your Exercise Library.
           </AppText>
 
           <AppText variant="body" color={colors.text.secondary}>
-            Manage your movements and build your training knowledge. Explore
-            shared exercises or create your own exercise collection.
+            Manage your movements and build your training knowledge. Explore shared
+            exercises or create your own exercise collection.
           </AppText>
         </View>
 
@@ -483,11 +465,7 @@ export default function ExerciseLibraryScreen() {
         </View>
 
         {/* Create Exercise */}
-        <Button
-          variant="primary"
-          fullWidth
-          onPress={openCreateForm}
-        >
+        <Button variant="primary" fullWidth onPress={openCreateForm}>
           + Add exercise
         </Button>
 
@@ -504,11 +482,7 @@ export default function ExerciseLibraryScreen() {
             backgroundColor: colors.background.secondary,
           }}
         >
-          <MaterialCommunityIcons
-            name="magnify"
-            size={21}
-            color={colors.text.tertiary}
-          />
+          <MaterialCommunityIcons name="magnify" size={21} color={colors.text.tertiary} />
 
           <TextInput
             value={search}
@@ -562,9 +536,7 @@ export default function ExerciseLibraryScreen() {
                     paddingVertical: spacing.sm,
                     borderRadius: 999,
                     borderWidth: 1,
-                    borderColor: selected
-                      ? colors.brand.red
-                      : colors.border.default,
+                    borderColor: selected ? colors.brand.red : colors.border.default,
                     backgroundColor: selected
                       ? colors.brand.red
                       : colors.background.primary,
@@ -599,11 +571,7 @@ export default function ExerciseLibraryScreen() {
               {errorMessage}
             </AppText>
 
-            <Button
-              variant="outline"
-              size="small"
-              onPress={handleRetry}
-            >
+            <Button variant="outline" size="small" onPress={handleRetry}>
               Try again
             </Button>
           </View>
@@ -619,11 +587,7 @@ export default function ExerciseLibraryScreen() {
               gap: spacing.md,
             }}
           >
-            <MaterialCommunityIcons
-              name="dumbbell"
-              size={28}
-              color={colors.brand.red}
-            />
+            <MaterialCommunityIcons name="dumbbell" size={28} color={colors.brand.red} />
 
             <AppText variant="bodySmall" color={colors.text.secondary}>
               Loading your exercise library...
@@ -659,12 +623,8 @@ export default function ExerciseLibraryScreen() {
                         {exercise.name}
                       </AppText>
 
-                      <AppText
-                        variant="bodySmall"
-                        color={colors.text.secondary}
-                      >
-                        {exercise.muscle_group ||
-                          'Muscle group not specified'}
+                      <AppText variant="bodySmall" color={colors.text.secondary}>
+                        {exercise.muscle_group || 'Muscle group not specified'}
                       </AppText>
                     </View>
 
@@ -677,18 +637,12 @@ export default function ExerciseLibraryScreen() {
                           ? colors.brand.redLight
                           : colors.background.primary,
                         borderWidth: 1,
-                        borderColor: isOwned
-                          ? colors.brand.red
-                          : colors.border.default,
+                        borderColor: isOwned ? colors.brand.red : colors.border.default,
                       }}
                     >
                       <AppText
                         variant="caption"
-                        color={
-                          isOwned
-                            ? colors.brand.red
-                            : colors.text.secondary
-                        }
+                        color={isOwned ? colors.brand.red : colors.text.secondary}
                       >
                         {isOwned ? 'MY EXERCISE' : 'SHARED'}
                       </AppText>
@@ -697,10 +651,7 @@ export default function ExerciseLibraryScreen() {
 
                   {/* Description */}
                   {exercise.description ? (
-                    <AppText
-                      variant="bodySmall"
-                      color={colors.text.secondary}
-                    >
+                    <AppText variant="bodySmall" color={colors.text.secondary}>
                       {exercise.description}
                     </AppText>
                   ) : null}
@@ -723,33 +674,21 @@ export default function ExerciseLibraryScreen() {
                       }}
                     >
                       <View style={{ flex: 1, gap: spacing.xs }}>
-                        <AppText
-                          variant="caption"
-                          color={colors.text.tertiary}
-                        >
+                        <AppText variant="caption" color={colors.text.tertiary}>
                           CATEGORY
                         </AppText>
 
-                        <AppText
-                          variant="bodySmall"
-                          color={colors.text.primary}
-                        >
+                        <AppText variant="bodySmall" color={colors.text.primary}>
                           {exercise.category || 'Not specified'}
                         </AppText>
                       </View>
 
                       <View style={{ flex: 1, gap: spacing.xs }}>
-                        <AppText
-                          variant="caption"
-                          color={colors.text.tertiary}
-                        >
+                        <AppText variant="caption" color={colors.text.tertiary}>
                           EQUIPMENT
                         </AppText>
 
-                        <AppText
-                          variant="bodySmall"
-                          color={colors.text.primary}
-                        >
+                        <AppText variant="bodySmall" color={colors.text.primary}>
                           {exercise.equipment?.length
                             ? exercise.equipment.join(', ')
                             : 'No equipment'}
@@ -759,17 +698,11 @@ export default function ExerciseLibraryScreen() {
 
                     {exercise.instructions ? (
                       <View style={{ gap: spacing.xs }}>
-                        <AppText
-                          variant="caption"
-                          color={colors.text.tertiary}
-                        >
+                        <AppText variant="caption" color={colors.text.tertiary}>
                           INSTRUCTIONS
                         </AppText>
 
-                        <AppText
-                          variant="bodySmall"
-                          color={colors.text.secondary}
-                        >
+                        <AppText variant="bodySmall" color={colors.text.secondary}>
                           {exercise.instructions}
                         </AppText>
                       </View>
@@ -793,10 +726,7 @@ export default function ExerciseLibraryScreen() {
                         color={colors.text.secondary}
                       />
 
-                      <AppText
-                        variant="caption"
-                        color={colors.text.secondary}
-                      >
+                      <AppText variant="caption" color={colors.text.secondary}>
                         Swipe left to manage this exercise
                       </AppText>
                     </View>
@@ -806,11 +736,7 @@ export default function ExerciseLibraryScreen() {
 
               // Shared exercises are read-only.
               if (!isOwned) {
-                return (
-                  <View key={exercise.id}>
-                    {exerciseCard}
-                  </View>
-                );
+                return <View key={exercise.id}>{exerciseCard}</View>;
               }
 
               return (
@@ -823,11 +749,7 @@ export default function ExerciseLibraryScreen() {
                     borderRadius: 16,
                     overflow: 'visible',
                   }}
-                  renderRightActions={(
-                    _progress,
-                    _translation,
-                    swipeableMethods,
-                  ) => (
+                  renderRightActions={(_progress, _translation, swipeableMethods) => (
                     <View
                       style={{
                         flexDirection: 'row',
@@ -862,10 +784,7 @@ export default function ExerciseLibraryScreen() {
                           color={colors.text.primary}
                         />
 
-                        <AppText
-                          variant="button"
-                          color={colors.text.primary}
-                        >
+                        <AppText variant="button" color={colors.text.primary}>
                           Edit
                         </AppText>
                       </Pressable>
@@ -917,16 +836,10 @@ export default function ExerciseLibraryScreen() {
               backgroundColor: colors.background.secondary,
             }}
           >
-            <MaterialCommunityIcons
-              name="dumbbell"
-              size={36}
-              color={colors.brand.red}
-            />
+            <MaterialCommunityIcons name="dumbbell" size={36} color={colors.brand.red} />
 
             <AppText variant="h3" color={colors.text.primary}>
-              {hasActiveFilters
-                ? 'NO EXERCISES FOUND.'
-                : 'YOUR LIBRARY IS EMPTY.'}
+              {hasActiveFilters ? 'NO EXERCISES FOUND.' : 'YOUR LIBRARY IS EMPTY.'}
             </AppText>
 
             <AppText
@@ -955,10 +868,7 @@ export default function ExerciseLibraryScreen() {
                 </AppText>
               </Pressable>
             ) : (
-              <Button
-                variant="primary"
-                onPress={openCreateForm}
-              >
+              <Button variant="primary" onPress={openCreateForm}>
                 Add your first exercise
               </Button>
             )}
@@ -1015,11 +925,7 @@ export default function ExerciseLibraryScreen() {
           </View>
         }
       >
-        {renderFormField(
-          'EXERCISE NAME *',
-          'name',
-          'e.g. Barbell squat',
-        )}
+        {renderFormField('EXERCISE NAME *', 'name', 'e.g. Barbell squat')}
 
         {renderFormField(
           'DESCRIPTION',
@@ -1028,23 +934,11 @@ export default function ExerciseLibraryScreen() {
           true,
         )}
 
-        {renderFormField(
-          'MUSCLE GROUP',
-          'muscle_group',
-          'e.g. Quadriceps',
-        )}
+        {renderFormField('MUSCLE GROUP', 'muscle_group', 'e.g. Quadriceps')}
 
-        {renderFormField(
-          'CATEGORY',
-          'category',
-          'e.g. Strength training',
-        )}
+        {renderFormField('CATEGORY', 'category', 'e.g. Strength training')}
 
-        {renderFormField(
-          'EQUIPMENT',
-          'equipment',
-          'e.g. Barbell, Bench',
-        )}
+        {renderFormField('EQUIPMENT', 'equipment', 'e.g. Barbell, Bench')}
 
         {renderFormField(
           'INSTRUCTIONS',
@@ -1053,28 +947,16 @@ export default function ExerciseLibraryScreen() {
           true,
         )}
 
-        {renderFormField(
-          'IMAGE URL',
-          'image_url',
-          'https://...',
-        )}
+        {renderFormField('IMAGE URL', 'image_url', 'https://...')}
 
-        {renderFormField(
-          'VIDEO URL',
-          'video_url',
-          'https://...',
-        )}
+        {renderFormField('VIDEO URL', 'video_url', 'https://...')}
 
         <AppText variant="caption" color={colors.text.tertiary}>
           Separate multiple equipment items with commas.
         </AppText>
 
         {formError ? (
-          <AppText
-            variant="bodySmall"
-            color={colors.error}
-            accessibilityRole="alert"
-          >
+          <AppText variant="bodySmall" color={colors.error} accessibilityRole="alert">
             {formError}
           </AppText>
         ) : null}
