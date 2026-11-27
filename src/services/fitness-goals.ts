@@ -19,7 +19,10 @@ const FITNESS_GOAL_COLUMNS = `
   goal_name,
   description,
   target_value,
+  current_value,
   measurement_unit,
+  exercise_id,
+  personal_exercise_id,
   start_date,
   target_date,
   goal_status,
@@ -71,6 +74,22 @@ function validateTargetValue(value: number) {
   }
 }
 
+function validateCurrentValue(
+  value: number | null,
+  goalType: FitnessGoalType,
+) {
+  if (goalType !== 'custom') {
+    throw new Error('Manual progress is only supported for custom goals.');
+  }
+
+  if (
+    value !== null &&
+    (!Number.isFinite(value) || value < 0)
+  ) {
+    throw new Error('Current progress must be a non-negative number.');
+  }
+}
+
 function validateGoalStatus(value: string) {
   if (!VALID_GOAL_STATUSES.includes(value as FitnessGoalStatus)) {
     throw new Error('Please select a valid fitness goal status.');
@@ -86,6 +105,59 @@ function validateDate(value: string, field: string) {
 
   if (Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== value) {
     throw new Error(`Please provide a valid ${field}.`);
+  }
+}
+
+function validateExerciseReferences(
+  goalType: FitnessGoalType,
+  exerciseId?: string | null,
+  personalExerciseId?: string | null,
+) {
+  const hasSharedExercise = exerciseId !== undefined && exerciseId !== null;
+  const hasPersonalExercise =
+    personalExerciseId !== undefined && personalExerciseId !== null;
+
+  if (hasSharedExercise && !exerciseId?.trim()) {
+    throw new Error('Please provide a valid exercise ID.');
+  }
+
+  if (hasPersonalExercise && !personalExerciseId?.trim()) {
+    throw new Error('Please provide a valid personal exercise ID.');
+  }
+
+  if (hasSharedExercise && hasPersonalExercise) {
+    throw new Error('A fitness goal can reference only one exercise.');
+  }
+
+  if (
+    (hasSharedExercise || hasPersonalExercise) &&
+    goalType !== 'strength_target' &&
+    goalType !== 'cardio_target'
+  ) {
+    throw new Error(
+      'Exercise references are only supported for strength and cardio goals.',
+    );
+  }
+}
+
+async function validatePersonalExerciseOwnership(
+  exerciseId: string,
+  userId: string,
+) {
+  const { data, error } = await supabase
+    .from('personal_exercises')
+    .select('id')
+    .eq('id', exerciseId)
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (error) {
+    console.error('[Fitness Goals] Unable to verify personal exercise:', error);
+    throw new Error('Unable to verify the selected exercise. Please try again.');
+  }
+
+  if (!data) {
+    throw new Error('Personal exercise not found or does not belong to your account.');
   }
 }
 
@@ -222,9 +294,23 @@ export async function createFitnessGoal(
   validateGoalName(input.goal_name);
   validateTargetValue(input.target_value);
   validateDescription(input.description);
+
+  if (input.current_value !== undefined) {
+    validateCurrentValue(input.current_value, input.goal_type);
+  }
+
   validateGoalDates(input.start_date, input.target_date);
+  validateExerciseReferences(
+    input.goal_type,
+    input.exercise_id,
+    input.personal_exercise_id,
+  );
 
   const user = await getAuthenticatedUser();
+
+  if (input.personal_exercise_id) {
+    await validatePersonalExerciseOwnership(input.personal_exercise_id, user.id);
+  }
 
   const { data, error } = await supabase
     .from('fitness_goals')
@@ -234,7 +320,10 @@ export async function createFitnessGoal(
       goal_name: input.goal_name.trim(),
       description: input.description?.trim() || null,
       target_value: input.target_value,
+      current_value: input.current_value ?? null,
       measurement_unit: input.measurement_unit?.trim() || null,
+      exercise_id: input.exercise_id ?? null,
+      personal_exercise_id: input.personal_exercise_id ?? null,
       ...(input.start_date ? { start_date: input.start_date } : {}),
       ...(input.target_date !== undefined ? { target_date: input.target_date } : {}),
     })
@@ -286,8 +375,20 @@ export async function updateFitnessGoal(
     updates.target_value = input.target_value;
   }
 
+  if (input.current_value !== undefined) {
+    updates.current_value = input.current_value;
+  }
+
   if (input.measurement_unit !== undefined) {
     updates.measurement_unit = input.measurement_unit?.trim() || null;
+  }
+
+  if (input.exercise_id !== undefined) {
+    updates.exercise_id = input.exercise_id;
+  }
+
+  if (input.personal_exercise_id !== undefined) {
+    updates.personal_exercise_id = input.personal_exercise_id;
   }
 
   if (input.start_date !== undefined) {
@@ -308,11 +409,112 @@ export async function updateFitnessGoal(
     updates.goal_status = input.goal_status;
   }
 
+  const user = await getAuthenticatedUser();
+
+  const needsGoalTypeLookup =
+    input.goal_type !== undefined ||
+    input.exercise_id !== undefined ||
+    input.personal_exercise_id !== undefined ||
+    input.current_value !== undefined;
+
+  if (needsGoalTypeLookup) {
+    const { data: existingGoal, error: lookupError } = await supabase
+      .from('fitness_goals')
+      .select('goal_type, exercise_id, personal_exercise_id, current_value')
+      .eq('id', goalId)
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    if (lookupError) {
+      console.error('[Fitness Goals] Unable to validate exercise references:', lookupError);
+      throw new Error('Unable to validate your fitness goal. Please try again.');
+    }
+
+    if (!existingGoal) {
+      throw new Error('Fitness goal not found.');
+    }
+
+    const effectiveGoalType = input.goal_type ?? existingGoal.goal_type;
+
+    if (input.current_value !== undefined) {
+      validateCurrentValue(input.current_value, effectiveGoalType);
+    }
+
+    const effectiveExerciseId =
+      input.exercise_id !== undefined
+        ? input.exercise_id
+        : existingGoal.exercise_id;
+    const effectivePersonalExerciseId =
+      input.personal_exercise_id !== undefined
+        ? input.personal_exercise_id
+        : existingGoal.personal_exercise_id;
+
+    // Non-exercise goals must never retain exercise references.
+    if (
+      effectiveGoalType !== 'strength_target' &&
+      effectiveGoalType !== 'cardio_target'
+    ) {
+      if (
+        (input.exercise_id !== undefined && input.exercise_id !== null) ||
+        (input.personal_exercise_id !== undefined &&
+          input.personal_exercise_id !== null)
+      ) {
+        validateExerciseReferences(
+          effectiveGoalType,
+          effectiveExerciseId,
+          effectivePersonalExerciseId,
+        );
+      }
+
+      // Clear exercise references when the goal type or references change,
+      // or when existing references need to be removed.
+      const shouldClearExerciseReferences =
+        input.goal_type !== undefined ||
+        input.exercise_id !== undefined ||
+        input.personal_exercise_id !== undefined ||
+        effectiveExerciseId !== null ||
+        effectivePersonalExerciseId !== null;
+
+      if (shouldClearExerciseReferences) {
+        updates.exercise_id = null;
+        updates.personal_exercise_id = null;
+      }
+    }
+
+    if (
+      existingGoal.goal_type === 'custom' &&
+      effectiveGoalType !== 'custom'
+    ) {
+      // Clear manual progress when leaving the custom goal type.
+      updates.current_value = null;
+    }
+
+    if (
+      effectiveGoalType === 'strength_target' ||
+      effectiveGoalType === 'cardio_target'
+    ) {
+      validateExerciseReferences(
+        effectiveGoalType,
+        effectiveExerciseId,
+        effectivePersonalExerciseId,
+      );
+
+      // Write both references together to preserve the database constraint.
+      updates.exercise_id = effectiveExerciseId ?? null;
+      updates.personal_exercise_id = effectivePersonalExerciseId ?? null;
+
+      if (effectivePersonalExerciseId) {
+        await validatePersonalExerciseOwnership(
+          effectivePersonalExerciseId,
+          user.id,
+        );
+      }
+    }
+  }
+
   if (Object.keys(updates).length === 0) {
     throw new Error('Please provide at least one field to update.');
   }
-
-  const user = await getAuthenticatedUser();
 
   if (input.start_date !== undefined || input.target_date !== undefined) {
     let existingDates: {

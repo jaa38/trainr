@@ -186,7 +186,10 @@ export type FitnessGoal = {
   goal_name: string;
   description: string | null;
   target_value: number;
+  current_value: number | null;
   measurement_unit: string | null;
+  exercise_id: string | null;
+  personal_exercise_id: string | null;
   start_date: string;
   target_date: string | null;
   goal_status: FitnessGoalStatus;
@@ -199,7 +202,10 @@ export type CreateFitnessGoalInput = {
   goal_name: string;
   description?: string | null;
   target_value: number;
+  current_value?: number | null;
   measurement_unit?: string | null;
+  exercise_id?: string | null;
+  personal_exercise_id?: string | null;
   start_date?: string;
   target_date?: string | null;
 };

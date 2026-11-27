@@ -724,6 +724,25 @@ export default function HomeTabScreen() {
                     <ArrowRight size={19} color={colors.brand.red} />
                   </Pressable>
                 ) : null}
+
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Track body measurements and view personal progress"
+                  onPress={() => router.push('/(tabs)/personal-workout/progress')}
+                  style={{
+                    borderTopWidth: 1,
+                    borderTopColor: colors.border.default,
+                    paddingTop: spacing.md,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                  }}
+                >
+                  <AppText variant="button" color={colors.brand.red}>
+                    Track Body Measurements
+                  </AppText>
+                  <ArrowRight size={19} color={colors.brand.red} />
+                </Pressable>
               </Card>
             </View>
           ) : null}

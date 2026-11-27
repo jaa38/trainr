@@ -815,6 +815,33 @@ export default function PersonalTrainerHomeScreen() {
               <ArrowRight size={20} color={colors.brand.red} />
             </Pressable>
 
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Track your personal body measurements"
+              onPress={() => navigateTo('/(tabs)/personal-workout/progress')}
+              style={({ pressed }) => ({
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: spacing.lg,
+                borderRadius: 16,
+                borderWidth: 1,
+                borderColor: colors.border.default,
+                backgroundColor: colors.background.secondary,
+                opacity: pressed ? 0.75 : 1,
+              })}
+            >
+              <View style={{ flex: 1, gap: spacing.xs }}>
+                <AppText variant="bodyMedium" color={colors.text.primary}>
+                  Track body measurements
+                </AppText>
+                <AppText variant="bodySmall" color={colors.text.secondary}>
+                  Record your weight and monitor personal measurement trends.
+                </AppText>
+              </View>
+              <ArrowRight size={20} color={colors.brand.red} />
+            </Pressable>
+
             {isPersonalProgressLoading ? (
               <View
                 style={{
@@ -1026,7 +1053,7 @@ export default function PersonalTrainerHomeScreen() {
                   <SectionHeading
                     title="ACTIVE FITNESS GOALS"
                     action="Manage goals"
-                    onPress={() => navigateTo('/(tabs)/personal-workout')}
+                    onPress={() => navigateTo('/(tabs)/personal-workout/goals')}
                   />
 
                   {fitnessGoals.length === 0 ? (

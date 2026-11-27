@@ -6,6 +6,7 @@ import {
   Flag,
   SlidersHorizontal,
   Trophy,
+  TrendingUp,
 } from 'lucide-react-native';
 import { useCallback, useState } from 'react';
 import { ActivityIndicator, Platform, Pressable, ScrollView, View } from 'react-native';
@@ -648,6 +649,20 @@ export default function PersonalWorkoutOverviewScreen() {
               )}
             </View>
 
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Manage all fitness goals"
+              onPress={() => router.push('/(tabs)/personal-workout/goals')}
+              style={{
+                alignSelf: 'flex-start',
+                paddingVertical: spacing.xs,
+              }}
+            >
+              <AppText variant="bodySmall" color={colors.brand.red}>
+                Manage all fitness goals
+              </AppText>
+            </Pressable>
+
             {/* Personal Records */}
             <View>
               <AppText variant="h3" color={colors.text.primary} style={sectionTitleStyle}>
@@ -692,6 +707,33 @@ export default function PersonalWorkoutOverviewScreen() {
                 </View>
               )}
             </View>
+
+            {/* Personal Measurements and Progress */}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Track body measurements and view personal progress"
+              onPress={() => router.push('/(tabs)/personal-workout/progress')}
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: spacing.lg,
+                borderRadius: radius.lg,
+                borderWidth: 1,
+                borderColor: colors.border.default,
+                backgroundColor: colors.background.secondary,
+              }}
+            >
+              <View style={{ flex: 1, gap: spacing.xs }}>
+                <AppText variant="bodyMedium" color={colors.text.primary}>
+                  Body measurements and progress
+                </AppText>
+                <AppText variant="bodySmall" color={colors.text.secondary}>
+                  Record your weight, track measurements and view trends.
+                </AppText>
+              </View>
+              <TrendingUp size={20} color={colors.brand.red} />
+            </Pressable>
 
             {/* Create Workout */}
             <Button fullWidth onPress={() => router.push('/(tabs)/personal-workout/new')}>

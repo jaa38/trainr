@@ -9,6 +9,11 @@ export default function PersonalWorkoutLayout() {
       }}
     >
       <Stack.Screen name="index" />
+      <Stack.Screen name="progress" />
+      <Stack.Screen name="goals" />
+      <Stack.Screen name="goals/new" />
+      <Stack.Screen name="goals/[id]" />
+      <Stack.Screen name="goals/edit/[id]" />
       <Stack.Screen name="new" />
       <Stack.Screen name="[id]" />
     </Stack>

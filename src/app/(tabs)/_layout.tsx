@@ -11,6 +11,11 @@ export default function TabsLayout() {
       <Stack.Screen name="trainer-profile/[id]" />
       <Stack.Screen name="booking/[trainerId]" />
       <Stack.Screen name="personal-workout" />
+      <Stack.Screen name="personal-workout/progress" />
+      <Stack.Screen name="personal-workout/goals" />
+      <Stack.Screen name="personal-workout/goals/[id]" />
+      <Stack.Screen name="personal-workout/goals/new" />
+      <Stack.Screen name="personal-workout/goals/edit/[id]" />
       <Stack.Screen name="personal-workout/new" />
       <Stack.Screen name="personal-workout/[id]" />
     </Stack>

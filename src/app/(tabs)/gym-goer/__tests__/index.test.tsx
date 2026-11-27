@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, waitFor } from '@testing-library/react-native';
+import { fireEvent, render, waitFor } from '@testing-library/react-native';
 
 import { useAuth } from '@/providers/AuthProvider';
 import { getBodyWeightHistory } from '@/services/fitness-progress';
@@ -164,11 +164,17 @@ const workoutStatistics = {
 };
 
 async function renderScreen() {
-  return render(
+  const rendered = await render(
     <TrainrThemeProvider>
       <HomeTabScreen />
     </TrainrThemeProvider>,
   );
+
+  await fireEvent.press(
+    rendered.getByRole('tab', { name: 'Workout tab' }),
+  );
+
+  return rendered;
 }
 
 describe('Gym-Goer Dashboard', () => {

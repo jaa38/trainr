@@ -38,7 +38,10 @@ const mockGoal: FitnessGoal = {
   goal_name: 'Bench Press Target',
   description: 'Improve bench press strength',
   target_value: 100,
+  current_value: null,
   measurement_unit: 'kg',
+  exercise_id: null,
+  personal_exercise_id: null,
   start_date: '2026-11-01',
   target_date: '2027-02-01',
   goal_status: 'active',
@@ -254,12 +257,72 @@ describe('Fitness Goals service', () => {
         goal_name: 'Bench Press Target',
         description: 'Improve bench press strength',
         target_value: 100,
+        current_value: null,
         measurement_unit: 'kg',
+        exercise_id: null,
+        personal_exercise_id: null,
         start_date: '2026-11-01',
         target_date: '2027-02-01',
       });
       expect(query.single).toHaveBeenCalled();
     });
+
+    it('creates a custom goal with manually recorded progress', async () => {
+      const customGoal = {
+        ...mockGoal,
+        goal_type: 'custom' as const,
+        current_value: 25,
+        target_value: 100,
+      };
+
+      const query = createQuery({ data: customGoal, error: null });
+      queueQueries(query);
+
+      await expect(
+        createFitnessGoal({
+          goal_type: 'custom',
+          goal_name: 'Read 20 books',
+          target_value: 100,
+          current_value: 25,
+        }),
+      ).resolves.toEqual(customGoal);
+
+      expect(query.insert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          goal_type: 'custom',
+          current_value: 25,
+          target_value: 100,
+        }),
+      );
+    });
+
+    it('rejects manual progress on non-custom goals', async () => {
+      await expect(
+        createFitnessGoal({ ...validInput, current_value: 10 }),
+      ).rejects.toThrow(
+        'Manual progress is only supported for custom goals.',
+      );
+
+      expect(mockedFrom).not.toHaveBeenCalled();
+    });
+
+    it.each([-1, Number.NaN, Number.POSITIVE_INFINITY])(
+      'rejects invalid custom goal progress value %s',
+      async (currentValue) => {
+        await expect(
+          createFitnessGoal({
+            goal_type: 'custom',
+            goal_name: 'Read 20 books',
+            target_value: 100,
+            current_value: currentValue,
+          }),
+        ).rejects.toThrow(
+          'Current progress must be a non-negative number.',
+        );
+
+        expect(mockedFrom).not.toHaveBeenCalled();
+      },
+    );
 
     it('trims goal names and descriptions', async () => {
       const query = createQuery({
@@ -303,8 +366,104 @@ describe('Fitness Goals service', () => {
         goal_name: 'Weekly workouts',
         description: null,
         target_value: 4,
+        current_value: null,
         measurement_unit: null,
+        exercise_id: null,
+        personal_exercise_id: null,
       });
+    });
+
+    it('creates a strength goal linked to a shared exercise', async () => {
+      const query = createQuery({
+        data: { ...mockGoal, exercise_id: 'shared-exercise-123' },
+        error: null,
+      });
+
+      queueQueries(query);
+
+      await createFitnessGoal({
+        ...validInput,
+        exercise_id: 'shared-exercise-123',
+      });
+
+      expect(query.insert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          exercise_id: 'shared-exercise-123',
+          personal_exercise_id: null,
+        }),
+      );
+    });
+
+    it('creates a cardio goal linked to an owned personal exercise', async () => {
+      const ownershipQuery = createQuery({
+        data: { id: 'personal-exercise-123' },
+        error: null,
+      });
+      const goalQuery = createQuery({
+        data: {
+          ...mockGoal,
+          goal_type: 'cardio_target',
+          exercise_id: null,
+          personal_exercise_id: 'personal-exercise-123',
+        },
+        error: null,
+      });
+
+      queueQueries(ownershipQuery, goalQuery);
+
+      await createFitnessGoal({
+        ...validInput,
+        goal_type: 'cardio_target',
+        personal_exercise_id: 'personal-exercise-123',
+      });
+
+      expect(mockedFrom).toHaveBeenNthCalledWith(1, 'personal_exercises');
+      expect(ownershipQuery.eq).toHaveBeenCalledWith('user_id', mockUser.id);
+      expect(goalQuery.insert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          exercise_id: null,
+          personal_exercise_id: 'personal-exercise-123',
+        }),
+      );
+    });
+
+    it('rejects a personal exercise not owned by the user', async () => {
+      queueQueries(createQuery({ data: null, error: null }));
+
+      await expect(
+        createFitnessGoal({
+          ...validInput,
+          personal_exercise_id: 'another-users-exercise',
+        }),
+      ).rejects.toThrow(
+        'Personal exercise not found or does not belong to your account.',
+      );
+    });
+
+    it('rejects both shared and personal exercise references', async () => {
+      await expect(
+        createFitnessGoal({
+          ...validInput,
+          exercise_id: 'shared-exercise-123',
+          personal_exercise_id: 'personal-exercise-123',
+        }),
+      ).rejects.toThrow('A fitness goal can reference only one exercise.');
+
+      expect(mockedFrom).not.toHaveBeenCalled();
+    });
+
+    it('rejects exercise references on non-exercise goal types', async () => {
+      await expect(
+        createFitnessGoal({
+          ...validInput,
+          goal_type: 'workout_frequency',
+          exercise_id: 'shared-exercise-123',
+        }),
+      ).rejects.toThrow(
+        'Exercise references are only supported for strength and cardio goals.',
+      );
+
+      expect(mockedFrom).not.toHaveBeenCalled();
     });
 
     it('rejects an invalid goal type', async () => {
@@ -423,6 +582,114 @@ describe('Fitness Goals service', () => {
       expect(query.maybeSingle).toHaveBeenCalled();
     });
 
+    it('updates manual progress on a custom goal', async () => {
+      const existingGoalQuery = createQuery({
+        data: {
+          goal_type: 'custom',
+          exercise_id: null,
+          personal_exercise_id: null,
+          current_value: 10,
+        },
+        error: null,
+      });
+
+      const updatedGoal = {
+        ...mockGoal,
+        goal_type: 'custom' as const,
+        current_value: 40,
+      };
+
+      const updateQuery = createQuery({ data: updatedGoal, error: null });
+      queueQueries(existingGoalQuery, updateQuery);
+
+      await expect(
+        updateFitnessGoal('goal-123', { current_value: 40 }),
+      ).resolves.toEqual(updatedGoal);
+
+      expect(updateQuery.update).toHaveBeenCalledWith({
+        current_value: 40,
+      });
+    });
+
+    it('allows zero as manually recorded custom progress', async () => {
+      const existingGoalQuery = createQuery({
+        data: {
+          goal_type: 'custom',
+          exercise_id: null,
+          personal_exercise_id: null,
+          current_value: null,
+        },
+        error: null,
+      });
+
+      const updateQuery = createQuery({
+        data: { ...mockGoal, goal_type: 'custom', current_value: 0 },
+        error: null,
+      });
+
+      queueQueries(existingGoalQuery, updateQuery);
+
+      await updateFitnessGoal('goal-123', { current_value: 0 });
+
+      expect(updateQuery.update).toHaveBeenCalledWith({
+        current_value: 0,
+      });
+    });
+
+    it('rejects manual progress updates on non-custom goals', async () => {
+      const existingGoalQuery = createQuery({
+        data: {
+          goal_type: 'strength_target',
+          exercise_id: null,
+          personal_exercise_id: null,
+          current_value: null,
+        },
+        error: null,
+      });
+
+      queueQueries(existingGoalQuery);
+
+      await expect(
+        updateFitnessGoal('goal-123', { current_value: 20 }),
+      ).rejects.toThrow(
+        'Manual progress is only supported for custom goals.',
+      );
+    });
+
+    it('clears manual progress when changing away from a custom goal', async () => {
+      const existingGoalQuery = createQuery({
+        data: {
+          goal_type: 'custom',
+          exercise_id: null,
+          personal_exercise_id: null,
+          current_value: 50,
+        },
+        error: null,
+      });
+
+      const updateQuery = createQuery({
+        data: {
+          ...mockGoal,
+          goal_type: 'workout_frequency',
+          current_value: null,
+        },
+        error: null,
+      });
+
+      queueQueries(existingGoalQuery, updateQuery);
+
+      await updateFitnessGoal('goal-123', {
+        goal_type: 'workout_frequency',
+      });
+
+      expect(updateQuery.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          goal_type: 'workout_frequency',
+          current_value: null,
+        }),
+      );
+    });
+
     it('allows a goal to be paused', async () => {
       const query = createQuery({
         data: { ...mockGoal, goal_status: 'paused' },
@@ -438,6 +705,41 @@ describe('Fitness Goals service', () => {
       expect(query.update).toHaveBeenCalledWith({
         goal_status: 'paused',
       });
+    });
+
+    it('clears exercise references when changing to a non-exercise goal type', async () => {
+      const existingGoalQuery = createQuery({
+        data: {
+          goal_type: 'strength_target',
+          exercise_id: 'shared-exercise-123',
+          personal_exercise_id: null,
+        },
+        error: null,
+      });
+
+      const updateQuery = createQuery({
+        data: {
+          ...mockGoal,
+          goal_type: 'workout_frequency',
+          exercise_id: null,
+          personal_exercise_id: null,
+        },
+        error: null,
+      });
+
+      queueQueries(existingGoalQuery, updateQuery);
+
+      await updateFitnessGoal('goal-123', {
+        goal_type: 'workout_frequency',
+      });
+
+      expect(updateQuery.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          goal_type: 'workout_frequency',
+          exercise_id: null,
+          personal_exercise_id: null,
+        }),
+      );
     });
 
     it('rejects an empty goal ID', async () => {

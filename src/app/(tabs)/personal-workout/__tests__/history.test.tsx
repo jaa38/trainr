@@ -5,14 +5,45 @@ import { getFitnessGoals } from '@/services/fitness-goals';
 import { getPersonalRecords } from '@/services/personal-records';
 import { getPersonalWorkoutHistory } from '@/services/personal-workouts';
 import { TrainrThemeProvider } from '@/theme/ThemeProvider';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import type { PersonalWorkout } from '@/types/personal-workouts';
 
 jest.mock('lucide-react-native', () => ({
   Activity: jest.fn(() => null),
+  ArrowLeft: jest.fn(() => null),
   Dumbbell: jest.fn(() => null),
   Flag: jest.fn(() => null),
+  SlidersHorizontal: jest.fn(() => null),
   Trophy: jest.fn(() => null),
+  TrendingUp: jest.fn(() => null),
 }));
+
+jest.mock('@react-native-community/datetimepicker', () => {
+  const React = require('react');
+  const { Pressable, Text } = require('react-native');
+
+  return function MockDateTimePicker({
+    onChange,
+    minimumDate,
+  }: {
+    onChange: (event: { type: string }, date?: Date) => void;
+    minimumDate?: Date;
+  }) {
+    const selectedDate = minimumDate
+      ? new Date('2026-11-30T12:00:00')
+      : new Date('2026-11-01T12:00:00');
+
+    return React.createElement(
+      Pressable,
+      {
+        accessibilityRole: 'button',
+        accessibilityLabel: 'Mock date picker',
+        onPress: () => onChange({ type: 'set' }, selectedDate),
+      },
+      React.createElement(Text, null, 'Date picker'),
+    );
+  };
+});
 
 jest.mock('expo-router', () => {
   const React = require('react');
@@ -64,9 +95,16 @@ const workout: PersonalWorkout = {
 
 async function renderScreen() {
   const rendered = await render(
-    <TrainrThemeProvider>
-      <PersonalWorkoutOverviewScreen />
-    </TrainrThemeProvider>,
+    <SafeAreaProvider
+      initialMetrics={{
+        frame: { x: 0, y: 0, width: 390, height: 844 },
+        insets: { top: 0, right: 0, bottom: 0, left: 0 },
+      }}
+    >
+      <TrainrThemeProvider>
+        <PersonalWorkoutOverviewScreen />
+      </TrainrThemeProvider>
+    </SafeAreaProvider>,
   );
 
   const {
@@ -81,7 +119,7 @@ async function renderScreen() {
   await fireEvent.press(getByRole('tab', { name: 'Workout History tab' }));
 
   await waitFor(() => {
-    expect(getByText('Workout history')).toBeTruthy();
+    expect(getByLabelText('Search workouts by name')).toBeTruthy();
   });
 
   return {
@@ -108,7 +146,6 @@ describe('Personal Workout History screen', () => {
     const { getByText } = await renderScreen();
 
     await waitFor(() => {
-      expect(getByText('Workout history')).toBeTruthy();
       expect(getByText('Upper body strength')).toBeTruthy();
       expect(getByText('Strength · 25 Nov 2026')).toBeTruthy();
       expect(getByText('60 min')).toBeTruthy();
@@ -130,12 +167,15 @@ describe('Personal Workout History screen', () => {
     });
 
     await fireEvent.changeText(getByLabelText('Search workouts by name'), 'upper body');
+    await fireEvent.press(getByRole('button', { name: 'Filter workouts' }));
     await fireEvent.press(getByRole('button', { name: 'Filter by Cardio' }));
-    await fireEvent.changeText(
-      getByLabelText('Workout history start date'),
-      '2026-11-01',
-    );
-    await fireEvent.changeText(getByLabelText('Workout history end date'), '2026-11-30');
+    await fireEvent.press(getByLabelText('Select start date'));
+    await fireEvent.press(getByRole('button', { name: 'Mock date picker' }));
+    await fireEvent.press(getByRole('button', { name: 'Done selecting date' }));
+
+    await fireEvent.press(getByLabelText('Select end date'));
+    await fireEvent.press(getByRole('button', { name: 'Mock date picker' }));
+    await fireEvent.press(getByRole('button', { name: 'Done selecting date' }));
     await fireEvent.press(getByRole('button', { name: 'Apply filters' }));
 
     await waitFor(() => {
@@ -158,6 +198,7 @@ describe('Personal Workout History screen', () => {
     });
 
     await fireEvent.changeText(getByLabelText('Search workouts by name'), 'upper body');
+    await fireEvent.press(getByRole('button', { name: 'Filter workouts' }));
     await fireEvent.press(getByRole('button', { name: 'Filter by Cardio' }));
     await fireEvent.press(getByRole('button', { name: 'Apply filters' }));
 
@@ -170,6 +211,7 @@ describe('Personal Workout History screen', () => {
       );
     });
 
+    await fireEvent.press(getByRole('button', { name: 'Edit workout filters' }));
     await fireEvent.press(getByRole('button', { name: 'Clear filters' }));
 
     await waitFor(() => {
