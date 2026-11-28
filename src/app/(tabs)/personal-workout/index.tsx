@@ -737,7 +737,7 @@ export default function PersonalWorkoutOverviewScreen() {
 
             {/* Create Workout */}
             <Button fullWidth onPress={() => router.push('/(tabs)/personal-workout/new')}>
-              Create personal workout
+              Create Personal Workout
             </Button>
           </>
         ) : (
